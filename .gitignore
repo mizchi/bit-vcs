@@ -5,3 +5,4 @@ target
 .mooncakes/
 .moonagent/
 .jj/tools/git-shim/shim.log
+tools/git-shim/shim.log
