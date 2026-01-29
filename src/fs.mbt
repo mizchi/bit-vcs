@@ -5,6 +5,7 @@ pub(open) trait FileSystem {
   mkdir_p(Self, String) -> Unit raise GitError
   write_file(Self, String, Bytes) -> Unit raise GitError
   write_string(Self, String, String) -> Unit raise GitError
+  remove_file(Self, String) -> Unit raise GitError
 }
 
 ///|

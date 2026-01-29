@@ -64,15 +64,19 @@ pub async fn upload_pack_request_http(
 pub async fn discover_upload_refs_http(
   remote : String,
   prefer_v2 : Bool,
-) -> (Array[(ObjectId, String)], Array[String], ProtocolVersion, Map[String, String]) raise GitError {
+) -> (
+  Array[(ObjectId, String)],
+  Array[String],
+  ProtocolVersion,
+  Map[String, String],
+) raise GitError {
   let adv = upload_pack_info_refs_http(remote, prefer_v2)
   let version = detect_protocol_version(adv)
   if version == ProtocolVersion::V2 {
     let caps = parse_v2_advertised_caps(adv)
-    let req = build_ls_refs_request(
-      "git/moonbit",
-      ["refs/heads/", "refs/tags/", "HEAD"],
-    )
+    let req = build_ls_refs_request("git/moonbit", [
+      "refs/heads/", "refs/tags/", "HEAD",
+    ])
     let resp = upload_pack_request_http(remote, req, true)
     let parsed = parse_ls_refs_response(resp)
     return (parsed.refs, caps, version, parsed.symrefs)
@@ -89,8 +93,7 @@ pub async fn fetch_pack_http(
   prefer_v2 : Bool,
 ) -> Bytes raise GitError {
   let (refs, caps, version, _symrefs) = discover_upload_refs_http(
-    remote,
-    prefer_v2,
+    remote, prefer_v2,
   )
   let wants = if wants.length() == 0 {
     let ids : Array[ObjectId] = []
@@ -128,8 +131,7 @@ pub async fn clone_http(
   prefer_v2 : Bool,
 ) -> (Array[(ObjectId, String)], Array[PackObject]) raise GitError {
   let (refs, _caps, _version, symrefs) = discover_upload_refs_http(
-    remote,
-    prefer_v2,
+    remote, prefer_v2,
   )
   let wants = select_default_wants(refs, symrefs)
   let pack = fetch_pack_http(remote, wants, prefer_v2)
@@ -146,8 +148,7 @@ pub async fn clone_http_to_fs(
   root : String,
 ) -> Array[(ObjectId, String)] raise GitError {
   let (refs, _caps, _version, symrefs) = discover_upload_refs_http(
-    remote,
-    prefer_v2,
+    remote, prefer_v2,
   )
   let wants = select_default_wants(refs, symrefs)
   let default_ref = select_default_ref(refs, symrefs)

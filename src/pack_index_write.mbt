@@ -24,7 +24,6 @@ pub fn build_pack_index_from_objects(
   if objects.length() != starts.length() || starts.length() != ends.length() {
     raise GitError::PackfileError("Pack entry count mismatch")
   }
-
   let entries : Array[PackIndexEntry] = []
   for i in 0..<objects.length() {
     let obj = objects[i]
@@ -32,15 +31,12 @@ pub fn build_pack_index_from_objects(
     let crc = crc32_range(pack, starts[i], ends[i])
     entries.push({ id, offset: starts[i], crc })
   }
-
   entries.sort_by(fn(a, b) { compare_object_id(a.id, b.id) })
-
   let counts : Array[Int] = Array::make(256, 0)
   for entry in entries {
     let first = entry.id.bytes[0].to_int()
     counts[first] = counts[first] + 1
   }
-
   let out : Array[Byte] = []
   // Index header: magic + version
   out.push(b'\xff')
@@ -92,7 +88,6 @@ pub fn build_pack_index_from_objects(
   for b in index_checksum.bytes {
     out.push(b)
   }
-
   bytes_from_array(out)
 }
 
@@ -127,8 +122,8 @@ fn scan_pack_entry_offsets(
     raise GitError::PackfileError("Packfile too short")
   }
   if not(
-    data[0] == b'P' && data[1] == b'A' && data[2] == b'C' && data[3] == b'K'
-  ) {
+      data[0] == b'P' && data[1] == b'A' && data[2] == b'C' && data[3] == b'K',
+    ) {
     raise GitError::PackfileError("Invalid packfile magic")
   }
   let version = read_u32_be(data, 4)
@@ -139,16 +134,13 @@ fn scan_pack_entry_offsets(
   if count < 0 {
     raise GitError::PackfileError("Packfile object count out of range")
   }
-
   let mut offset = 12
   let starts : Array[Int] = []
   let ends : Array[Int] = []
-
   for _ in 0..<count {
     let start = offset
     let (type_id, size, next_offset) = decode_type_and_size_at(data, offset)
     offset = next_offset
-
     let after = match type_id {
       1 | 2 | 3 | 4 => {
         let (content, after) = @zlib.zlib_decompress_at(data, offset) catch {
@@ -190,12 +182,10 @@ fn scan_pack_entry_offsets(
           "Unknown packfile object type: \{type_id}",
         )
     }
-
     offset = after
     starts.push(start)
     ends.push(after)
   }
-
   let trailer_offset = data.length() - 20
   if offset != trailer_offset {
     raise GitError::PackfileError("Packfile length mismatch")
@@ -208,7 +198,6 @@ fn scan_pack_entry_offsets(
   if computed != trailer {
     raise GitError::HashMismatch(computed.to_hex(), trailer.to_hex())
   }
-
   (starts, ends)
 }
 

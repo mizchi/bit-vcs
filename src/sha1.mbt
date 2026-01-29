@@ -90,50 +90,51 @@ fn sha1_process_block(block : FixedArray[Byte], h : FixedArray[Int]) -> Unit {
 }
 
 ///|
-/// Compute SHA-1 hash of data
-pub fn sha1(data : Bytes) -> ObjectId {
+/// Compute SHA-1 hash of data prefix (first `len` bytes).
+pub fn sha1_prefix(data : Bytes, len : Int) -> ObjectId {
   let h : FixedArray[Int] = [sha1_h0, sha1_h1, sha1_h2, sha1_h3, sha1_h4]
-  let msg_len = data.length()
-  let bit_len = msg_len * 8
-
-  // Pad message: append 1 bit, then zeros, then 64-bit length
-  // Padded length must be congruent to 56 (mod 64)
-  let pad_len = if msg_len % 64 < 56 {
-    56 - msg_len % 64
+  let msg_len = if len < 0 {
+    0
+  } else if len > data.length() {
+    data.length()
   } else {
-    64 + 56 - msg_len % 64
+    len
   }
-  let total_len = msg_len + pad_len + 8
-  let padded : FixedArray[Byte] = FixedArray::make(total_len, b'\x00')
+  let bit_len = msg_len * 8
+  let full_blocks = msg_len / 64
+  let rem = msg_len % 64
 
-  // Copy original data
-  for i = 0; i < msg_len; i = i + 1 {
-    padded[i] = data[i]
-  }
-
-  // Append 1 bit (0x80)
-  padded[msg_len] = b'\x80'
-
-  // Append length in bits (big-endian, 64-bit)
-  // For messages < 2^32 bits, upper 32 bits are 0
-  let len_offset = total_len - 8
-  // Upper 32 bits (usually 0 for normal messages)
-  padded[len_offset] = b'\x00'
-  padded[len_offset + 1] = b'\x00'
-  padded[len_offset + 2] = b'\x00'
-  padded[len_offset + 3] = b'\x00'
-  // Lower 32 bits
-  padded[len_offset + 4] = ((bit_len >> 24) & 0xff).to_byte()
-  padded[len_offset + 5] = ((bit_len >> 16) & 0xff).to_byte()
-  padded[len_offset + 6] = ((bit_len >> 8) & 0xff).to_byte()
-  padded[len_offset + 7] = (bit_len & 0xff).to_byte()
-
-  // Process blocks
-  let num_blocks = total_len / 64
-  for i = 0; i < num_blocks; i = i + 1 {
+  // Process full blocks directly from input
+  for i = 0; i < full_blocks; i = i + 1 {
     let block : FixedArray[Byte] = FixedArray::make(64, b'\x00')
     for j = 0; j < 64; j = j + 1 {
-      block[j] = padded[i * 64 + j]
+      block[j] = data[i * 64 + j]
+    }
+    sha1_process_block(block, h)
+  }
+
+  // Pad remaining bytes
+  let pad_len = if rem < 56 { 56 - rem } else { 64 + 56 - rem }
+  let tail_len = rem + pad_len + 8
+  let tail : FixedArray[Byte] = FixedArray::make(tail_len, b'\x00')
+  for i = 0; i < rem; i = i + 1 {
+    tail[i] = data[full_blocks * 64 + i]
+  }
+  tail[rem] = b'\x80'
+  let len_offset = tail_len - 8
+  tail[len_offset] = b'\x00'
+  tail[len_offset + 1] = b'\x00'
+  tail[len_offset + 2] = b'\x00'
+  tail[len_offset + 3] = b'\x00'
+  tail[len_offset + 4] = ((bit_len >> 24) & 0xff).to_byte()
+  tail[len_offset + 5] = ((bit_len >> 16) & 0xff).to_byte()
+  tail[len_offset + 6] = ((bit_len >> 8) & 0xff).to_byte()
+  tail[len_offset + 7] = (bit_len & 0xff).to_byte()
+  let tail_blocks = tail_len / 64
+  for i = 0; i < tail_blocks; i = i + 1 {
+    let block : FixedArray[Byte] = FixedArray::make(64, b'\x00')
+    for j = 0; j < 64; j = j + 1 {
+      block[j] = tail[i * 64 + j]
     }
     sha1_process_block(block, h)
   }
@@ -150,7 +151,68 @@ pub fn sha1(data : Bytes) -> ObjectId {
 }
 
 ///|
+/// Compute SHA-1 hash of data
+pub fn sha1(data : Bytes) -> ObjectId {
+  sha1_prefix(data, data.length())
+}
+
+///|
+/// Compute SHA-1 hash of Array prefix (first `len` bytes).
+pub fn sha1_array_prefix(data : Array[Byte], len : Int) -> ObjectId {
+  let h : FixedArray[Int] = [sha1_h0, sha1_h1, sha1_h2, sha1_h3, sha1_h4]
+  let msg_len = if len < 0 {
+    0
+  } else if len > data.length() {
+    data.length()
+  } else {
+    len
+  }
+  let bit_len = msg_len * 8
+  let full_blocks = msg_len / 64
+  let rem = msg_len % 64
+  for i = 0; i < full_blocks; i = i + 1 {
+    let block : FixedArray[Byte] = FixedArray::make(64, b'\x00')
+    for j = 0; j < 64; j = j + 1 {
+      block[j] = data[i * 64 + j]
+    }
+    sha1_process_block(block, h)
+  }
+  let pad_len = if rem < 56 { 56 - rem } else { 64 + 56 - rem }
+  let tail_len = rem + pad_len + 8
+  let tail : FixedArray[Byte] = FixedArray::make(tail_len, b'\x00')
+  for i = 0; i < rem; i = i + 1 {
+    tail[i] = data[full_blocks * 64 + i]
+  }
+  tail[rem] = b'\x80'
+  let len_offset = tail_len - 8
+  tail[len_offset] = b'\x00'
+  tail[len_offset + 1] = b'\x00'
+  tail[len_offset + 2] = b'\x00'
+  tail[len_offset + 3] = b'\x00'
+  tail[len_offset + 4] = ((bit_len >> 24) & 0xff).to_byte()
+  tail[len_offset + 5] = ((bit_len >> 16) & 0xff).to_byte()
+  tail[len_offset + 6] = ((bit_len >> 8) & 0xff).to_byte()
+  tail[len_offset + 7] = (bit_len & 0xff).to_byte()
+  let tail_blocks = tail_len / 64
+  for i = 0; i < tail_blocks; i = i + 1 {
+    let block : FixedArray[Byte] = FixedArray::make(64, b'\x00')
+    for j = 0; j < 64; j = j + 1 {
+      block[j] = tail[i * 64 + j]
+    }
+    sha1_process_block(block, h)
+  }
+  let result : FixedArray[Byte] = FixedArray::make(20, b'\x00')
+  for i = 0; i < 5; i = i + 1 {
+    result[i * 4] = ((h[i] >> 24) & 0xff).to_byte()
+    result[i * 4 + 1] = ((h[i] >> 16) & 0xff).to_byte()
+    result[i * 4 + 2] = ((h[i] >> 8) & 0xff).to_byte()
+    result[i * 4 + 3] = (h[i] & 0xff).to_byte()
+  }
+  ObjectId::new(result)
+}
+
+///|
 /// Compute SHA-1 hash of data from Array
 pub fn sha1_array(data : Array[Byte]) -> ObjectId {
-  sha1(Bytes::from_array(FixedArray::makei(data.length(), fn(i) { data[i] })))
+  sha1_array_prefix(data, data.length())
 }

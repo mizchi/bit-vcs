@@ -85,7 +85,6 @@ pub fn parse_tree(content : Bytes) -> Array[TreeEntry] raise GitError {
       raise GitError::InvalidObject("Truncated tree entry mode")
     }
     i += 1 // skip space
-
     let name_buf = StringBuilder::new()
     while i < content.length() && content[i] != b'\x00' {
       name_buf.write_char(content[i].to_int().unsafe_to_char())
@@ -95,7 +94,6 @@ pub fn parse_tree(content : Bytes) -> Array[TreeEntry] raise GitError {
       raise GitError::InvalidObject("Truncated tree entry name")
     }
     i += 1 // skip NUL
-
     if i + 20 > content.length() {
       raise GitError::InvalidObject("Truncated tree entry id")
     }
@@ -164,8 +162,11 @@ fn walk_tree(
       }
       let entries = parse_tree(obj.data)
       for entry in entries {
-        let path =
-          if prefix.length() == 0 { entry.name } else { prefix + "/" + entry.name }
+        let path = if prefix.length() == 0 {
+          entry.name
+        } else {
+          prefix + "/" + entry.name
+        }
         if is_tree_mode(entry.mode) {
           walk_tree(store, entry.id, path, files)
         } else {
@@ -193,7 +194,11 @@ fn is_tree_mode(mode : String) -> Bool {
 ///|
 fn join_path(root : String, path : String) -> String {
   if root.length() == 0 || root == "/" {
-    if path.has_prefix("/") { path } else { "/" + path }
+    if path.has_prefix("/") {
+      path
+    } else {
+      "/" + path
+    }
   } else if root.has_suffix("/") {
     root + path
   } else {

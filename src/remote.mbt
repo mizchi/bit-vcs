@@ -52,6 +52,27 @@ pub fn Remote::receive_pack_url(self : Remote) -> String {
 }
 
 ///|
+/// Fetch receive-pack refs via smart HTTP
+pub async fn discover_receive_refs_http(
+  remote : Remote,
+) -> Array[(ObjectId, String)] raise GitError {
+  let url = remote.info_refs_url()
+  let headers : Map[String, String] = {
+    "User-Agent": "git/moonbit",
+    "Accept": "application/x-git-receive-pack-advertisement",
+  }
+  let (response, data) = @http.get(url, headers~) catch {
+    e => raise GitError::IoError("HTTP request failed: \{e}")
+  }
+  if response.code != 200 {
+    raise GitError::ProtocolError(
+      "Failed to fetch info/refs: HTTP \{response.code}",
+    )
+  }
+  parse_refs(data)
+}
+
+///|
 /// Git push request data
 pub struct PushRequest {
   old_id : ObjectId

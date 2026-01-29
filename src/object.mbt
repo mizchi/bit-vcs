@@ -15,16 +15,13 @@ pub fn create_object(
 ) -> (ObjectId, Bytes) {
   let raw = format_object(obj_type, content)
   let id = sha1(raw)
-  let compressed = @zlib.zlib_compress_stored(raw)
+  let compressed = @zlib.zlib_compress(raw)
   (id, compressed)
 }
 
 ///|
 /// Hash object content (without compression)
-pub fn hash_object_content(
-  obj_type : ObjectType,
-  content : Bytes,
-) -> ObjectId {
+pub fn hash_object_content(obj_type : ObjectType, content : Bytes) -> ObjectId {
   let raw = format_object(obj_type, content)
   sha1(raw)
 }

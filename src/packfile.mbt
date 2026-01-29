@@ -19,6 +19,375 @@ pub fn PackObject::new(obj_type : ObjectType, data : Bytes) -> PackObject {
 }
 
 ///|
+fn type_and_size_len(size : Int) -> Int {
+  let mut remaining = size >> 4
+  let mut len = 1
+  while remaining > 0 {
+    len += 1
+    remaining = remaining >> 7
+  }
+  len
+}
+
+///|
+fn ofs_delta_len(back_offset : Int) -> Int {
+  let mut count = 1
+  let mut val = back_offset
+  while val > 0x7f {
+    val = (val >> 7) - 1
+    count += 1
+  }
+  count
+}
+
+///|
+fn encode_ofs_delta_offset(back_offset : Int, result : Array[Byte]) -> Unit {
+  let parts : Array[Int] = []
+  let mut val = back_offset
+  parts.push(val & 0x7f)
+  while val > 0x7f {
+    val = (val >> 7) - 1
+    parts.push(val & 0x7f)
+  }
+  for i in 0..<parts.length() {
+    let idx = parts.length() - 1 - i
+    let mut b = parts[idx]
+    if i < parts.length() - 1 {
+      b = b | 0x80
+    }
+    result.push(b.to_byte())
+  }
+}
+
+///|
+fn encode_delta_size(value : Int, out : Array[Byte]) -> Unit {
+  let mut v = value
+  while true {
+    let b = v & 0x7f
+    v = v >> 7
+    if v == 0 {
+      out.push(b.to_byte())
+      break
+    } else {
+      out.push((b | 0x80).to_byte())
+    }
+  }
+}
+
+///|
+fn encode_delta_insert(
+  data : Bytes,
+  start : Int,
+  len : Int,
+  out : Array[Byte],
+) -> Unit {
+  let mut offset = start
+  let mut remaining = len
+  while remaining > 0 {
+    let chunk = if remaining > 0x7f { 0x7f } else { remaining }
+    out.push(chunk.to_byte())
+    for i = 0; i < chunk; i = i + 1 {
+      out.push(data[offset + i])
+    }
+    offset = offset + chunk
+    remaining = remaining - chunk
+  }
+}
+
+///|
+fn encode_delta_copy_single(
+  offset : Int,
+  size : Int,
+  out : Array[Byte],
+) -> Unit {
+  let mut op = 0x80
+  let buf : Array[Byte] = []
+  if (offset & 0xff) != 0 {
+    op = op | 0x01
+    buf.push((offset & 0xff).to_byte())
+  }
+  if ((offset >> 8) & 0xff) != 0 {
+    op = op | 0x02
+    buf.push(((offset >> 8) & 0xff).to_byte())
+  }
+  if ((offset >> 16) & 0xff) != 0 {
+    op = op | 0x04
+    buf.push(((offset >> 16) & 0xff).to_byte())
+  }
+  if ((offset >> 24) & 0xff) != 0 {
+    op = op | 0x08
+    buf.push(((offset >> 24) & 0xff).to_byte())
+  }
+  if (size & 0xff) != 0 {
+    op = op | 0x10
+    buf.push((size & 0xff).to_byte())
+  }
+  if ((size >> 8) & 0xff) != 0 {
+    op = op | 0x20
+    buf.push(((size >> 8) & 0xff).to_byte())
+  }
+  if ((size >> 16) & 0xff) != 0 {
+    op = op | 0x40
+    buf.push(((size >> 16) & 0xff).to_byte())
+  }
+  out.push(op.to_byte())
+  for b in buf {
+    out.push(b)
+  }
+}
+
+///|
+fn encode_delta_copy(offset : Int, size : Int, out : Array[Byte]) -> Unit {
+  let max_chunk = 0xffffff
+  let mut remaining = size
+  let mut off = offset
+  while remaining > 0 {
+    let chunk = if remaining > max_chunk { max_chunk } else { remaining }
+    encode_delta_copy_single(off, chunk, out)
+    off = off + chunk
+    remaining = remaining - chunk
+  }
+}
+
+///|
+let delta_block_size : Int = 32
+
+///|
+fn byte_to_uint(b : Byte) -> UInt {
+  Int::reinterpret_as_uint(b.to_int())
+}
+
+///|
+fn uint_from_int(v : Int) -> UInt {
+  Int::reinterpret_as_uint(v)
+}
+
+///|
+fn rolling_hash_init(data : Bytes, start : Int, len : Int) -> UInt {
+  let base = uint_from_int(257)
+  let mut h = uint_from_int(0)
+  for i = 0; i < len; i = i + 1 {
+    h = h * base + byte_to_uint(data[start + i])
+  }
+  h
+}
+
+///|
+fn rolling_hash_base_pow(len : Int) -> UInt {
+  let base = uint_from_int(257)
+  let mut pow = uint_from_int(1)
+  for _ in 1..<len {
+    pow = pow * base
+  }
+  pow
+}
+
+///|
+fn rolling_hash_next(
+  hash : UInt,
+  base_pow : UInt,
+  out_b : Byte,
+  in_b : Byte,
+) -> UInt {
+  let base = uint_from_int(257)
+  let removed = byte_to_uint(out_b) * base_pow
+  let h1 = hash - removed
+  h1 * base + byte_to_uint(in_b)
+}
+
+///|
+fn build_block_index(
+  base : Bytes,
+  block_size : Int,
+) -> (Map[UInt, Array[Int]], UInt) {
+  let base_pow = rolling_hash_base_pow(block_size)
+  let index : Map[UInt, Array[Int]] = {}
+  if base.length() < block_size {
+    return (index, base_pow)
+  }
+  let mut h = rolling_hash_init(base, 0, block_size)
+  let last = base.length() - block_size
+  for i = 0; i <= last; i = i + 1 {
+    match index.get(h) {
+      Some(arr) => arr.push(i)
+      None => {
+        let arr : Array[Int] = [i]
+        index[h] = arr
+      }
+    }
+    if i < last {
+      h = rolling_hash_next(h, base_pow, base[i], base[i + block_size])
+    }
+  }
+  (index, base_pow)
+}
+
+///|
+fn find_best_match(
+  base : Bytes,
+  target : Bytes,
+  target_pos : Int,
+  block_size : Int,
+  candidates : Array[Int],
+) -> (Int, Int)? {
+  let mut best_len = 0
+  let mut best_off = 0
+  let mut checked = 0
+  for off in candidates {
+    if off + block_size > base.length() {
+      continue
+    }
+    let mut ok = true
+    for i = 0; i < block_size; i = i + 1 {
+      if base[off + i] != target[target_pos + i] {
+        ok = false
+        break
+      }
+    }
+    if ok {
+      let mut len = block_size
+      while target_pos + len < target.length() &&
+            off + len < base.length() &&
+            base[off + len] == target[target_pos + len] {
+        len += 1
+      }
+      if len > best_len {
+        best_len = len
+        best_off = off
+      }
+    }
+    checked += 1
+    if checked > 64 {
+      break
+    }
+  }
+  if best_len >= block_size {
+    Some((best_off, best_len))
+  } else {
+    None
+  }
+}
+
+///|
+fn build_delta(base : Bytes, target : Bytes) -> Bytes {
+  let base_len = base.length()
+  let target_len = target.length()
+  let out : Array[Byte] = []
+  encode_delta_size(base_len, out)
+  encode_delta_size(target_len, out)
+  if target_len == 0 {
+    return Bytes::from_array(FixedArray::makei(out.length(), fn(i) { out[i] }))
+  }
+  if base_len < delta_block_size || target_len < delta_block_size {
+    encode_delta_insert(target, 0, target_len, out)
+    return Bytes::from_array(FixedArray::makei(out.length(), fn(i) { out[i] }))
+  }
+  let (index, base_pow) = build_block_index(base, delta_block_size)
+  let mut t = 0
+  let mut literal_start = 0
+  let mut literal_len = 0
+  let last = target_len - delta_block_size
+  let mut th = rolling_hash_init(target, 0, delta_block_size)
+  while t <= last {
+    let matched = match index.get(th) {
+      None => None
+      Some(cands) => find_best_match(base, target, t, delta_block_size, cands)
+    }
+    match matched {
+      Some((base_off, match_len)) => {
+        if literal_len > 0 {
+          encode_delta_insert(target, literal_start, literal_len, out)
+          literal_len = 0
+        }
+        encode_delta_copy(base_off, match_len, out)
+        t = t + match_len
+        literal_start = t
+        if t <= last {
+          th = rolling_hash_init(target, t, delta_block_size)
+        }
+      }
+      None => {
+        if literal_len == 0 {
+          literal_start = t
+        }
+        literal_len += 1
+        if t < last {
+          th = rolling_hash_next(
+            th,
+            base_pow,
+            target[t],
+            target[t + delta_block_size],
+          )
+        }
+        t = t + 1
+      }
+    }
+  }
+  if t < target_len {
+    let tail_len = target_len - t
+    if literal_len == 0 {
+      literal_start = t
+      literal_len = tail_len
+    } else if literal_start + literal_len == t {
+      literal_len = literal_len + tail_len
+    } else {
+      encode_delta_insert(target, literal_start, literal_len, out)
+      literal_start = t
+      literal_len = tail_len
+    }
+  }
+  if literal_len > 0 {
+    encode_delta_insert(target, literal_start, literal_len, out)
+  }
+  Bytes::from_array(FixedArray::makei(out.length(), fn(i) { out[i] }))
+}
+
+///|
+fn pack_object_with_delta(
+  obj : PackObject,
+  base : (Int, PackObject)?,
+  obj_offset : Int,
+  result : Array[Byte],
+) -> Int {
+  let obj_type = obj.obj_type.to_packfile_type()
+  let data = obj.data
+  let compressed = @zlib.zlib_compress(data)
+  let normal_len = type_and_size_len(data.length()) + compressed.length()
+  match base {
+    None => {
+      encode_type_and_size(obj_type, data.length(), result)
+      for b in compressed {
+        result.push(b)
+      }
+      normal_len
+    }
+    Some((base_offset, base_obj)) => {
+      if base_offset < obj_offset && base_obj.obj_type == obj.obj_type {
+        let delta = build_delta(base_obj.data, data)
+        let compressed_delta = @zlib.zlib_compress(delta)
+        let back_offset = obj_offset - base_offset
+        let delta_len = type_and_size_len(delta.length()) +
+          ofs_delta_len(back_offset) +
+          compressed_delta.length()
+        if delta_len < normal_len {
+          encode_type_and_size(6, delta.length(), result)
+          encode_ofs_delta_offset(back_offset, result)
+          for b in compressed_delta {
+            result.push(b)
+          }
+          return delta_len
+        }
+      }
+      encode_type_and_size(obj_type, data.length(), result)
+      for b in compressed {
+        result.push(b)
+      }
+      normal_len
+    }
+  }
+}
+
+///|
 /// Create a packfile from a list of objects
 /// Format:
 ///   [PACK]           4 bytes magic
@@ -48,41 +417,26 @@ pub fn create_packfile(objects : Array[PackObject]) -> Bytes {
   result.push(((count >> 8) & 0xff).to_byte())
   result.push((count & 0xff).to_byte())
 
-  // Pack each object
+  // Pack each object (delta against the last object of the same type)
+  let mut offset = 12
+  let last_by_type : Map[Int, (Int, PackObject)] = {}
   for obj in objects {
-    pack_object(obj, result)
+    let obj_offset = offset
+    let key = obj.obj_type.to_packfile_type()
+    let base = last_by_type.get(key)
+    let written = pack_object_with_delta(obj, base, obj_offset, result)
+    offset = offset + written
+    last_by_type[key] = (obj_offset, obj)
   }
 
   // Compute SHA-1 of everything so far
-  let pack_data = pack_array_to_bytes(result)
-  let trailer = sha1(pack_data)
+  let trailer = sha1_array_prefix(result, result.length())
 
   // Append trailer
   for b in trailer.bytes {
     result.push(b)
   }
   pack_array_to_bytes(result)
-}
-
-///|
-/// Pack a single object into the result array
-fn pack_object(obj : PackObject, result : Array[Byte]) -> Unit {
-  let obj_type = obj.obj_type.to_packfile_type()
-  let data = obj.data
-  let size = data.length()
-
-  // Encode type and size
-  // First byte: [MSB | type(3 bits) | size(4 bits)]
-  // Continue bytes: [MSB | size(7 bits)]
-  encode_type_and_size(obj_type, size, result)
-
-  // Compress data with zlib
-  let compressed = @zlib.zlib_compress_stored(data)
-
-  // Append compressed data
-  for b in compressed {
-    result.push(b)
-  }
 }
 
 ///|

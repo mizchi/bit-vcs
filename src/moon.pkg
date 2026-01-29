@@ -1,5 +1,7 @@
 import {
+  "moonbitlang/async" as @async,
   "mizchi/zlib",
+  "moonbitlang/async/process" as @process,
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/x/fs",
   "moonbitlang/async/http" as @http,
@@ -11,6 +13,10 @@ options(
     "pack_index_write_test.mbt": [ "native" ],
     "remote.mbt": [ "wasm-gc", "wasm" ],
     "remote_test.mbt": [ "wasm-gc", "wasm" ],
+    "sync_http.mbt": [ "wasm-gc", "wasm" ],
     "upload_pack_http.mbt": [ "wasm-gc", "wasm" ],
+    "upload_pack_process.mbt": [ "native" ],
+    "upload_pack_remote_native.mbt": [ "native" ],
+    "upload_pack_remote_wasm.mbt": [ "wasm-gc", "wasm" ],
   },
 )

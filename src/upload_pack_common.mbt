@@ -56,11 +56,9 @@ pub fn parse_v0_advertised_caps(data : Bytes) -> Array[String] raise GitError {
     match line.find("\u0000") {
       None => continue
       Some(idx) => {
-        let caps_str = trim_newline(String::unsafe_substring(
-          line,
-          start=idx + 1,
-          end=line.length(),
-        ))
+        let caps_str = trim_newline(
+          String::unsafe_substring(line, start=idx + 1, end=line.length()),
+        )
         let parts = split_by_space(caps_str)
         for p in parts {
           result.push(p)
@@ -73,10 +71,7 @@ pub fn parse_v0_advertised_caps(data : Bytes) -> Array[String] raise GitError {
 }
 
 ///|
-pub fn build_ls_refs_request(
-  agent : String,
-  prefixes : Array[String],
-) -> Bytes {
+pub fn build_ls_refs_request(agent : String, prefixes : Array[String]) -> Bytes {
   let chunks : Array[Bytes] = []
   chunks.push(pktline_encode("command=ls-refs\n"))
   chunks.push(pktline_encode("agent=\{agent}\n"))
@@ -119,11 +114,7 @@ pub fn parse_ls_refs_response(data : Bytes) -> LsRefsResult raise GitError {
     for i in 2..<parts.length() {
       let attr = parts[i]
       if attr.has_prefix("symref-target:") {
-        let target = String::unsafe_substring(
-          attr,
-          start=14,
-          end=attr.length(),
-        )
+        let target = String::unsafe_substring(attr, start=14, end=attr.length())
         symrefs[name] = target
       }
     }
@@ -138,7 +129,7 @@ pub fn select_default_wants(
 ) -> Array[ObjectId] {
   let wants : Array[ObjectId] = []
   match symrefs.get("HEAD") {
-    Some(target) => {
+    Some(target) =>
       for item in refs {
         let (id, name) = item
         if name == target {
@@ -146,7 +137,6 @@ pub fn select_default_wants(
           return wants
         }
       }
-    }
     None => ()
   }
   for item in refs {
@@ -169,14 +159,13 @@ pub fn select_default_ref(
   symrefs : Map[String, String],
 ) -> (String, ObjectId)? {
   match symrefs.get("HEAD") {
-    Some(target) => {
+    Some(target) =>
       for item in refs {
         let (id, name) = item
         if name == target {
           return Some((name, id))
         }
       }
-    }
     None => ()
   }
   for item in refs {
@@ -193,10 +182,7 @@ pub fn select_default_ref(
 }
 
 ///|
-pub fn build_fetch_request_v2(
-  agent : String,
-  wants : Array[ObjectId],
-) -> Bytes {
+pub fn build_fetch_request_v2(agent : String, wants : Array[ObjectId]) -> Bytes {
   let chunks : Array[Bytes] = []
   chunks.push(pktline_encode("command=fetch\n"))
   chunks.push(pktline_encode("agent=\{agent}\n"))
@@ -224,8 +210,7 @@ pub fn build_fetch_request_v0(
   }
   let caps = select_v0_caps(agent, advertised)
   let chunks : Array[Bytes] = []
-  let first =
-    "want \{wants[0].to_hex()} \{caps}\n"
+  let first = "want \{wants[0].to_hex()} \{caps}\n"
   chunks.push(pktline_encode(first))
   for i in 1..<wants.length() {
     chunks.push(pktline_encode("want \{wants[i].to_hex()}\n"))

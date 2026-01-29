@@ -28,7 +28,6 @@ pub fn write_git_metadata(
   fs.mkdir_p(join_path(git_dir, "objects/info"))
   fs.mkdir_p(join_path(git_dir, "refs/heads"))
   fs.mkdir_p(join_path(git_dir, "refs/tags"))
-
   write_loose_objects(store, fs, git_dir)
   write_head_and_refs(fs, git_dir, refname, commit_id)
   write_config(fs, git_dir, remote_url)
@@ -115,9 +114,9 @@ fn write_loose_objects(
     let file = join_path(
       git_dir,
       "objects/" +
-        String::unsafe_substring(hex, start=0, end=2) +
-        "/" +
-        String::unsafe_substring(hex, start=2, end=hex.length()),
+      String::unsafe_substring(hex, start=0, end=2) +
+      "/" +
+      String::unsafe_substring(hex, start=2, end=hex.length()),
     )
     fs.write_file(file, compressed)
   }
@@ -154,13 +153,14 @@ fn write_index_v2(
 ) -> Unit raise GitError {
   let entries = collect_commit_entries(store, commit_id)
   entries.sort_by(fn(a, b) { String::compare(a.path, b.path) })
-
   let out : Array[Byte] = []
   // Header: "DIRC" + version(2) + count
-  out.push(b'D'); out.push(b'I'); out.push(b'R'); out.push(b'C')
+  out.push(b'D')
+  out.push(b'I')
+  out.push(b'R')
+  out.push(b'C')
   push_u32_be(out, 2)
   push_u32_be(out, entries.length())
-
   for e in entries {
     // ctime/mtime/dev/ino/uid/gid all zeros
     push_u32_be(out, 0)
@@ -179,24 +179,31 @@ fn write_index_v2(
     for b in e.id.bytes {
       out.push(b)
     }
-    let name_len = if e.path.length() < 0x0fff { e.path.length() } else { 0x0fff }
+    let name_len = if e.path.length() < 0x0fff {
+      e.path.length()
+    } else {
+      0x0fff
+    }
     push_u16_be(out, name_len)
     for c in e.path {
       out.push(c.to_int().to_byte())
     }
     out.push(b'\x00')
     // pad to 8-byte alignment
-    while (out.length() % 8) != 0 {
+    while out.length() % 8 != 0 {
       out.push(b'\x00')
     }
   }
-
-  let content = Bytes::from_array(FixedArray::makei(out.length(), fn(i) { out[i] }))
+  let content = Bytes::from_array(
+    FixedArray::makei(out.length(), fn(i) { out[i] }),
+  )
   let checksum = sha1(content)
   for b in checksum.bytes {
     out.push(b)
   }
-  let index_bytes = Bytes::from_array(FixedArray::makei(out.length(), fn(i) { out[i] }))
+  let index_bytes = Bytes::from_array(
+    FixedArray::makei(out.length(), fn(i) { out[i] }),
+  )
   let index_path = join_path(git_dir, "index")
   fs.write_file(index_path, index_bytes)
 }
@@ -245,8 +252,11 @@ fn collect_tree_entries(
       }
       let entries = parse_tree(obj.data)
       for entry in entries {
-        let path =
-          if prefix.length() == 0 { entry.name } else { prefix + "/" + entry.name }
+        let path = if prefix.length() == 0 {
+          entry.name
+        } else {
+          prefix + "/" + entry.name
+        }
         if is_tree_mode(entry.mode) {
           collect_tree_entries(store, entry.id, path, out)
         } else {
@@ -294,7 +304,11 @@ fn push_u16_be(out : Array[Byte], v : Int) -> Unit {
 }
 
 ///|
-fn write_text(fs : &FileSystem, path : String, content : String) -> Unit raise GitError {
+fn write_text(
+  fs : &FileSystem,
+  path : String,
+  content : String,
+) -> Unit raise GitError {
   fs.write_string(path, content)
 }
 

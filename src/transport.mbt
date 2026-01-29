@@ -20,18 +20,26 @@ pub struct RemoteSpec {
 pub fn parse_remote(remote : String) -> RemoteSpec {
   if remote.has_prefix("http://") || remote.has_prefix("https://") {
     let base = normalize_http_url(remote)
-    return { kind: RemoteKind::Http, raw: remote, host: None, path: "", base_url: Some(base) }
+    return {
+      kind: RemoteKind::Http,
+      raw: remote,
+      host: None,
+      path: "",
+      base_url: Some(base),
+    }
   }
   if remote.has_prefix("ssh://") {
     return parse_ssh_url(remote)
   }
   if remote.has_prefix("file://") {
-    let path = String::unsafe_substring(
-      remote,
-      start=7,
-      end=remote.length(),
-    )
-    return { kind: RemoteKind::File, raw: remote, host: None, path, base_url: None }
+    let path = String::unsafe_substring(remote, start=7, end=remote.length())
+    return {
+      kind: RemoteKind::File,
+      raw: remote,
+      host: None,
+      path,
+      base_url: None,
+    }
   }
   // scp-style: [user@]host:path
   let colon = remote.find(":")
@@ -42,10 +50,22 @@ pub fn parse_remote(remote : String) -> RemoteSpec {
       start=idx + 1,
       end=remote.length(),
     )
-    return { kind: RemoteKind::Ssh, raw: remote, host: Some(host), path, base_url: None }
+    return {
+      kind: RemoteKind::Ssh,
+      raw: remote,
+      host: Some(host),
+      path,
+      base_url: None,
+    }
   }
   // default: local path
-  { kind: RemoteKind::File, raw: remote, host: None, path: remote, base_url: None }
+  {
+    kind: RemoteKind::File,
+    raw: remote,
+    host: None,
+    path: remote,
+    base_url: None,
+  }
 }
 
 ///|
@@ -64,10 +84,20 @@ fn parse_ssh_url(remote : String) -> RemoteSpec {
   let slash = rest.find("/")
   match slash {
     None =>
-      { kind: RemoteKind::Ssh, raw: remote, host: Some(rest), path: "", base_url: None }
+      {
+        kind: RemoteKind::Ssh,
+        raw: remote,
+        host: Some(rest),
+        path: "",
+        base_url: None,
+      }
     Some(idx) => {
       let host = String::unsafe_substring(rest, start=0, end=idx)
-      let path = String::unsafe_substring(rest, start=idx + 1, end=rest.length())
+      let path = String::unsafe_substring(
+        rest,
+        start=idx + 1,
+        end=rest.length(),
+      )
       {
         kind: RemoteKind::Ssh,
         raw: remote,

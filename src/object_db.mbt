@@ -48,13 +48,16 @@ pub fn ObjectDb::load(
   } else {
     {}
   }
-  let packs =
-    if fs.is_dir(objects_dir) {
-      let pack_dir = join_path(objects_dir, "pack")
-      if fs.is_dir(pack_dir) { load_pack_indexes(fs, pack_dir) } else { [] }
+  let packs = if fs.is_dir(objects_dir) {
+    let pack_dir = join_path(objects_dir, "pack")
+    if fs.is_dir(pack_dir) {
+      load_pack_indexes(fs, pack_dir)
     } else {
       []
     }
+  } else {
+    []
+  }
   { loose, packs }
 }
 
@@ -188,11 +191,7 @@ fn load_pack_indexes(
     if not(fs.is_file(idx_path)) {
       continue
     }
-    let base = String::unsafe_substring(
-      entry,
-      start=0,
-      end=entry.length() - 4,
-    )
+    let base = String::unsafe_substring(entry, start=0, end=entry.length() - 4)
     let pack_path = join_path(pack_dir, base + ".pack")
     if not(fs.is_file(pack_path)) {
       continue
@@ -229,7 +228,10 @@ fn load_pack_objects(
 }
 
 ///|
-fn parse_pack_index(data : Bytes, pack_path : String) -> PackIndex raise GitError {
+fn parse_pack_index(
+  data : Bytes,
+  pack_path : String,
+) -> PackIndex raise GitError {
   if data.length() < 8 {
     raise GitError::InvalidObject("Index file too short")
   }
@@ -362,13 +364,15 @@ fn read_pack_object_at(
         None =>
           match get_by_hex(db, fs, base_hex, seen) {
             Some(obj) => obj
-            None => raise GitError::PackfileError("Missing base object for REF_DELTA")
+            None =>
+              raise GitError::PackfileError("Missing base object for REF_DELTA")
           }
       }
       let content = apply_delta(base.data, delta)
       PackObject::new(base.obj_type, content)
     }
-    _ => raise GitError::PackfileError("Unknown packfile object type: \{type_id}")
+    _ =>
+      raise GitError::PackfileError("Unknown packfile object type: \{type_id}")
   }
 }
 
