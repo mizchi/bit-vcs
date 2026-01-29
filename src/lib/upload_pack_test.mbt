@@ -88,3 +88,6 @@ test "parse_upload_pack_request: multiple wants and haves" {
   assert_true(req.haves.length() == 1)
   assert_true(req.done)
 }
+
+// Note: Oracle tests for upload-pack are in src/git_oracle_pack_test.mbt
+// (main package) which has access to native-only features (@process, @fs).

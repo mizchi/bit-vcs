@@ -457,3 +457,7 @@ async test "git oracle: verify packfile with commit+tree+blob" {
   }
   remove_dir_recursive(temp_dir)
 }
+
+// Note: upload-pack oracle tests are in src/lib/upload_pack_test.mbt
+// because they need access to @gitlib package which is not accessible
+// from the main package's blackbox tests.
