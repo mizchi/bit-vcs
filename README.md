@@ -110,9 +110,9 @@ just git-t-allowlist-shim      # Run with git-shim
 
 | Category | Passed | Failed | Total |
 |----------|--------|--------|-------|
-| All (pack/fetch/push/clone/pull/protocol) | 3500 | 0 | 3542 |
+| Strict mode (MoonBit impl only) | 1284 | 0 | 1299 |
 
-**3500/3542 tests pass** with 0 failures (skipped tests are due to platform-specific prerequisites like GPG, MINGW, etc.).
+**1284/1299 tests pass** in strict mode with 0 failures. Strict mode uses MoonBit implementation for `pack-objects`, `index-pack`, `upload-pack`, and `receive-pack` without falling back to real git.
 
 ### Oracle Testing
 
