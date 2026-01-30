@@ -1,4 +1,4 @@
-///| Miscellaneous handlers: diff, merge, tag, rm, mv, config, sparse-checkout, rev-parse
+///| Miscellaneous handlers: diff, merge, tag, rm, mv, config, sparse-checkout, rev-parse, cat-file, ls-files
 
 ///|
 async fn handle_diff(args : Array[String]) -> Unit raise Error {
@@ -438,4 +438,144 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
       }
     }
   }
+}
+
+///|
+async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  let mut show_type = false
+  let mut show_size = false
+  let mut pretty_print = false
+  let mut obj_spec : String? = None
+  for arg in args {
+    match arg {
+      "-t" => show_type = true
+      "-s" => show_size = true
+      "-p" => pretty_print = true
+      _ if arg.has_prefix("-") => ()
+      _ => obj_spec = Some(arg)
+    }
+  }
+  guard obj_spec is Some(spec) else {
+    raise @git.GitError::InvalidObject("object name required")
+  }
+  let obj_id = @gitlib.rev_parse(fs, git_dir, spec)
+  guard obj_id is Some(oid) else {
+    raise @git.GitError::InvalidObject("Not a valid object name: \{spec}")
+  }
+  let db = @gitlib.ObjectDb::load(fs, git_dir)
+  let obj = db.get(fs, oid)
+  guard obj is Some(o) else {
+    raise @git.GitError::InvalidObject("Object not found: \{spec}")
+  }
+  if show_type {
+    print_line(o.obj_type.to_string())
+    return ()
+  }
+  if show_size {
+    print_line(o.data.length().to_string())
+    return ()
+  }
+  if pretty_print {
+    match o.obj_type {
+      @git.ObjectType::Blob => @stdio.stdout.write(o.data)
+      @git.ObjectType::Tree => {
+        let entries = @git.parse_tree(o.data)
+        for entry in entries {
+          let mode_str = if entry.mode == "40000" {
+            "040000"
+          } else {
+            entry.mode
+          }
+          let type_str = if entry.mode == "40000" { "tree" } else { "blob" }
+          print_line("\{mode_str} \{type_str} \{entry.id.to_hex()}\t\{entry.name}")
+        }
+      }
+      @git.ObjectType::Commit => {
+        let text = decode_bytes(o.data)
+        print_line(text)
+      }
+      @git.ObjectType::Tag => {
+        let text = decode_bytes(o.data)
+        print_line(text)
+      }
+    }
+    return ()
+  }
+  // Default: output raw content
+  @stdio.stdout.write(o.data)
+}
+
+///|
+async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  let mut show_stage = false
+  let mut show_others = false
+  let mut show_deleted = false
+  for arg in args {
+    match arg {
+      "-s" | "--stage" => show_stage = true
+      "-c" | "--cached" => () // default mode, no-op
+      "-o" | "--others" => show_others = true
+      "-d" | "--deleted" => show_deleted = true
+      _ => ()
+    }
+  }
+  let entries = @gitlib.read_index_entries(fs, git_dir)
+  if show_others {
+    // Show untracked files
+    let tracked : Map[String, Bool] = {}
+    for e in entries {
+      tracked[e.path] = true
+    }
+    let all_files = @gitlib.list_working_files(fs, root)
+    for path in all_files {
+      if not(tracked.contains(path)) {
+        print_line(path)
+      }
+    }
+    return ()
+  }
+  if show_deleted {
+    // Show deleted files (in index but not in worktree)
+    for e in entries {
+      let abs = root + "/" + e.path
+      if not(fs.is_file(abs)) {
+        print_line(e.path)
+      }
+    }
+    return ()
+  }
+  // Default: show cached (indexed) files
+  if show_stage {
+    for e in entries {
+      let mode = format_mode(e.mode)
+      // Stage is always 0 for normal entries (no merge conflict)
+      print_line("\{mode} \{e.id.to_hex()} 0\t\{e.path}")
+    }
+  } else {
+    for e in entries {
+      print_line(e.path)
+    }
+  }
+}
+
+///|
+fn format_mode(mode : Int) -> String {
+  // Convert mode to octal string (6 digits)
+  let mut n = mode
+  let digits : Array[String] = []
+  while n > 0 {
+    digits.push((n % 8).to_string())
+    n = n / 8
+  }
+  while digits.length() < 6 {
+    digits.push("0")
+  }
+  digits.rev_in_place()
+  digits.iter().fold(init="", fn(acc, d) { acc + d })
 }

@@ -348,6 +348,7 @@ pub fn TestFs::new() -> Self
 pub fn TestFs::read_file(Self, String) -> Bytes raise GitError
 pub fn TestFs::read_string(Self, String) -> String raise GitError
 pub fn TestFs::readdir(Self, String) -> Array[String] raise GitError
+pub fn TestFs::remove_dir(Self, String) -> Unit raise GitError
 pub fn TestFs::remove_file(Self, String) -> Unit raise GitError
 pub fn TestFs::write_file(Self, String, Bytes) -> Unit
 pub fn TestFs::write_string(Self, String, String) -> Unit
@@ -369,6 +370,7 @@ pub(open) trait FileSystem {
   write_file(Self, String, Bytes) -> Unit raise GitError
   write_string(Self, String, String) -> Unit raise GitError
   remove_file(Self, String) -> Unit raise GitError
+  remove_dir(Self, String) -> Unit raise GitError
 }
 
 pub(open) trait HttpClient {

@@ -162,7 +162,9 @@ fn rebase_collect_chain(
         }
         let info = @git.parse_commit(o.data)
         if info.parents.length() == 0 {
-          raise @git.GitError::InvalidObject("Reached root without finding base")
+          raise @git.GitError::InvalidObject(
+            "Reached root without finding base",
+          )
         }
         current = info.parents[0]
       }
@@ -774,20 +776,29 @@ fn save_rebase_state(
   fs.write_string(join_path(state_dir, "head-name"), state.head_name + "\n")
   // Write todo list
   let todo_lines = state.todo.map(fn(id) { "pick " + id.to_hex() })
-  fs.write_string(join_path(state_dir, "git-rebase-todo"), todo_lines.join("\n") +
-    "\n")
+  fs.write_string(
+    join_path(state_dir, "git-rebase-todo"),
+    todo_lines.join("\n") + "\n",
+  )
   // Write done list
   let done_lines = state.done.map(fn(id) { "pick " + id.to_hex() })
   fs.write_string(
     join_path(state_dir, "done"),
-    if done_lines.length() > 0 { done_lines.join("\n") + "\n" } else { "" },
+    if done_lines.length() > 0 {
+      done_lines.join("\n") + "\n"
+    } else {
+      ""
+    },
   )
   // Write current commit info
   match state.current {
     Some(id) => {
       fs.write_string(join_path(state_dir, "stopped-sha"), id.to_hex() + "\n")
       fs.write_string(join_path(state_dir, "message"), state.message)
-      fs.write_string(join_path(state_dir, "author-script"), "GIT_AUTHOR_NAME='\{state.author}'\nGIT_AUTHOR_DATE='\{state.author_time} \{state.author_tz}'\n")
+      fs.write_string(
+        join_path(state_dir, "author-script"),
+        "GIT_AUTHOR_NAME='\{state.author}'\nGIT_AUTHOR_DATE='\{state.author_time} \{state.author_tz}'\n",
+      )
     }
     None => ()
   }
@@ -819,20 +830,18 @@ pub fn load_rebase_state(
   } else {
     ""
   }
-  Some(
-    {
-      onto: @git.ObjectId::from_hex(onto_hex),
-      orig_head: @git.ObjectId::from_hex(orig_head_hex),
-      head_name,
-      todo,
-      done,
-      current,
-      message,
-      author: "",
-      author_time: 0L,
-      author_tz: "+0000",
-    },
-  )
+  Some({
+    onto: @git.ObjectId::from_hex(onto_hex),
+    orig_head: @git.ObjectId::from_hex(orig_head_hex),
+    head_name,
+    todo,
+    done,
+    current,
+    message,
+    author: "",
+    author_time: 0L,
+    author_tz: "+0000",
+  })
 }
 
 ///|
@@ -921,16 +930,28 @@ pub fn rebase_start(
   match head {
     None => {
       fast_forward_to(fs, rfs, root, upstream)
-      return { status: RebaseStatus::Complete, commit_id: Some(upstream), conflicts: [] }
+      return {
+        status: RebaseStatus::Complete,
+        commit_id: Some(upstream),
+        conflicts: [],
+      }
     }
     Some(h) => {
       if h == upstream {
-        return { status: RebaseStatus::NothingToRebase, commit_id: Some(h), conflicts: [] }
+        return {
+          status: RebaseStatus::NothingToRebase,
+          commit_id: Some(h),
+          conflicts: [],
+        }
       }
       let db = ObjectDb::load(rfs, git_dir)
       let chain = rebase_collect_chain(db, rfs, h, upstream)
       if chain.length() == 0 {
-        return { status: RebaseStatus::NothingToRebase, commit_id: Some(h), conflicts: [] }
+        return {
+          status: RebaseStatus::NothingToRebase,
+          commit_id: Some(h),
+          conflicts: [],
+        }
       }
       // Get head name for later restoration
       let head_name = match read_head_ref(rfs, git_dir) {
@@ -1170,7 +1191,11 @@ fn rebase_apply_next(
     rebase_write_worktree_except(fs, db, rfs, root, base_map, conflicts)
     let entries = rebase_map_to_index(db, rfs, base_map)
     write_index_entries(fs, git_dir, entries)
-    return { status: RebaseStatus::Conflict, commit_id: Some(commit_id), conflicts }
+    return {
+      status: RebaseStatus::Conflict,
+      commit_id: Some(commit_id),
+      conflicts,
+    }
   }
   // No conflicts - create new commit
   let new_tree = rebase_write_tree_from_map(fs, git_dir, base_map)
@@ -1223,7 +1248,7 @@ fn rebase_apply_changes_with_conflicts(
   for ch in changes {
     let path = ch.path
     match ch.kind {
-      ChangeKind::Added => {
+      ChangeKind::Added =>
         if base.contains(path) {
           // Conflict: file exists in base but commit adds it
           let base_entry = base.get(path).unwrap()
@@ -1231,7 +1256,14 @@ fn rebase_apply_changes_with_conflicts(
           if base_entry.id != new_entry.id {
             // Write conflict markers
             write_conflict_file(
-              db, rfs, fs, root, path, Some(base_entry), None, Some(new_entry),
+              db,
+              rfs,
+              fs,
+              root,
+              path,
+              Some(base_entry),
+              None,
+              Some(new_entry),
             )
             conflicts.push(path)
           }
@@ -1239,19 +1271,26 @@ fn rebase_apply_changes_with_conflicts(
         } else {
           base[path] = ch.entry.unwrap()
         }
-      }
       ChangeKind::Deleted =>
         match (base.get(path), parent_map.get(path)) {
-          (Some(b), Some(p)) => {
+          (Some(b), Some(p)) =>
             if b.id != p.id || b.mode != p.mode {
               // Conflict: base modified, but commit deletes
               conflicts.push(path)
               // Keep base version with marker
-              write_conflict_file(db, rfs, fs, root, path, Some(b), Some(p), None)
+              write_conflict_file(
+                db,
+                rfs,
+                fs,
+                root,
+                path,
+                Some(b),
+                Some(p),
+                None,
+              )
             } else {
               base.remove(path)
             }
-          }
           (None, None) => ()
           (Some(b), None) => {
             // File in base but not in parent - conflict
@@ -1265,23 +1304,36 @@ fn rebase_apply_changes_with_conflicts(
       ChangeKind::Modified => {
         let entry = ch.entry.unwrap()
         match (base.get(path), parent_map.get(path)) {
-          (Some(b), Some(p)) => {
+          (Some(b), Some(p)) =>
             if b.id != p.id || b.mode != p.mode {
               // Three-way conflict: base, parent, and commit all different
               write_conflict_file(
-                db, rfs, fs, root, path, Some(b), Some(p), Some(entry),
+                db,
+                rfs,
+                fs,
+                root,
+                path,
+                Some(b),
+                Some(p),
+                Some(entry),
               )
               conflicts.push(path)
             } else {
               // Base matches parent, apply modification
               base[path] = entry
             }
-          }
           (None, None) => base[path] = entry
           (None, Some(p)) => {
             // File was deleted in base but modified in commit
             write_conflict_file(
-              db, rfs, fs, root, path, None, Some(p), Some(entry),
+              db,
+              rfs,
+              fs,
+              root,
+              path,
+              None,
+              Some(p),
+              Some(entry),
             )
             conflicts.push(path)
             base[path] = entry
@@ -1290,7 +1342,14 @@ fn rebase_apply_changes_with_conflicts(
             // File added in base, modified in commit (from nothing to something)
             if b.id != entry.id {
               write_conflict_file(
-                db, rfs, fs, root, path, Some(b), None, Some(entry),
+                db,
+                rfs,
+                fs,
+                root,
+                path,
+                Some(b),
+                None,
+                Some(entry),
               )
               conflicts.push(path)
             }

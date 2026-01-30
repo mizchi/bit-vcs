@@ -1,4 +1,4 @@
-///| Remote operation handlers: remote, upload-pack, receive-pack, fetch, pull, clone
+///| Remote operation handlers: remote, upload-pack, receive-pack, fetch, pull, push, clone
 
 ///|
 async fn handle_remote(args : Array[String]) -> Unit raise Error {
@@ -483,6 +483,72 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
   match result {
     None => print_line("Already up to date.")
     Some(id) => print_line("Updated to \{id.to_hex()}")
+  }
+}
+
+///|
+async fn handle_push(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  // Parse arguments
+  let mut remote_name = "origin"
+  let mut refspec : String? = None
+  let mut force = false
+  let mut set_upstream = false
+  for arg in args {
+    match arg {
+      "-f" | "--force" => force = true
+      "-u" | "--set-upstream" => set_upstream = true
+      _ if arg.has_prefix("-") => ()
+      _ =>
+        if refspec is None {
+          // First non-option is either remote or refspec
+          // Check if it's a known remote
+          let url = get_remote_url(fs, git_dir, arg)
+          if url is Some(_) {
+            remote_name = arg
+          } else {
+            refspec = Some(arg)
+          }
+        } else {
+          // Second non-option is refspec
+          refspec = Some(arg)
+        }
+    }
+  }
+  // Get remote URL
+  let remote_url = get_remote_url(fs, git_dir, remote_name)
+  guard remote_url is Some(url) else {
+    raise @git.GitError::InvalidObject("No such remote: \{remote_name}")
+  }
+  // Determine refspec
+  let refname = match refspec {
+    Some(r) =>
+      if r.has_prefix("refs/") {
+        r
+      } else {
+        "refs/heads/" + r
+      }
+    None => {
+      // Use current branch
+      let head_ref = @gitlib.read_head_ref(fs, git_dir)
+      match head_ref {
+        @gitlib.HeadRef::Branch(branch) => "refs/heads/" + branch
+        @gitlib.HeadRef::Detached(_) =>
+          raise @git.GitError::InvalidObject(
+            "Cannot push from detached HEAD without refspec",
+          )
+      }
+    }
+  }
+  print_line("Pushing to \{url}...")
+  ignore(force) // TODO: implement force push
+  let result = @gitlib.push_http(fs, root, url, refname)
+  print_line(result)
+  if set_upstream {
+    // TODO: set tracking branch
+    print_line("Branch '\{refname}' set up to track remote branch.")
   }
 }
 

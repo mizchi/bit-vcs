@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/git/cmd/git_shim"
+package "mizchi/git/cmd/moongit"
 
 import {
   "mizchi/git",

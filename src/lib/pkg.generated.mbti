@@ -16,6 +16,8 @@ pub fn build_upload_pack_advertisement(&@git.RepoFileSystem, String, agent? : St
 
 pub fn checkout(&@git.FileSystem, &@git.RepoFileSystem, String, String, detach? : Bool, update_worktree? : Bool, update_index? : Bool) -> @git.ObjectId raise @git.GitError
 
+pub fn cherry_pick(&@git.FileSystem, &@git.RepoFileSystem, String, @git.ObjectId, String, Int64) -> CherryPickResult raise @git.GitError
+
 pub fn clear_rebase_state(&@git.FileSystem, &@git.RepoFileSystem, String) -> Unit raise @git.GitError
 
 pub async fn clone_http(&@git.FileSystem, &@git.RepoFileSystem, String, String, Bool) -> @git.ObjectId? raise @git.GitError
@@ -148,6 +150,14 @@ pub fn sparse_checkout_init(&@git.FileSystem, &@git.RepoFileSystem, String, cone
 
 pub fn sparse_checkout_set(&@git.FileSystem, &@git.RepoFileSystem, String, Array[String]) -> Unit raise @git.GitError
 
+pub fn stash_apply(&@git.FileSystem, &@git.RepoFileSystem, String, Int, Bool) -> Unit raise @git.GitError
+
+pub fn stash_drop(&@git.FileSystem, &@git.RepoFileSystem, String, Int) -> Unit raise @git.GitError
+
+pub fn stash_list(&@git.RepoFileSystem, String) -> Array[StashEntry] raise @git.GitError
+
+pub fn stash_push(&@git.FileSystem, &@git.RepoFileSystem, String, String, String, Int64) -> @git.ObjectId? raise @git.GitError
+
 pub fn status(&@git.RepoFileSystem, String) -> Status raise @git.GitError
 
 pub fn status_porcelain(&@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
@@ -183,6 +193,17 @@ pub struct BranchInfo {
   name : String
   id : @git.ObjectId
   current : Bool
+}
+
+pub struct CherryPickResult {
+  status : CherryPickStatus
+  commit_id : @git.ObjectId?
+  conflicts : Array[String]
+}
+
+pub enum CherryPickStatus {
+  Success
+  Conflict
 }
 
 pub struct DiffFile {
@@ -312,6 +333,11 @@ pub(all) enum ResetMode {
   Soft
   Mixed
   Hard
+}
+
+pub struct StashEntry {
+  id : @git.ObjectId
+  message : String
 }
 
 pub struct Status {

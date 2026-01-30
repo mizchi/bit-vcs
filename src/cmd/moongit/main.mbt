@@ -25,22 +25,27 @@ async fn show_help() -> Unit {
     #|   status     Show the working tree status
     #|
     #|grow, mark and tweak your common history
-    #|   branch     List, create, or delete branches
-    #|   commit     Record changes to the repository
-    #|   checkout   Switch branches or restore working tree files
-    #|   merge      Join two or more development histories together
-    #|   rebase     Reapply commits on top of another base tip
-    #|   reset      Reset current HEAD to the specified state
-    #|   switch     Switch branches
-    #|   tag        Create, list, delete tag objects
+    #|   branch      List, create, or delete branches
+    #|   cherry-pick Apply the changes from some existing commits
+    #|   commit      Record changes to the repository
+    #|   checkout    Switch branches or restore working tree files
+    #|   merge       Join two or more development histories together
+    #|   rebase      Reapply commits on top of another base tip
+    #|   reset       Reset current HEAD to the specified state
+    #|   stash       Stash the changes in a dirty working directory
+    #|   switch      Switch branches
+    #|   tag         Create, list, delete tag objects
     #|
     #|collaborate
-    #|   fetch      Download objects and refs from another repository
-    #|   pull       Fetch from and integrate with another repository
-    #|   remote     Manage set of tracked repositories
+    #|   fetch       Download objects and refs from another repository
+    #|   pull        Fetch from and integrate with another repository
+    #|   push        Update remote refs along with associated objects
+    #|   remote      Manage set of tracked repositories
     #|
     #|low-level / plumbing
+    #|   cat-file        Provide content or type info for repository objects
     #|   config          Get and set repository options
+    #|   ls-files        Show information about files in the index
     #|   rev-parse       Parse revision specifications
     #|   pack-objects    Create a packed archive of objects
     #|   index-pack      Build pack index file for an existing packed archive
@@ -197,6 +202,7 @@ async fn dispatch_command(
     "clone" => handle_clone(rest) catch { err => exit_with_error("clone", err) }
     "fetch" => handle_fetch(rest) catch { err => exit_with_error("fetch", err) }
     "pull" => handle_pull(rest) catch { err => exit_with_error("pull", err) }
+    "push" => handle_push(rest) catch { err => exit_with_error("push", err) }
     // Core operations
     "init" => handle_init(rest) catch { err => exit_with_error("init", err) }
     "status" =>
@@ -228,6 +234,11 @@ async fn dispatch_command(
       handle_rebase(rest) catch {
         err => exit_with_error("rebase", err)
       }
+    "stash" => handle_stash(rest) catch { err => exit_with_error("stash", err) }
+    "cherry-pick" =>
+      handle_cherry_pick(rest) catch {
+        err => exit_with_error("cherry-pick", err)
+      }
     // Misc operations
     "diff" => handle_diff(rest) catch { err => exit_with_error("diff", err) }
     "merge" =>
@@ -248,6 +259,14 @@ async fn dispatch_command(
     "rev-parse" =>
       handle_rev_parse(rest) catch {
         err => exit_with_error("rev-parse", err)
+      }
+    "cat-file" =>
+      handle_cat_file(rest) catch {
+        err => exit_with_error("cat-file", err)
+      }
+    "ls-files" =>
+      handle_ls_files(rest) catch {
+        err => exit_with_error("ls-files", err)
       }
     "version" | "--version" => print_line("git version 2.47.0 (moongit)")
     // Fallback to system git for unknown commands
