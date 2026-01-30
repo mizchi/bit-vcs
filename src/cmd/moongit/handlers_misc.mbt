@@ -344,8 +344,8 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
         return
       }
     }
-    // Key not found
-    raise @git.GitError::InvalidObject("key not found: " + k)
+    // Key not found - exit silently with code 1 (git behavior)
+    @sys.exit(1)
   } else {
     // Write config - fallback to system git for now
     raise @git.GitError::InvalidObject("config write not implemented")
@@ -725,11 +725,13 @@ async fn handle_ls_tree(args : Array[String]) -> Unit raise Error {
   let git_dir = root + "/.git"
   let fs = OsFs::new()
   let mut recursive = false
+  let mut show_trees = false // -t option
   let mut name_only = false
   let mut tree_spec : String? = None
   for arg in args {
     match arg {
       "-r" | "--recursive" => recursive = true
+      "-t" => show_trees = true // Show tree entries when recursing
       "--name-only" | "--name-status" => name_only = true
       _ if not(arg.has_prefix("-")) => tree_spec = Some(arg)
       _ => ()
@@ -745,7 +747,7 @@ async fn handle_ls_tree(args : Array[String]) -> Unit raise Error {
   let db = @gitlib.ObjectDb::load(fs, git_dir)
   // Resolve to tree if it's a commit
   let actual_tree_id = resolve_to_tree(db, fs, tid)
-  print_tree_entries(db, fs, actual_tree_id, "", recursive, name_only)
+  print_tree_entries(db, fs, actual_tree_id, "", recursive, show_trees, name_only)
 }
 
 ///|
@@ -775,6 +777,7 @@ async fn print_tree_entries(
   tree_id : @git.ObjectId,
   prefix : String,
   recursive : Bool,
+  show_trees : Bool,
   name_only : Bool,
 ) -> Unit raise Error {
   let obj = db.get(fs, tree_id)
@@ -789,17 +792,19 @@ async fn print_tree_entries(
       prefix + "/" + entry.name
     }
     let is_tree = entry.mode == "40000" || entry.mode == "040000"
-    if name_only {
-      if not(is_tree) || not(recursive) {
+    // With -r, don't print tree entries unless -t is also specified
+    let should_print = not(recursive) || not(is_tree) || show_trees
+    if should_print {
+      if name_only {
         print_line(path)
+      } else {
+        let mode_str = if entry.mode == "40000" { "040000" } else { entry.mode }
+        let type_str = if is_tree { "tree" } else { "blob" }
+        print_line("\{mode_str} \{type_str} \{entry.id.to_hex()}\t\{path}")
       }
-    } else {
-      let mode_str = if entry.mode == "40000" { "040000" } else { entry.mode }
-      let type_str = if is_tree { "tree" } else { "blob" }
-      print_line("\{mode_str} \{type_str} \{entry.id.to_hex()}\t\{path}")
     }
     if recursive && is_tree {
-      print_tree_entries(db, fs, entry.id, path, recursive, name_only)
+      print_tree_entries(db, fs, entry.id, path, recursive, show_trees, name_only)
     }
   }
 }
