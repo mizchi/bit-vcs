@@ -28,11 +28,23 @@ pub fn collect_tree_files_from_commit(ObjectDb, &@git.RepoFileSystem, @git.Objec
 
 pub fn commit(&@git.FileSystem, &@git.RepoFileSystem, String, String, String, Int64) -> @git.ObjectId raise @git.GitError
 
+pub fn commit_amend(&@git.FileSystem, &@git.RepoFileSystem, String, String, String, Int64) -> @git.ObjectId raise @git.GitError
+
+pub fn create_annotated_tag(&@git.FileSystem, &@git.RepoFileSystem, String, String, @git.ObjectId, String, String, Int64) -> Unit raise @git.GitError
+
 pub fn create_branch(&@git.FileSystem, &@git.RepoFileSystem, String, String) -> Unit raise @git.GitError
+
+pub fn create_branch_at(&@git.FileSystem, &@git.RepoFileSystem, String, String, @git.ObjectId) -> Unit raise @git.GitError
+
+pub fn create_lightweight_tag(&@git.FileSystem, String, String, @git.ObjectId) -> Unit raise @git.GitError
 
 pub fn delete_branch(&@git.FileSystem, &@git.RepoFileSystem, String, String, force? : Bool) -> Unit raise @git.GitError
 
+pub fn delete_tag(&@git.FileSystem, String, String) -> Unit raise @git.GitError
+
 pub fn diff_index(&@git.RepoFileSystem, String) -> Array[DiffFile] raise @git.GitError
+
+pub fn diff_stat(Array[DiffFile]) -> Array[String]
 
 pub fn diff_text(Array[DiffFile]) -> Array[String]
 
@@ -52,6 +64,12 @@ pub fn list_branches(&@git.RepoFileSystem, String) -> (HeadRef, Array[BranchInfo
 
 pub fn list_branches_text(&@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
 
+pub fn list_branches_verbose(&@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
+
+pub fn list_remote_branches(&@git.RepoFileSystem, String) -> Array[String]
+
+pub fn list_tags(&@git.RepoFileSystem, String) -> Array[String]
+
 pub fn list_working_files(&@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
 
 pub fn load_object_store_from_fs(&@git.RepoFileSystem, String) -> @git.ObjectStore raise @git.GitError
@@ -63,6 +81,8 @@ pub fn log_head_oneline(&@git.RepoFileSystem, String, max_count? : Int) -> Array
 pub fn matches_sparse_pattern(String, Array[String]) -> Bool
 
 pub fn merge(&@git.FileSystem, &@git.RepoFileSystem, String, @git.ObjectId, String, String, Int64) -> MergeResult raise @git.GitError
+
+pub fn mv_path(&@git.FileSystem, &@git.RepoFileSystem, String, String, String, force? : Bool) -> Unit raise @git.GitError
 
 pub fn parse_receive_pack_request(Bytes) -> ReceivePackRequest raise @git.GitError
 
@@ -99,6 +119,8 @@ pub fn resolve_ref(&@git.RepoFileSystem, String, String) -> @git.ObjectId? raise
 pub fn restore_paths(&@git.FileSystem, &@git.RepoFileSystem, String, Array[String]) -> Unit raise @git.GitError
 
 pub fn rev_parse(&@git.RepoFileSystem, String, String) -> @git.ObjectId? raise @git.GitError
+
+pub fn rm_paths(&@git.FileSystem, &@git.RepoFileSystem, String, Array[String], cached? : Bool, force? : Bool, recursive? : Bool) -> Unit raise @git.GitError
 
 pub fn show_ref(&@git.RepoFileSystem, String) -> Array[(String, @git.ObjectId)] raise @git.GitError
 

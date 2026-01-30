@@ -501,3 +501,174 @@ fn worktree_parse_octal(s : String) -> Int {
   }
   result
 }
+
+///|
+/// Commit with amend (replace the last commit).
+pub fn commit_amend(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  root : String,
+  message : String,
+  author : String,
+  timestamp : Int64,
+) -> @git.ObjectId raise @git.GitError {
+  let git_dir = join_path(root, ".git")
+  let entries = read_index_entries(rfs, git_dir)
+  if entries.length() == 0 {
+    raise @git.GitError::InvalidObject("Empty index")
+  }
+  let tree_id = write_tree_from_index(fs, git_dir, entries)
+  // Get the parent of the current HEAD (grandparent of new commit)
+  let current_head = resolve_head_commit(rfs, git_dir)
+  let parents = match current_head {
+    Some(head_id) => {
+      // Get parent of current HEAD
+      let db = ObjectDb::load(rfs, git_dir)
+      let obj = db.get(rfs, head_id)
+      match obj {
+        Some(o) => {
+          let info = @git.parse_commit(o.data)
+          info.parents
+        }
+        None => []
+      }
+    }
+    None => []
+  }
+  let commit = @git.Commit::new(
+    tree_id, parents, author, timestamp, "+0000", author, timestamp, "+0000", message,
+  )
+  let (commit_id, compressed) = @git.create_commit(commit)
+  write_object_bytes(fs, git_dir, commit_id, compressed)
+  update_head_ref(fs, rfs, git_dir, commit_id)
+  commit_id
+}
+
+///|
+/// Remove files from index (and optionally working tree).
+pub fn rm_paths(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  root : String,
+  paths : Array[String],
+  cached? : Bool = false,
+  force? : Bool = false,
+  recursive? : Bool = false,
+) -> Unit raise @git.GitError {
+  let git_dir = join_path(root, ".git")
+  let entries = read_index_entries(rfs, git_dir)
+  let map : Map[String, IndexEntry] = {}
+  for e in entries {
+    map[e.path] = e
+  }
+  // Expand paths if recursive
+  let all_paths = if recursive {
+    expand_rm_paths(rfs, root, paths, map)
+  } else {
+    paths
+  }
+  ignore(force)
+  for path in all_paths {
+    let norm_path = normalize_rel_path(path)
+    // Remove from index
+    map.remove(norm_path)
+    // Remove from working tree unless --cached
+    if not(cached) {
+      let abs = join_path(root, norm_path)
+      if rfs.is_file(abs) {
+        fs.remove_file(abs)
+      }
+    }
+  }
+  let out : Array[IndexEntry] = []
+  for item in map.to_array() {
+    let (_, entry) = item
+    out.push(entry)
+  }
+  write_index_entries(fs, git_dir, out)
+}
+
+///|
+fn expand_rm_paths(
+  rfs : &@git.RepoFileSystem,
+  root : String,
+  paths : Array[String],
+  index_map : Map[String, IndexEntry],
+) -> Array[String] {
+  let result : Array[String] = []
+  for p in paths {
+    let norm_path = normalize_rel_path(p)
+    let abs = join_path(root, norm_path)
+    if rfs.is_dir(abs) {
+      // Add all index entries under this directory
+      let prefix = if norm_path.has_suffix("/") {
+        norm_path
+      } else {
+        norm_path + "/"
+      }
+      for item in index_map.to_array() {
+        let (entry_path, _) = item
+        if entry_path.has_prefix(prefix) || entry_path == norm_path {
+          result.push(entry_path)
+        }
+      }
+    } else {
+      result.push(norm_path)
+    }
+  }
+  result
+}
+
+///|
+/// Move/rename a file in the index and working tree.
+pub fn mv_path(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  root : String,
+  source : String,
+  dest : String,
+  force? : Bool = false,
+) -> Unit raise @git.GitError {
+  let git_dir = join_path(root, ".git")
+  let src_norm = normalize_rel_path(source)
+  let dst_norm = normalize_rel_path(dest)
+  let src_abs = join_path(root, src_norm)
+  let dst_abs = join_path(root, dst_norm)
+  // Check source exists
+  if not(rfs.is_file(src_abs)) {
+    raise @git.GitError::InvalidObject("source '\{source}' does not exist")
+  }
+  // Check dest doesn't exist (unless force)
+  if rfs.is_file(dst_abs) && not(force) {
+    raise @git.GitError::InvalidObject("destination '\{dest}' already exists")
+  }
+  // Read index
+  let entries = read_index_entries(rfs, git_dir)
+  let map : Map[String, IndexEntry] = {}
+  for e in entries {
+    map[e.path] = e
+  }
+  // Find source entry
+  guard map.get(src_norm) is Some(src_entry) else {
+    raise @git.GitError::InvalidObject("'\{source}' not in index")
+  }
+  // Remove source, add dest
+  map.remove(src_norm)
+  map[dst_norm] = {
+    path: dst_norm,
+    id: src_entry.id,
+    mode: src_entry.mode,
+    size: src_entry.size,
+  }
+  // Move file on disk
+  let content = rfs.read_file(src_abs)
+  fs.write_file(dst_abs, content)
+  fs.remove_file(src_abs)
+  // Write index
+  let out : Array[IndexEntry] = []
+  for item in map.to_array() {
+    let (_, entry) = item
+    out.push(entry)
+  }
+  write_index_entries(fs, git_dir, out)
+}
