@@ -1,0 +1,33 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/git/ignore"
+
+// Values
+pub fn match_glob(String, String) -> Bool
+
+pub fn parse(String, String) -> Array[Rule]
+
+// Errors
+
+// Types and methods
+pub struct Matcher {
+  rules : Array[Rule]
+}
+pub fn Matcher::add_rules(Self, String, String) -> Unit
+pub fn Matcher::is_ignored(Self, String, Bool) -> Bool
+pub fn Matcher::len(Self) -> Int
+pub fn Matcher::new() -> Self
+pub fn Matcher::truncate(Self, Int) -> Unit
+
+pub struct Rule {
+  base : String
+  pattern : String
+  negated : Bool
+  dir_only : Bool
+  anchored : Bool
+  has_slash : Bool
+}
+
+// Type aliases
+
+// Traits
+
