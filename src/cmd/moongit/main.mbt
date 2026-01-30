@@ -86,7 +86,7 @@ async fn main_async() -> Unit {
     }
   }
   let full_args = collect_args(args, 1)
-  let (subcmd, rest, cwd, unsupported_global, no_fallback) = parse_global_options(
+  let (subcmd, rest, cwd, unsupported_global, no_fallback, bare) = parse_global_options(
     args,
   )
   guard subcmd is Some(cmd) else {
@@ -113,18 +113,25 @@ async fn main_async() -> Unit {
     }
     None => ()
   }
-  dispatch_command(cmd, rest, full_args, no_fallback)
+  // If --bare was passed globally, prepend it to rest for init command
+  let effective_rest = if bare && cmd == "init" {
+    prepend_arg("--bare", rest)
+  } else {
+    rest
+  }
+  dispatch_command(cmd, effective_rest, full_args, no_fallback)
 }
 
 ///|
 fn parse_global_options(
   args : Array[String],
-) -> (String?, Array[String], String?, Bool, Bool) {
+) -> (String?, Array[String], String?, Bool, Bool, Bool) {
   let mut i = 1
   let mut in_opts = true
   let mut cwd : String? = None
   let mut unsupported_global = false
   let mut no_fallback = false
+  let mut bare = false
   let mut subcmd : String? = None
   let mut rest : Array[String] = []
   while i < args.length() {
@@ -136,6 +143,11 @@ fn parse_global_options(
     }
     if in_opts && arg == "--no-git-fallback" {
       no_fallback = true
+      i += 1
+      continue
+    }
+    if in_opts && arg == "--bare" {
+      bare = true
       i += 1
       continue
     }
@@ -175,7 +187,7 @@ fn parse_global_options(
     rest = collect_args(args, i + 1)
     break
   }
-  (subcmd, rest, cwd, unsupported_global, no_fallback)
+  (subcmd, rest, cwd, unsupported_global, no_fallback, bare)
 }
 
 ///|

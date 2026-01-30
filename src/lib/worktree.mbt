@@ -338,8 +338,29 @@ pub fn write_tree_from_index(
   fs : &@git.FileSystem,
   git_dir : String,
   entries : Array[IndexEntry],
+  prefix? : String? = None,
 ) -> @git.ObjectId raise @git.GitError {
-  let rel_entries = entries.map(fn(e) { e })
+  // If prefix is specified, filter entries and strip prefix from paths
+  let rel_entries = match prefix {
+    Some(p) => {
+      // Ensure prefix ends with /
+      let prefix_with_slash = if p.has_suffix("/") { p } else { p + "/" }
+      let result : Array[IndexEntry] = []
+      for e in entries {
+        if e.path.has_prefix(prefix_with_slash) {
+          // Strip the prefix from the path
+          let new_path = try {
+            e.path[prefix_with_slash.length():].to_string()
+          } catch {
+            _ => continue
+          }
+          result.push({ path: new_path, id: e.id, mode: e.mode, size: e.size })
+        }
+      }
+      result
+    }
+    None => entries.map(fn(e) { e })
+  }
   write_tree_from_entries(fs, git_dir, rel_entries)
 }
 

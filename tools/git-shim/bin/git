@@ -66,34 +66,7 @@ case "${1:-}" in
     ;;
 esac
 
-# Validate -c key=value syntax early (matches git's command-line config parsing).
-prev_is_c=0
-for arg in "$@"; do
-  if [ "$prev_is_c" -eq 1 ]; then
-    prev_is_c=0
-    case "$arg" in
-      *=*) ;;
-      *)
-        key_lc=$(printf '%s' "$arg" | tr 'A-Z' 'a-z')
-        if [ "$key_lc" = "receive.fsck.skiplist" ]; then
-          printf 'unable to parse '\''%s'\'' from command-line config\n' "$key_lc" >&2
-          exit 129
-        fi
-        ;;
-    esac
-    continue
-  fi
-  if [ "$arg" = "-c" ]; then
-    prev_is_c=1
-    continue
-  fi
-done
-if [ "$prev_is_c" -eq 1 ]; then
-  printf 'no config key given for -c\n' >&2
-  exit 129
-fi
-
-# Parse global options to find subcommand
+# Parse global options to find subcommand (must be done before -c validation)
 subcmd=""
 take_next=0
 skip_next=0
@@ -126,6 +99,47 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+# Validate -c key=value syntax for global options (before subcommand only)
+prev_is_c=0
+skip_next_c=0
+for arg in "$@"; do
+  # Handle -c value argument (don't treat as subcommand)
+  if [ "$prev_is_c" -eq 1 ]; then
+    prev_is_c=0
+    case "$arg" in
+      *=*) ;;
+      *)
+        key_lc=$(printf '%s' "$arg" | tr 'A-Z' 'a-z')
+        if [ "$key_lc" = "receive.fsck.skiplist" ]; then
+          printf 'unable to parse '\''%s'\'' from command-line config\n' "$key_lc" >&2
+          exit 129
+        fi
+        ;;
+    esac
+    continue
+  fi
+  # Stop at subcommand
+  case "$arg" in
+    -c)
+      prev_is_c=1
+      ;;
+    -C|--git-dir|--work-tree|--namespace|--super-prefix|--git-path|--exec-path|--)
+      ;;
+    --exec-path=*|--git-dir=*|--work-tree=*)
+      ;;
+    -*)
+      ;;
+    *)
+      # Found subcommand, stop checking
+      break
+      ;;
+  esac
+done
+if [ "$prev_is_c" -eq 1 ]; then
+  printf 'no config key given for -c\n' >&2
+  exit 129
+fi
 
 if [ -z "$subcmd" ]; then
   log "pass <none> $*"

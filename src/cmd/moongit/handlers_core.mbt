@@ -3,14 +3,82 @@
 ///|
 async fn handle_init(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
-  let path = match args {
-    [arg, ..] if arg.has_prefix("/") => arg
-    [arg, ..] => root + "/" + arg
-    [] => root
-  }
   let fs = OsFs::new()
-  @gitlib.init_repo(fs, path)
-  print_line("Initialized empty Git repository in " + path + "/.git/")
+  // Parse options
+  let mut bare = false
+  let mut initial_branch : String? = None
+  let mut target_dir : String? = None
+  let mut i = 0
+  while i < args.length() {
+    let arg = args[i]
+    match arg {
+      "--bare" => bare = true
+      "-b" if i + 1 < args.length() => {
+        initial_branch = Some(args[i + 1])
+        i += 1
+      }
+      _ if arg.has_prefix("--initial-branch=") =>
+        initial_branch = Some((try! arg[17:]).to_string())
+      _ if not(arg.has_prefix("-")) => target_dir = Some(arg)
+      _ => () // Ignore other options
+    }
+    i += 1
+  }
+  // Check GIT_DIR and GIT_WORK_TREE environment variables
+  let git_dir_env = @sys.get_env_var("GIT_DIR")
+  let work_tree_env = @sys.get_env_var("GIT_WORK_TREE")
+  // Determine the target path and git directory
+  let (path, effective_git_dir) : (String, String?) = match
+    (target_dir, git_dir_env) {
+    (Some(dir), _) => {
+      let p = if dir.has_prefix("/") { dir } else { root + "/" + dir }
+      (p, None)
+    }
+    (None, Some(gd)) => {
+      // When GIT_DIR is set without target
+      let g = if gd.has_prefix("/") { gd } else { root + "/" + gd }
+      // If GIT_WORK_TREE is also set, it's not bare (work tree exists)
+      // If only GIT_DIR is set, it's a bare repo
+      if work_tree_env is Some(_) {
+        (root, Some(g))
+      } else {
+        (g, Some(g))
+      }
+    }
+    (None, None) => (root, None)
+  }
+  // Determine if bare: only bare if explicitly requested or GIT_DIR without GIT_WORK_TREE
+  if git_dir_env is Some(_) && work_tree_env is None && target_dir is None {
+    bare = true
+  }
+  // If GIT_WORK_TREE is set with --bare, that's an error
+  if bare && work_tree_env is Some(_) {
+    eprint_line(
+      "fatal: GIT_WORK_TREE (or --work-tree=<directory>) not allowed without specifying a repository to work with",
+    )
+    @sys.exit(128)
+  }
+  // Determine default branch
+  let branch = match initial_branch {
+    Some(b) => b
+    None => "main"
+  }
+  // Determine actual git directory path for output message
+  let actual_git_dir = match effective_git_dir {
+    Some(gd) => gd
+    None => if bare { path } else { path + "/.git" }
+  }
+  // Check if this is a reinit (repository already exists)
+  let is_reinit = fs.is_dir(actual_git_dir) && fs.is_file(actual_git_dir + "/HEAD")
+  // Initialize repository (init_repo handles both new and reinit)
+  @gitlib.init_repo(fs, path, default_branch=branch, bare=bare)
+  // Print appropriate message
+  let verb = if is_reinit { "Reinitialized existing" } else { "Initialized empty" }
+  if bare {
+    print_line(verb + " Git repository in " + actual_git_dir + "/")
+  } else {
+    print_line(verb + " Git repository in " + actual_git_dir + "/")
+  }
 }
 
 ///|
@@ -259,12 +327,14 @@ async fn handle_show(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let fs = OsFs::new()
-  // Parse: git show [<commit>]
+  // Parse: git show [--pretty=<format>] [<commit>]
   let mut rev = "HEAD"
+  let mut pretty_raw = false
   for arg in args {
-    if not(arg.has_prefix("-")) {
+    if arg == "--pretty=raw" || arg == "--format=raw" {
+      pretty_raw = true
+    } else if not(arg.has_prefix("-")) {
       rev = arg
-      break
     }
   }
   // Resolve revision
@@ -285,6 +355,17 @@ async fn handle_show(args : Array[String]) -> Unit raise Error {
   }
   // Parse commit for tree/parents
   let commit_info = @git.parse_commit(o.data)
+  // If --pretty=raw, output raw commit object content
+  if pretty_raw {
+    print_line("commit \{commit_id.to_hex()}")
+    // Output the raw commit object as text
+    let text = decode_bytes(o.data)
+    print_str(text)
+    if not(text.has_suffix("\n")) {
+      print_line("")
+    }
+    return ()
+  }
   // Parse full commit details
   let show_info = parse_show_commit(o.data)
   // Print commit info

@@ -21,25 +21,54 @@ t2060-switch.sh
 
 # ls-files / ls-tree
 t3000-ls-files-others.sh
+t3001-ls-files-others-exclude.sh
+t3002-ls-files-dashpath.sh
+t3003-ls-files-exclude.sh
 t3004-ls-files-basic.sh
+t3005-ls-files-relative.sh
 t3100-ls-tree-restrict.sh
+t3101-ls-tree-dirname.sh
+t3102-ls-tree-wildcards.sh
+t3103-ls-tree-misc.sh
+t3104-ls-tree-format.sh
+t3105-ls-tree-output.sh
+
+# branch
+t3200-branch.sh
+t3201-branch-contains.sh
+t3202-show-branch.sh
+t3203-branch-output.sh
+t3204-branch-name-interpretation.sh
+t3205-branch-color.sh
 
 # diff
 t4000-diff-format.sh
 t4001-diff-rename.sh
 t4002-diff-basic.sh
+t4003-diff-rename-1.sh
+t4004-diff-rename-symlink.sh
+t4005-diff-rename-2.sh
 t4006-diff-mode.sh
+t4007-rename-3.sh
+t4008-diff-break-rewrite.sh
 t4010-diff-pathspec.sh
 t4017-diff-retval.sh
 
 # rev-list / log
 t6000-rev-list-misc.sh
+t6001-rev-list-graft.sh
+t6002-rev-list-bisect.sh
 t6003-rev-list-topo-order.sh
+t6004-rev-list-path-optim.sh
+t6005-rev-list-count.sh
+t6006-rev-list-format.sh
 
 # porcelain commands
 t7001-mv.sh
 t7004-tag.sh
+t7005-editor.sh
 t7007-show.sh
+t7010-setup.sh
 t7060-wtstatus.sh
 t7102-reset.sh
 t7500-commit-template-squash-signoff.sh
