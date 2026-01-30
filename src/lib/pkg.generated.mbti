@@ -16,6 +16,8 @@ pub fn build_upload_pack_advertisement(&@git.RepoFileSystem, String, agent? : St
 
 pub fn checkout(&@git.FileSystem, &@git.RepoFileSystem, String, String, detach? : Bool, update_worktree? : Bool, update_index? : Bool) -> @git.ObjectId raise @git.GitError
 
+pub fn clear_rebase_state(&@git.FileSystem, &@git.RepoFileSystem, String) -> Unit raise @git.GitError
+
 pub async fn clone_http(&@git.FileSystem, &@git.RepoFileSystem, String, String, Bool) -> @git.ObjectId? raise @git.GitError
 
 pub fn collect_reachable_objects(ObjectDb, &@git.RepoFileSystem, @git.ObjectId) -> Array[@git.PackObject] raise @git.GitError
@@ -58,6 +60,8 @@ pub fn init_repo(&@git.FileSystem, String, default_branch? : String) -> Unit rai
 
 pub fn is_ignored_path(&@git.RepoFileSystem, String, String, Bool) -> Bool raise @git.GitError
 
+pub fn is_rebase_in_progress(&@git.RepoFileSystem, String) -> Bool
+
 pub fn is_sparse_checkout_enabled(&@git.RepoFileSystem, String) -> Bool
 
 pub fn list_branches(&@git.RepoFileSystem, String) -> (HeadRef, Array[BranchInfo]) raise @git.GitError
@@ -73,6 +77,8 @@ pub fn list_tags(&@git.RepoFileSystem, String) -> Array[String]
 pub fn list_working_files(&@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
 
 pub fn load_object_store_from_fs(&@git.RepoFileSystem, String) -> @git.ObjectStore raise @git.GitError
+
+pub fn load_rebase_state(&@git.RepoFileSystem, String) -> RebaseState? raise @git.GitError
 
 pub fn log_head(&@git.RepoFileSystem, String, max_count? : Int) -> Array[LogEntry] raise @git.GitError
 
@@ -100,7 +106,15 @@ pub fn read_index_entries(&@git.RepoFileSystem, String) -> Array[IndexEntry] rai
 
 pub fn read_sparse_patterns(&@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
 
+pub fn rebase_abort(&@git.FileSystem, &@git.RepoFileSystem, String) -> Unit raise @git.GitError
+
+pub fn rebase_continue(&@git.FileSystem, &@git.RepoFileSystem, String) -> RebaseResult raise @git.GitError
+
 pub fn rebase_onto(&@git.FileSystem, &@git.RepoFileSystem, String, @git.ObjectId) -> @git.ObjectId raise @git.GitError
+
+pub fn rebase_skip(&@git.FileSystem, &@git.RepoFileSystem, String) -> RebaseResult raise @git.GitError
+
+pub fn rebase_start(&@git.FileSystem, &@git.RepoFileSystem, String, @git.ObjectId) -> RebaseResult raise @git.GitError
 
 pub fn receive_pack(&@git.FileSystem, &@git.RepoFileSystem, String, Bytes) -> Bytes raise @git.GitError
 
@@ -244,6 +258,31 @@ pub fn PackIndex::find_offset_hex(Self, String) -> Int64?
 
 pub struct PruneResult {
   pruned : Array[@git.ObjectId]
+}
+
+pub struct RebaseResult {
+  status : RebaseStatus
+  commit_id : @git.ObjectId?
+  conflicts : Array[String]
+}
+
+pub struct RebaseState {
+  onto : @git.ObjectId
+  orig_head : @git.ObjectId
+  head_name : String
+  todo : Array[@git.ObjectId]
+  done : Array[@git.ObjectId]
+  current : @git.ObjectId?
+  message : String
+  author : String
+  author_time : Int64
+  author_tz : String
+}
+
+pub enum RebaseStatus {
+  Complete
+  Conflict
+  NothingToRebase
 }
 
 pub struct ReceivePackRequest {

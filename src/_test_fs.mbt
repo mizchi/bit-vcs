@@ -73,6 +73,19 @@ pub fn TestFs::remove_file(self : TestFs, path : String) -> Unit raise GitError 
 }
 
 ///|
+pub fn TestFs::remove_dir(self : TestFs, path : String) -> Unit raise GitError {
+  if not(self.dirs.contains(path)) {
+    raise GitError::IoError("Directory not found: \{path}")
+  }
+  // Check if directory is empty
+  let children = self.readdir(path)
+  if children.length() > 0 {
+    raise GitError::IoError("Directory not empty: \{path}")
+  }
+  self.dirs.remove(path)
+}
+
+///|
 pub fn TestFs::readdir(
   self : TestFs,
   path : String,
@@ -130,6 +143,11 @@ pub impl FileSystem for TestFs with write_string(self, path, content) {
 ///|
 pub impl FileSystem for TestFs with remove_file(self, path) {
   TestFs::remove_file(self, path)
+}
+
+///|
+pub impl FileSystem for TestFs with remove_dir(self, path) {
+  TestFs::remove_dir(self, path)
 }
 
 ///|

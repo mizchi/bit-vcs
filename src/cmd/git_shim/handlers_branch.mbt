@@ -1,4 +1,4 @@
-///| Branch handlers: branch, checkout, switch, reset
+///| Branch handlers: branch, checkout, switch, reset, rebase
 
 ///|
 async fn handle_branch(args : Array[String]) -> Unit raise Error {
@@ -216,4 +216,80 @@ fn handle_reset(args : Array[String]) -> Unit raise Error {
   let commit_id = @gitlib.reset(fs, fs, root, rev, mode)
   let short_id = String::unsafe_substring(commit_id.to_hex(), start=0, end=7)
   println("HEAD is now at \{short_id}")
+}
+
+///|
+async fn handle_rebase(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  // Parse arguments
+  let mut do_continue = false
+  let mut do_abort = false
+  let mut do_skip = false
+  let mut upstream : String? = None
+  for arg in args {
+    match arg {
+      "--continue" => do_continue = true
+      "--abort" => do_abort = true
+      "--skip" => do_skip = true
+      _ if not(arg.has_prefix("-")) => upstream = Some(arg)
+      _ => ()
+    }
+  }
+  // Handle --continue
+  if do_continue {
+    let result = @gitlib.rebase_continue(fs, fs, root)
+    print_rebase_result(result)
+    return ()
+  }
+  // Handle --abort
+  if do_abort {
+    @gitlib.rebase_abort(fs, fs, root)
+    print_line("Rebase aborted")
+    return ()
+  }
+  // Handle --skip
+  if do_skip {
+    let result = @gitlib.rebase_skip(fs, fs, root)
+    print_rebase_result(result)
+    return ()
+  }
+  // Start new rebase
+  guard upstream is Some(ref_name) else {
+    raise @git.GitError::InvalidObject("usage: git rebase <upstream>")
+  }
+  let upstream_id = @gitlib.rev_parse(fs, git_dir, ref_name)
+  guard upstream_id is Some(id) else {
+    raise @git.GitError::InvalidObject("unknown revision: \{ref_name}")
+  }
+  let result = @gitlib.rebase_start(fs, fs, root, id)
+  print_rebase_result(result)
+}
+
+///|
+async fn print_rebase_result(result : @gitlib.RebaseResult) -> Unit {
+  match result.status {
+    @gitlib.RebaseStatus::Complete => {
+      match result.commit_id {
+        Some(id) => {
+          let short = String::unsafe_substring(id.to_hex(), start=0, end=7)
+          print_line("Successfully rebased and updated refs. [\{short}]")
+        }
+        None => print_line("Successfully rebased.")
+      }
+    }
+    @gitlib.RebaseStatus::NothingToRebase =>
+      print_line("Current branch is up to date.")
+    @gitlib.RebaseStatus::Conflict => {
+      print_line("CONFLICT: Merge conflict in:")
+      for path in result.conflicts {
+        print_line("  \{path}")
+      }
+      print_line("")
+      print_line("Resolve all conflicts, then run \"git rebase --continue\".")
+      print_line("To abort and return to the original state, run \"git rebase --abort\".")
+      print_line("To skip this commit, run \"git rebase --skip\".")
+    }
+  }
 }

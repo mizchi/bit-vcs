@@ -37,6 +37,13 @@ pub impl @git.FileSystem for OsFs with remove_file(_self, path) {
 }
 
 ///|
+pub impl @git.FileSystem for OsFs with remove_dir(_self, path) {
+  @fs.remove_dir(path) catch {
+    err => raise io_error(err)
+  }
+}
+
+///|
 pub impl @git.RepoFileSystem for OsFs with read_file(_self, path) {
   @fs.read_file_to_bytes(path) catch {
     err => raise io_error(err)

@@ -133,6 +133,8 @@ async fn dispatch_command(
     "index-pack" =>
       handle_index_pack(rest) catch { err => exit_with_error("index-pack", err) }
     // Remote operations
+    "remote" =>
+      handle_remote(rest) catch { err => exit_with_error("remote", err) }
     "clone" =>
       handle_clone(rest) catch { err => exit_with_error("clone", err) }
     "fetch" =>
@@ -169,6 +171,8 @@ async fn dispatch_command(
       }
     "reset" =>
       handle_reset(rest) catch { err => exit_with_error("reset", err) }
+    "rebase" =>
+      handle_rebase(rest) catch { err => exit_with_error("rebase", err) }
     // Misc operations
     "diff" => handle_diff(rest) catch { err => exit_with_error("diff", err) }
     "merge" =>

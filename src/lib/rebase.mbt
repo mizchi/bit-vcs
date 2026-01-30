@@ -1,6 +1,34 @@
 ///| Rebase and fast-forward helpers
 
 ///|
+pub struct RebaseState {
+  onto : @git.ObjectId
+  orig_head : @git.ObjectId
+  head_name : String // "refs/heads/main" or "" for detached
+  todo : Array[@git.ObjectId]
+  done : Array[@git.ObjectId]
+  current : @git.ObjectId?
+  message : String
+  author : String
+  author_time : Int64
+  author_tz : String
+}
+
+///|
+pub struct RebaseResult {
+  status : RebaseStatus
+  commit_id : @git.ObjectId?
+  conflicts : Array[String]
+}
+
+///|
+pub enum RebaseStatus {
+  Complete
+  Conflict
+  NothingToRebase
+}
+
+///|
 pub fn fast_forward_to(
   fs : &@git.FileSystem,
   rfs : &@git.RepoFileSystem,
@@ -47,7 +75,7 @@ pub fn rebase_onto(
           raise @git.GitError::InvalidObject("Cannot rebase root commit")
         }
         let parent_map = rebase_tree_map(db, rfs, parent_id)
-        let commit_map = rebase_tree_map(db, rfs, info.tree)
+        let commit_map = rebase_tree_map_from_tree(db, rfs, info.tree)
         let changes = rebase_diff_maps(parent_map, commit_map)
         rebase_apply_changes(base_map, parent_map, changes)
         let new_tree = rebase_write_tree_from_map(fs, git_dir, base_map)
@@ -115,12 +143,15 @@ fn rebase_collect_chain(
   head : @git.ObjectId,
   upstream : @git.ObjectId,
 ) -> Array[@git.ObjectId] raise @git.GitError {
+  // Find the merge base between head and upstream
+  let merge_base = find_merge_base(db, fs, head, upstream)
+  guard merge_base is Some(base) else {
+    raise @git.GitError::InvalidObject("No common ancestor found")
+  }
+  // Collect commits from head to merge base (exclusive)
   let list : Array[@git.ObjectId] = []
   let mut current = head
-  while true {
-    if current == upstream {
-      break
-    }
+  while current != base {
     list.push(current)
     let obj = db.get(fs, current)
     match obj {
@@ -131,13 +162,86 @@ fn rebase_collect_chain(
         }
         let info = @git.parse_commit(o.data)
         if info.parents.length() == 0 {
-          raise @git.GitError::InvalidObject("Upstream not found in history")
+          raise @git.GitError::InvalidObject("Reached root without finding base")
         }
         current = info.parents[0]
       }
     }
   }
   list.rev()
+}
+
+///|
+/// Find the merge base (common ancestor) of two commits.
+fn find_merge_base(
+  db : ObjectDb,
+  fs : &@git.RepoFileSystem,
+  commit1 : @git.ObjectId,
+  commit2 : @git.ObjectId,
+) -> @git.ObjectId? raise @git.GitError {
+  // Collect all ancestors of commit1
+  let ancestors1 : Map[String, Bool] = {}
+  collect_ancestors(db, fs, commit1, ancestors1)
+  // Walk commit2's history and find first common ancestor
+  let visited : Map[String, Bool] = {}
+  let queue : Array[@git.ObjectId] = [commit2]
+  while queue.length() > 0 {
+    let c = queue.remove(0)
+    let hex = c.to_hex()
+    if visited.contains(hex) {
+      continue
+    }
+    visited[hex] = true
+    if ancestors1.contains(hex) {
+      return Some(c)
+    }
+    let obj = db.get(fs, c)
+    match obj {
+      None => continue
+      Some(o) => {
+        if o.obj_type != @git.ObjectType::Commit {
+          continue
+        }
+        let info = @git.parse_commit(o.data)
+        for parent in info.parents {
+          queue.push(parent)
+        }
+      }
+    }
+  }
+  None
+}
+
+///|
+/// Collect all ancestors of a commit into a set.
+fn collect_ancestors(
+  db : ObjectDb,
+  fs : &@git.RepoFileSystem,
+  commit : @git.ObjectId,
+  out : Map[String, Bool],
+) -> Unit raise @git.GitError {
+  let queue : Array[@git.ObjectId] = [commit]
+  while queue.length() > 0 {
+    let c = queue.remove(0)
+    let hex = c.to_hex()
+    if out.contains(hex) {
+      continue
+    }
+    out[hex] = true
+    let obj = db.get(fs, c)
+    match obj {
+      None => continue
+      Some(o) => {
+        if o.obj_type != @git.ObjectType::Commit {
+          continue
+        }
+        let info = @git.parse_commit(o.data)
+        for parent in info.parents {
+          queue.push(parent)
+        }
+      }
+    }
+  }
 }
 
 ///|
@@ -158,6 +262,18 @@ fn rebase_tree_map(
       rebase_collect_tree(db, fs, info.tree, "", result)
     }
   }
+  result
+}
+
+///|
+/// Build tree map directly from a tree ID (not a commit ID).
+fn rebase_tree_map_from_tree(
+  db : ObjectDb,
+  fs : &@git.RepoFileSystem,
+  tree_id : @git.ObjectId,
+) -> Map[String, TreeEntryInfo] raise @git.GitError {
+  let result : Map[String, TreeEntryInfo] = {}
+  rebase_collect_tree(db, fs, tree_id, "", result)
   result
 }
 
@@ -333,8 +449,28 @@ fn rebase_write_worktree(
   root : String,
   map : Map[String, TreeEntryInfo],
 ) -> Unit raise @git.GitError {
+  rebase_write_worktree_except(fs, db, rfs, root, map, [])
+}
+
+///|
+/// Write worktree from map, skipping files in the except list.
+fn rebase_write_worktree_except(
+  fs : &@git.FileSystem,
+  db : ObjectDb,
+  rfs : &@git.RepoFileSystem,
+  root : String,
+  map : Map[String, TreeEntryInfo],
+  except : Array[String],
+) -> Unit raise @git.GitError {
+  let except_set : Map[String, Bool] = {}
+  for path in except {
+    except_set[path] = true
+  }
   for item in map.to_array() {
     let (path, info) = item
+    if except_set.contains(path) {
+      continue // Skip conflicting files
+    }
     let obj = db.get(rfs, info.id)
     match obj {
       Some(o) => {
@@ -604,5 +740,638 @@ fn rebase_parent_dir(path : String) -> String {
     None => "/"
     Some(0) => "/"
     Some(i) => String::unsafe_substring(path, start=0, end=i)
+  }
+}
+
+// ============================================================================
+// Rebase with conflict handling
+// ============================================================================
+
+///|
+/// Check if a rebase is in progress.
+pub fn is_rebase_in_progress(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> Bool {
+  let state_dir = join_path(git_dir, "rebase-merge")
+  fs.is_dir(state_dir)
+}
+
+///|
+/// Save rebase state to .git/rebase-merge/
+fn save_rebase_state(
+  fs : &@git.FileSystem,
+  git_dir : String,
+  state : RebaseState,
+) -> Unit raise @git.GitError {
+  let state_dir = join_path(git_dir, "rebase-merge")
+  fs.mkdir_p(state_dir)
+  fs.write_string(join_path(state_dir, "onto"), state.onto.to_hex() + "\n")
+  fs.write_string(
+    join_path(state_dir, "orig-head"),
+    state.orig_head.to_hex() + "\n",
+  )
+  fs.write_string(join_path(state_dir, "head-name"), state.head_name + "\n")
+  // Write todo list
+  let todo_lines = state.todo.map(fn(id) { "pick " + id.to_hex() })
+  fs.write_string(join_path(state_dir, "git-rebase-todo"), todo_lines.join("\n") +
+    "\n")
+  // Write done list
+  let done_lines = state.done.map(fn(id) { "pick " + id.to_hex() })
+  fs.write_string(
+    join_path(state_dir, "done"),
+    if done_lines.length() > 0 { done_lines.join("\n") + "\n" } else { "" },
+  )
+  // Write current commit info
+  match state.current {
+    Some(id) => {
+      fs.write_string(join_path(state_dir, "stopped-sha"), id.to_hex() + "\n")
+      fs.write_string(join_path(state_dir, "message"), state.message)
+      fs.write_string(join_path(state_dir, "author-script"), "GIT_AUTHOR_NAME='\{state.author}'\nGIT_AUTHOR_DATE='\{state.author_time} \{state.author_tz}'\n")
+    }
+    None => ()
+  }
+}
+
+///|
+/// Load rebase state from .git/rebase-merge/
+pub fn load_rebase_state(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> RebaseState? raise @git.GitError {
+  let state_dir = join_path(git_dir, "rebase-merge")
+  if not(fs.is_dir(state_dir)) {
+    return None
+  }
+  let onto_hex = read_file_trimmed(fs, join_path(state_dir, "onto"))
+  let orig_head_hex = read_file_trimmed(fs, join_path(state_dir, "orig-head"))
+  let head_name = read_file_trimmed(fs, join_path(state_dir, "head-name"))
+  let todo = parse_todo_file(fs, join_path(state_dir, "git-rebase-todo"))
+  let done = parse_todo_file(fs, join_path(state_dir, "done"))
+  let current = if fs.is_file(join_path(state_dir, "stopped-sha")) {
+    let hex = read_file_trimmed(fs, join_path(state_dir, "stopped-sha"))
+    Some(@git.ObjectId::from_hex(hex))
+  } else {
+    None
+  }
+  let message = if fs.is_file(join_path(state_dir, "message")) {
+    @utf8.decode_lossy(fs.read_file(join_path(state_dir, "message"))[:])
+  } else {
+    ""
+  }
+  Some(
+    {
+      onto: @git.ObjectId::from_hex(onto_hex),
+      orig_head: @git.ObjectId::from_hex(orig_head_hex),
+      head_name,
+      todo,
+      done,
+      current,
+      message,
+      author: "",
+      author_time: 0L,
+      author_tz: "+0000",
+    },
+  )
+}
+
+///|
+fn read_file_trimmed(fs : &@git.RepoFileSystem, path : String) -> String {
+  let content = @utf8.decode_lossy(
+    (fs.read_file(path) catch { _ => Bytes::default() })[:],
+  )
+  let mut end = content.length()
+  while end > 0 {
+    let c = content.unsafe_get(end - 1)
+    if c == '\n' || c == '\r' || c == ' ' || c == '\t' {
+      end -= 1
+    } else {
+      break
+    }
+  }
+  String::unsafe_substring(content, start=0, end~)
+}
+
+///|
+fn parse_todo_file(
+  fs : &@git.RepoFileSystem,
+  path : String,
+) -> Array[@git.ObjectId] {
+  let result : Array[@git.ObjectId] = []
+  if not(fs.is_file(path)) {
+    return result
+  }
+  let content = @utf8.decode_lossy(
+    (fs.read_file(path) catch { _ => Bytes::default() })[:],
+  )
+  for line_view in content.split("\n") {
+    let line = line_view.to_string()
+    if line.length() == 0 || line.has_prefix("#") {
+      continue
+    }
+    // Format: "pick <sha>" or just "<sha>"
+    let parts = line.split(" ").map(fn(v) { v.to_string() }).collect()
+    if parts.length() >= 2 && parts[0] == "pick" {
+      let id = @git.ObjectId::from_hex(parts[1]) catch { _ => continue }
+      result.push(id)
+    } else if parts.length() >= 1 && parts[0].length() == 40 {
+      let id = @git.ObjectId::from_hex(parts[0]) catch { _ => continue }
+      result.push(id)
+    }
+  }
+  result
+}
+
+///|
+/// Clear rebase state (remove .git/rebase-merge/)
+pub fn clear_rebase_state(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> Unit raise @git.GitError {
+  let state_dir = join_path(git_dir, "rebase-merge")
+  if not(rfs.is_dir(state_dir)) {
+    return ()
+  }
+  // Remove all files in state_dir
+  let files = rfs.readdir(state_dir)
+  for file in files {
+    fs.remove_file(join_path(state_dir, file))
+  }
+  // Remove the directory
+  fs.remove_dir(state_dir)
+}
+
+///|
+/// Start a rebase operation. Returns RebaseResult indicating status.
+pub fn rebase_start(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  root : String,
+  upstream : @git.ObjectId,
+) -> RebaseResult raise @git.GitError {
+  let git_dir = join_path(root, ".git")
+  // Check if rebase already in progress
+  if is_rebase_in_progress(rfs, git_dir) {
+    raise @git.GitError::InvalidObject(
+      "A rebase is already in progress. Use --continue, --abort, or --skip.",
+    )
+  }
+  let head = resolve_head_commit(rfs, git_dir)
+  match head {
+    None => {
+      fast_forward_to(fs, rfs, root, upstream)
+      return { status: RebaseStatus::Complete, commit_id: Some(upstream), conflicts: [] }
+    }
+    Some(h) => {
+      if h == upstream {
+        return { status: RebaseStatus::NothingToRebase, commit_id: Some(h), conflicts: [] }
+      }
+      let db = ObjectDb::load(rfs, git_dir)
+      let chain = rebase_collect_chain(db, rfs, h, upstream)
+      if chain.length() == 0 {
+        return { status: RebaseStatus::NothingToRebase, commit_id: Some(h), conflicts: [] }
+      }
+      // Get head name for later restoration
+      let head_name = match read_head_ref(rfs, git_dir) {
+        HeadRef::Branch(name) => "refs/heads/" + name
+        HeadRef::Detached(_) => ""
+      }
+      // Create initial state
+      let state : RebaseState = {
+        onto: upstream,
+        orig_head: h,
+        head_name,
+        todo: chain,
+        done: [],
+        current: None,
+        message: "",
+        author: "",
+        author_time: 0L,
+        author_tz: "+0000",
+      }
+      save_rebase_state(fs, git_dir, state)
+      // Move HEAD to upstream before applying commits
+      // This is crucial for correct conflict markers (HEAD = upstream, not feature branch)
+      rebase_update_head(fs, rfs, git_dir, upstream)
+      let upstream_map = rebase_tree_map(db, rfs, upstream)
+      rebase_write_worktree(fs, db, rfs, root, upstream_map)
+      let entries = rebase_map_to_index(db, rfs, upstream_map)
+      write_index_entries(fs, git_dir, entries)
+      // Start applying commits
+      rebase_apply_next(fs, rfs, root, state)
+    }
+  }
+}
+
+///|
+/// Continue rebase after resolving conflicts.
+pub fn rebase_continue(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  root : String,
+) -> RebaseResult raise @git.GitError {
+  let git_dir = join_path(root, ".git")
+  let state = load_rebase_state(rfs, git_dir)
+  guard state is Some(s) else {
+    raise @git.GitError::InvalidObject("No rebase in progress")
+  }
+  // Commit the resolved changes
+  guard s.current is Some(current_id) else {
+    raise @git.GitError::InvalidObject("No commit to continue")
+  }
+  let db = ObjectDb::load(rfs, git_dir)
+  let info = rebase_parse_commit_full(db, rfs, current_id)
+  // Get current HEAD as parent
+  let head = resolve_head_commit(rfs, git_dir)
+  guard head is Some(parent) else {
+    raise @git.GitError::InvalidObject("No HEAD commit")
+  }
+  // Build tree from current index
+  let entries = read_index_entries(rfs, git_dir)
+  let new_tree = write_tree_from_entries(fs, git_dir, entries)
+  // Create new commit with original author info
+  let new_commit = @git.Commit::new(
+    new_tree,
+    [parent],
+    info.author,
+    info.author_time,
+    info.author_tz,
+    info.committer,
+    info.commit_time,
+    info.committer_tz,
+    info.message,
+  )
+  let (new_id, compressed) = @git.create_commit(new_commit)
+  rebase_write_object(fs, git_dir, new_id, compressed)
+  rebase_update_head(fs, rfs, git_dir, new_id)
+  // Update state: move current to done, clear current
+  let new_done = s.done.copy()
+  new_done.push(current_id)
+  let new_state : RebaseState = {
+    onto: s.onto,
+    orig_head: s.orig_head,
+    head_name: s.head_name,
+    todo: s.todo,
+    done: new_done,
+    current: None,
+    message: "",
+    author: "",
+    author_time: 0L,
+    author_tz: "+0000",
+  }
+  save_rebase_state(fs, git_dir, new_state)
+  // Continue with next commits
+  rebase_apply_next(fs, rfs, root, new_state)
+}
+
+///|
+/// Abort the current rebase and restore original state.
+pub fn rebase_abort(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  root : String,
+) -> Unit raise @git.GitError {
+  let git_dir = join_path(root, ".git")
+  let state = load_rebase_state(rfs, git_dir)
+  guard state is Some(s) else {
+    raise @git.GitError::InvalidObject("No rebase in progress")
+  }
+  // Restore original HEAD
+  let head_path = join_path(git_dir, "HEAD")
+  if s.head_name.length() > 0 {
+    fs.write_string(head_path, "ref: " + s.head_name + "\n")
+    let ref_path = join_path(git_dir, s.head_name)
+    let dir = rebase_parent_dir(ref_path)
+    fs.mkdir_p(dir)
+    fs.write_string(ref_path, s.orig_head.to_hex() + "\n")
+  } else {
+    fs.write_string(head_path, s.orig_head.to_hex() + "\n")
+  }
+  // Restore worktree to original HEAD
+  let db = ObjectDb::load(rfs, git_dir)
+  let tree_map = rebase_tree_map(db, rfs, s.orig_head)
+  rebase_write_worktree(fs, db, rfs, root, tree_map)
+  let entries = rebase_map_to_index(db, rfs, tree_map)
+  write_index_entries(fs, git_dir, entries)
+  // Clear rebase state
+  clear_rebase_state(fs, rfs, git_dir)
+}
+
+///|
+/// Skip the current commit and continue rebase.
+pub fn rebase_skip(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  root : String,
+) -> RebaseResult raise @git.GitError {
+  let git_dir = join_path(root, ".git")
+  let state = load_rebase_state(rfs, git_dir)
+  guard state is Some(s) else {
+    raise @git.GitError::InvalidObject("No rebase in progress")
+  }
+  guard s.current is Some(current_id) else {
+    raise @git.GitError::InvalidObject("No commit to skip")
+  }
+  // Move current to done (skipped)
+  let new_done = s.done.copy()
+  new_done.push(current_id)
+  let new_state : RebaseState = {
+    onto: s.onto,
+    orig_head: s.orig_head,
+    head_name: s.head_name,
+    todo: s.todo,
+    done: new_done,
+    current: None,
+    message: "",
+    author: "",
+    author_time: 0L,
+    author_tz: "+0000",
+  }
+  save_rebase_state(fs, git_dir, new_state)
+  // Reset worktree to current HEAD
+  let db = ObjectDb::load(rfs, git_dir)
+  let head = resolve_head_commit(rfs, git_dir)
+  guard head is Some(h) else {
+    raise @git.GitError::InvalidObject("No HEAD commit")
+  }
+  let tree_map = rebase_tree_map(db, rfs, h)
+  rebase_write_worktree(fs, db, rfs, root, tree_map)
+  let entries = rebase_map_to_index(db, rfs, tree_map)
+  write_index_entries(fs, git_dir, entries)
+  // Continue with next commits
+  rebase_apply_next(fs, rfs, root, new_state)
+}
+
+///|
+/// Apply the next commit in the todo list.
+fn rebase_apply_next(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  root : String,
+  state : RebaseState,
+) -> RebaseResult raise @git.GitError {
+  let git_dir = join_path(root, ".git")
+  let db = ObjectDb::load(rfs, git_dir)
+  // Find the next commit to apply
+  let next_idx = state.done.length()
+  if next_idx >= state.todo.length() {
+    // All done, finalize rebase
+    clear_rebase_state(fs, rfs, git_dir)
+    // Restore branch ref if applicable
+    let head = resolve_head_commit(rfs, git_dir)
+    guard head is Some(final_id) else {
+      raise @git.GitError::InvalidObject("No HEAD after rebase")
+    }
+    if state.head_name.length() > 0 {
+      let head_path = join_path(git_dir, "HEAD")
+      fs.write_string(head_path, "ref: " + state.head_name + "\n")
+      let ref_path = join_path(git_dir, state.head_name)
+      fs.write_string(ref_path, final_id.to_hex() + "\n")
+    }
+    return { status: RebaseStatus::Complete, commit_id: head, conflicts: [] }
+  }
+  let commit_id = state.todo[next_idx]
+  let info = rebase_parse_commit_full(db, rfs, commit_id)
+  let parent_id = if info.parents.length() > 0 {
+    info.parents[0]
+  } else {
+    raise @git.GitError::InvalidObject("Cannot rebase root commit")
+  }
+  // Get current HEAD as the base
+  let head = resolve_head_commit(rfs, git_dir)
+  guard head is Some(base_id) else {
+    raise @git.GitError::InvalidObject("No HEAD commit")
+  }
+  let base_map = rebase_tree_map(db, rfs, base_id)
+  let parent_map = rebase_tree_map(db, rfs, parent_id)
+  let commit_map = rebase_tree_map_from_tree(db, rfs, info.tree)
+  let changes = rebase_diff_maps(parent_map, commit_map)
+  // Try to apply changes, detecting conflicts
+  let conflicts = rebase_apply_changes_with_conflicts(
+    db, rfs, fs, root, base_map, parent_map, changes,
+  )
+  if conflicts.length() > 0 {
+    // Conflict detected - save state and stop
+    let new_state : RebaseState = {
+      onto: state.onto,
+      orig_head: state.orig_head,
+      head_name: state.head_name,
+      todo: state.todo,
+      done: state.done,
+      current: Some(commit_id),
+      message: info.message,
+      author: info.author,
+      author_time: info.author_time,
+      author_tz: info.author_tz,
+    }
+    save_rebase_state(fs, git_dir, new_state)
+    // Write partially merged state to worktree and index (skip conflicting files)
+    rebase_write_worktree_except(fs, db, rfs, root, base_map, conflicts)
+    let entries = rebase_map_to_index(db, rfs, base_map)
+    write_index_entries(fs, git_dir, entries)
+    return { status: RebaseStatus::Conflict, commit_id: Some(commit_id), conflicts }
+  }
+  // No conflicts - create new commit
+  let new_tree = rebase_write_tree_from_map(fs, git_dir, base_map)
+  let new_commit = @git.Commit::new(
+    new_tree,
+    [base_id],
+    info.author,
+    info.author_time,
+    info.author_tz,
+    info.committer,
+    info.commit_time,
+    info.committer_tz,
+    info.message,
+  )
+  let (new_id, compressed) = @git.create_commit(new_commit)
+  rebase_write_object(fs, git_dir, new_id, compressed)
+  rebase_update_head(fs, rfs, git_dir, new_id)
+  // Update state and continue
+  let new_done = state.done.copy()
+  new_done.push(commit_id)
+  let new_state : RebaseState = {
+    onto: state.onto,
+    orig_head: state.orig_head,
+    head_name: state.head_name,
+    todo: state.todo,
+    done: new_done,
+    current: None,
+    message: "",
+    author: "",
+    author_time: 0L,
+    author_tz: "+0000",
+  }
+  save_rebase_state(fs, git_dir, new_state)
+  // Recursively apply next
+  rebase_apply_next(fs, rfs, root, new_state)
+}
+
+///|
+/// Apply changes with conflict detection and conflict markers.
+fn rebase_apply_changes_with_conflicts(
+  db : ObjectDb,
+  rfs : &@git.RepoFileSystem,
+  fs : &@git.FileSystem,
+  root : String,
+  base : Map[String, TreeEntryInfo],
+  parent_map : Map[String, TreeEntryInfo],
+  changes : Array[Change],
+) -> Array[String] raise @git.GitError {
+  let conflicts : Array[String] = []
+  for ch in changes {
+    let path = ch.path
+    match ch.kind {
+      ChangeKind::Added => {
+        if base.contains(path) {
+          // Conflict: file exists in base but commit adds it
+          let base_entry = base.get(path).unwrap()
+          let new_entry = ch.entry.unwrap()
+          if base_entry.id != new_entry.id {
+            // Write conflict markers
+            write_conflict_file(
+              db, rfs, fs, root, path, Some(base_entry), None, Some(new_entry),
+            )
+            conflicts.push(path)
+          }
+          // If same content, just keep base version
+        } else {
+          base[path] = ch.entry.unwrap()
+        }
+      }
+      ChangeKind::Deleted =>
+        match (base.get(path), parent_map.get(path)) {
+          (Some(b), Some(p)) => {
+            if b.id != p.id || b.mode != p.mode {
+              // Conflict: base modified, but commit deletes
+              conflicts.push(path)
+              // Keep base version with marker
+              write_conflict_file(db, rfs, fs, root, path, Some(b), Some(p), None)
+            } else {
+              base.remove(path)
+            }
+          }
+          (None, None) => ()
+          (Some(b), None) => {
+            // File in base but not in parent - conflict
+            conflicts.push(path)
+            write_conflict_file(db, rfs, fs, root, path, Some(b), None, None)
+          }
+          (None, Some(_)) =>
+            // File in parent but not base - already deleted, nothing to do
+            ()
+        }
+      ChangeKind::Modified => {
+        let entry = ch.entry.unwrap()
+        match (base.get(path), parent_map.get(path)) {
+          (Some(b), Some(p)) => {
+            if b.id != p.id || b.mode != p.mode {
+              // Three-way conflict: base, parent, and commit all different
+              write_conflict_file(
+                db, rfs, fs, root, path, Some(b), Some(p), Some(entry),
+              )
+              conflicts.push(path)
+            } else {
+              // Base matches parent, apply modification
+              base[path] = entry
+            }
+          }
+          (None, None) => base[path] = entry
+          (None, Some(p)) => {
+            // File was deleted in base but modified in commit
+            write_conflict_file(
+              db, rfs, fs, root, path, None, Some(p), Some(entry),
+            )
+            conflicts.push(path)
+            base[path] = entry
+          }
+          (Some(b), None) => {
+            // File added in base, modified in commit (from nothing to something)
+            if b.id != entry.id {
+              write_conflict_file(
+                db, rfs, fs, root, path, Some(b), None, Some(entry),
+              )
+              conflicts.push(path)
+            }
+            // Keep entry as the result
+            base[path] = entry
+          }
+        }
+      }
+    }
+  }
+  conflicts
+}
+
+///|
+/// Write a file with conflict markers.
+fn write_conflict_file(
+  db : ObjectDb,
+  rfs : &@git.RepoFileSystem,
+  fs : &@git.FileSystem,
+  root : String,
+  path : String,
+  ours : TreeEntryInfo?,
+  base : TreeEntryInfo?,
+  theirs : TreeEntryInfo?,
+) -> Unit raise @git.GitError {
+  let full_path = join_path(root, path)
+  let dir = rebase_parent_dir(full_path)
+  fs.mkdir_p(dir)
+  // Get content from each version
+  let ours_content = match ours {
+    Some(e) => get_blob_content(db, rfs, e.id)
+    None => ""
+  }
+  let base_content = match base {
+    Some(e) => get_blob_content(db, rfs, e.id)
+    None => ""
+  }
+  let theirs_content = match theirs {
+    Some(e) => get_blob_content(db, rfs, e.id)
+    None => ""
+  }
+  // Write conflict markers
+  let merged = "<<<<<<< HEAD\n" +
+    ours_content +
+    (if ours_content.length() > 0 && not(ours_content.has_suffix("\n")) {
+      "\n"
+    } else {
+      ""
+    }) +
+    "||||||| parent\n" +
+    base_content +
+    (if base_content.length() > 0 && not(base_content.has_suffix("\n")) {
+      "\n"
+    } else {
+      ""
+    }) +
+    "=======\n" +
+    theirs_content +
+    (if theirs_content.length() > 0 && not(theirs_content.has_suffix("\n")) {
+      "\n"
+    } else {
+      ""
+    }) +
+    ">>>>>>> incoming\n"
+  fs.write_string(full_path, merged)
+}
+
+///|
+fn get_blob_content(
+  db : ObjectDb,
+  fs : &@git.RepoFileSystem,
+  id : @git.ObjectId,
+) -> String {
+  let obj = db.get(fs, id) catch { _ => return "" }
+  match obj {
+    Some(o) =>
+      if o.obj_type == @git.ObjectType::Blob {
+        @utf8.decode_lossy(o.data[:])
+      } else {
+        ""
+      }
+    None => ""
   }
 }

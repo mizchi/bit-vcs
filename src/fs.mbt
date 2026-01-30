@@ -6,6 +6,7 @@ pub(open) trait FileSystem {
   write_file(Self, String, Bytes) -> Unit raise GitError
   write_string(Self, String, String) -> Unit raise GitError
   remove_file(Self, String) -> Unit raise GitError
+  remove_dir(Self, String) -> Unit raise GitError
 }
 
 ///|

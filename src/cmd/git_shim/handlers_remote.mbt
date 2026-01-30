@@ -1,4 +1,286 @@
-///| Remote operation handlers: upload-pack, receive-pack, fetch, pull, clone
+///| Remote operation handlers: remote, upload-pack, receive-pack, fetch, pull, clone
+
+///|
+async fn handle_remote(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  if args.length() == 0 {
+    // List remotes
+    let remotes = list_remotes(fs, git_dir)
+    for name in remotes {
+      print_line(name)
+    }
+    return ()
+  }
+  let subcmd = args[0]
+  match subcmd {
+    "add" => {
+      if args.length() < 3 {
+        raise @git.GitError::InvalidObject(
+          "usage: git remote add <name> <url>",
+        )
+      }
+      let name = args[1]
+      let url = args[2]
+      remote_add(fs, fs, git_dir, name, url)
+      print_line("Added remote '\{name}'")
+    }
+    "remove" | "rm" => {
+      if args.length() < 2 {
+        raise @git.GitError::InvalidObject(
+          "usage: git remote remove <name>",
+        )
+      }
+      let name = args[1]
+      remote_remove(fs, fs, git_dir, name)
+      print_line("Removed remote '\{name}'")
+    }
+    "-v" | "--verbose" => {
+      // List remotes with URLs
+      let remotes = list_remotes_verbose(fs, git_dir)
+      for item in remotes {
+        let (name, url) = item
+        print_line("\{name}\t\{url} (fetch)")
+        print_line("\{name}\t\{url} (push)")
+      }
+    }
+    "get-url" => {
+      if args.length() < 2 {
+        raise @git.GitError::InvalidObject(
+          "usage: git remote get-url <name>",
+        )
+      }
+      let name = args[1]
+      let url = get_remote_url(fs, git_dir, name)
+      match url {
+        Some(u) => print_line(u)
+        None => raise @git.GitError::InvalidObject("No such remote '\{name}'")
+      }
+    }
+    "set-url" => {
+      if args.length() < 3 {
+        raise @git.GitError::InvalidObject(
+          "usage: git remote set-url <name> <newurl>",
+        )
+      }
+      let name = args[1]
+      let url = args[2]
+      remote_set_url(fs, fs, git_dir, name, url)
+    }
+    _ => raise @git.GitError::InvalidObject("Unknown remote subcommand: \{subcmd}")
+  }
+}
+
+///|
+fn list_remotes(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> Array[String] {
+  let config_path = git_dir + "/config"
+  if not(fs.is_file(config_path)) {
+    return []
+  }
+  let content = decode_bytes(fs.read_file(config_path) catch { _ => return [] })
+  let remotes : Array[String] = []
+  for line_view in content.split("\n") {
+    let line = trim_string(line_view.to_string())
+    if line.has_prefix("[remote \"") && line.has_suffix("\"]") {
+      let name = String::unsafe_substring(
+        line,
+        start=9,
+        end=line.length() - 2,
+      )
+      remotes.push(name)
+    }
+  }
+  remotes
+}
+
+///|
+fn list_remotes_verbose(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> Array[(String, String)] {
+  let config_path = git_dir + "/config"
+  if not(fs.is_file(config_path)) {
+    return []
+  }
+  let content = decode_bytes(fs.read_file(config_path) catch { _ => return [] })
+  let remotes : Array[(String, String)] = []
+  let mut current_remote : String? = None
+  for line_view in content.split("\n") {
+    let line = trim_string(line_view.to_string())
+    if line.has_prefix("[remote \"") && line.has_suffix("\"]") {
+      current_remote = Some(
+        String::unsafe_substring(line, start=9, end=line.length() - 2),
+      )
+      continue
+    }
+    if line.has_prefix("[") {
+      current_remote = None
+      continue
+    }
+    match current_remote {
+      Some(name) if line.has_prefix("url = ") => {
+        let url = String::unsafe_substring(line, start=6, end=line.length())
+        remotes.push((name, url))
+      }
+      _ => ()
+    }
+  }
+  remotes
+}
+
+///|
+fn get_remote_url(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+  name : String,
+) -> String? {
+  let config_path = git_dir + "/config"
+  if not(fs.is_file(config_path)) {
+    return None
+  }
+  let content = decode_bytes(fs.read_file(config_path) catch { _ => return None })
+  let target_section = "[remote \"\{name}\"]"
+  let mut in_section = false
+  for line_view in content.split("\n") {
+    let line = trim_string(line_view.to_string())
+    if line == target_section {
+      in_section = true
+      continue
+    }
+    if line.has_prefix("[") {
+      in_section = false
+      continue
+    }
+    if in_section && line.has_prefix("url = ") {
+      return Some(String::unsafe_substring(line, start=6, end=line.length()))
+    }
+  }
+  None
+}
+
+///|
+fn remote_add(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  git_dir : String,
+  name : String,
+  url : String,
+) -> Unit raise @git.GitError {
+  let config_path = git_dir + "/config"
+  // Check if remote already exists
+  if get_remote_url(rfs, git_dir, name) is Some(_) {
+    raise @git.GitError::InvalidObject("remote '\{name}' already exists")
+  }
+  // Read existing config or create new
+  let existing = if rfs.is_file(config_path) {
+    decode_bytes(rfs.read_file(config_path))
+  } else {
+    ""
+  }
+  // Append remote section
+  let remote_section = "[remote \"\{name}\"]\n\turl = \{url}\n\tfetch = +refs/heads/*:refs/remotes/\{name}/*\n"
+  let new_content = if existing.length() > 0 && not(existing.has_suffix("\n")) {
+    existing + "\n" + remote_section
+  } else {
+    existing + remote_section
+  }
+  fs.write_string(config_path, new_content)
+}
+
+///|
+fn remote_remove(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  git_dir : String,
+  name : String,
+) -> Unit raise @git.GitError {
+  let config_path = git_dir + "/config"
+  if not(rfs.is_file(config_path)) {
+    raise @git.GitError::InvalidObject("No such remote '\{name}'")
+  }
+  let content = decode_bytes(rfs.read_file(config_path))
+  let target_section = "[remote \"\{name}\"]"
+  let lines : Array[String] = []
+  let mut in_target_section = false
+  let mut found = false
+  for line_view in content.split("\n") {
+    let line = line_view.to_string()
+    let trimmed = trim_string(line)
+    if trimmed == target_section {
+      in_target_section = true
+      found = true
+      continue
+    }
+    if in_target_section && trimmed.has_prefix("[") {
+      in_target_section = false
+    }
+    if not(in_target_section) {
+      lines.push(line)
+    }
+  }
+  if not(found) {
+    raise @git.GitError::InvalidObject("No such remote '\{name}'")
+  }
+  // Remove trailing empty lines
+  while lines.length() > 0 && trim_string(lines[lines.length() - 1]) == "" {
+    let _ = lines.pop()
+
+  }
+  let new_content = lines.iter().fold(init="", fn(acc, line) {
+    if acc == "" { line } else { acc + "\n" + line }
+  }) + "\n"
+  fs.write_string(config_path, new_content)
+}
+
+///|
+fn remote_set_url(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  git_dir : String,
+  name : String,
+  url : String,
+) -> Unit raise @git.GitError {
+  let config_path = git_dir + "/config"
+  if not(rfs.is_file(config_path)) {
+    raise @git.GitError::InvalidObject("No such remote '\{name}'")
+  }
+  let content = decode_bytes(rfs.read_file(config_path))
+  let target_section = "[remote \"\{name}\"]"
+  let lines : Array[String] = []
+  let mut in_target_section = false
+  let mut found = false
+  let mut url_replaced = false
+  for line_view in content.split("\n") {
+    let line = line_view.to_string()
+    let trimmed = trim_string(line)
+    if trimmed == target_section {
+      in_target_section = true
+      found = true
+      lines.push(line)
+      continue
+    }
+    if in_target_section && trimmed.has_prefix("[") {
+      in_target_section = false
+    }
+    if in_target_section && trimmed.has_prefix("url = ") && not(url_replaced) {
+      lines.push("\turl = \{url}")
+      url_replaced = true
+      continue
+    }
+    lines.push(line)
+  }
+  if not(found) {
+    raise @git.GitError::InvalidObject("No such remote '\{name}'")
+  }
+  let new_content = lines.iter().fold(init="", fn(acc, line) {
+    if acc == "" { line } else { acc + "\n" + line }
+  })
+  fs.write_string(config_path, new_content)
+}
 
 ///|
 fn parse_pack_args(args : Array[String]) -> (Bool, String)? {
