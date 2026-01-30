@@ -24,3 +24,63 @@ jobs:
         run: moon test --target js
       - name: Moon test (native)
         run: moon test --target native
+
+  git-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext libcurl4-openssl-dev libexpat1-dev
+
+      - name: Build git from source
+        run: |
+          cd third_party/git
+          make -j$(nproc)
+
+      - name: Install MoonBit CLI
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Moon update
+        run: moon update
+
+      - name: Build moongit
+        run: |
+          moon build --target native
+          cp _build/native/release/build/cmd/moongit/moongit.exe tools/git-shim/moon
+          chmod +x tools/git-shim/moon
+
+      - name: Run git compatibility tests
+        run: |
+          real_git="$(pwd)/third_party/git/git"
+          exec_path="$(pwd)/third_party/git"
+          shim_dir="$(pwd)/tools/git-shim/bin"
+          echo "$real_git" > tools/git-shim/real-git-path
+
+          tests=$(grep -v '^[[:space:]]*#' tools/git-test-allowlist.txt | grep -v '^[[:space:]]*$' | tr '\n' ' ')
+
+          SHIM_REAL_GIT="$real_git" SHIM_EXEC_PATH="$exec_path" \
+          SHIM_MOON="$(pwd)/tools/git-shim/moon" SHIM_CMDS="receive-pack upload-pack pack-objects index-pack" \
+          GIT_TEST_INSTALLED="$shim_dir" GIT_TEST_EXEC_PATH="$exec_path" \
+          GIT_TEST_DEFAULT_HASH=sha1 \
+          make -C third_party/git test T="$tests"
+
+      - name: Generate compat table
+        if: always()
+        run: |
+          bash tools/generate-compat-table.sh > compat-results.md
+          cat compat-results.md
+
+      - name: Upload compat results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-results
+          path: compat-results.md

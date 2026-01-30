@@ -125,6 +125,10 @@ git-t-allowlist-shim-strict:
     CPATH="$prefix/include" LDFLAGS="-L$prefix/lib" LIBRARY_PATH="$prefix/lib" \
     make -C third_party/git test T="$(rg -v '^[[:space:]]*#' tools/git-test-allowlist.txt | rg -v '^[[:space:]]*$' | tr '\n' ' ')"
 
+# Generate compatibility table from allowlist
+compat-table:
+    @bash tools/generate-compat-table.sh
+
 # Run a single test file in strict shim mode (e.g., just git-t-one t3200-branch.sh)
 git-t-one test_file:
     @prefix=$(brew --prefix gettext); \

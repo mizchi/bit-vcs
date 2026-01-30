@@ -141,3 +141,10 @@ t5730-protocol-v2-bundle-uri-file.sh
 t5731-protocol-v2-bundle-uri-git.sh
 t5732-protocol-v2-bundle-uri-http.sh
 t5750-bundle-uri-parse.sh
+
+# worktree
+t2400-worktree-add.sh
+t2401-worktree-prune.sh
+t2402-worktree-list.sh
+t2403-worktree-move.sh
+t2406-worktree-repair.sh
