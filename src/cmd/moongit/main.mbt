@@ -199,7 +199,6 @@ async fn dispatch_command(
     "pull" => handle_pull(rest) catch { err => exit_with_error("pull", err) }
     // Core operations
     "init" => handle_init(rest) catch { err => exit_with_error("init", err) }
-    // DEBUG: Testing native status handler
     "status" =>
       handle_status(rest) catch {
         err => exit_with_error("status", err)
@@ -209,31 +208,20 @@ async fn dispatch_command(
       handle_commit(rest) catch {
         err => exit_with_error("commit", err)
       }
-    "log" => run_system_git(prepend_arg("log", rest))
-    "show" => run_system_git(prepend_arg("show", rest))
+    "log" => handle_log(rest) catch { err => exit_with_error("log", err) }
+    "show" => handle_show(rest) catch { err => exit_with_error("show", err) }
     // Branch operations
     "branch" =>
       handle_branch(rest) catch {
-        _ => run_system_git(prepend_arg("branch", rest))
+        err => exit_with_error("branch", err)
       }
-    "checkout" => {
-      // For -b/-B options, don't fallback to system git
-      let has_create_branch = rest
-        .iter()
-        .any(fn(arg) { arg == "-b" || arg == "-B" })
-      if has_create_branch {
-        handle_checkout(rest) catch {
-          err => exit_with_error("checkout", err)
-        }
-      } else {
-        handle_checkout(rest) catch {
-          _ => run_system_git(prepend_arg("checkout", rest))
-        }
+    "checkout" =>
+      handle_checkout(rest) catch {
+        err => exit_with_error("checkout", err)
       }
-    }
     "switch" =>
       handle_switch(rest) catch {
-        _ => run_system_git(prepend_arg("switch", rest))
+        err => exit_with_error("switch", err)
       }
     "reset" => handle_reset(rest) catch { err => exit_with_error("reset", err) }
     "rebase" =>
@@ -241,17 +229,17 @@ async fn dispatch_command(
         err => exit_with_error("rebase", err)
       }
     // Misc operations
-    "diff" => run_system_git(prepend_arg("diff", rest))
+    "diff" => handle_diff(rest) catch { err => exit_with_error("diff", err) }
     "merge" =>
       handle_merge(rest) catch {
-        _ => run_system_git(prepend_arg("merge", rest))
+        err => exit_with_error("merge", err)
       }
     "tag" => handle_tag(rest) catch { err => exit_with_error("tag", err) }
     "rm" => handle_rm(rest) catch { err => exit_with_error("rm", err) }
     "mv" => handle_mv(rest) catch { err => exit_with_error("mv", err) }
     "config" =>
       handle_config(rest) catch {
-        _ => run_system_git(prepend_arg("config", rest))
+        err => exit_with_error("config", err)
       }
     "sparse-checkout" =>
       handle_sparse_checkout(rest) catch {
@@ -259,10 +247,10 @@ async fn dispatch_command(
       }
     "rev-parse" =>
       handle_rev_parse(rest) catch {
-        _ => run_system_git(prepend_arg("rev-parse", rest))
+        err => exit_with_error("rev-parse", err)
       }
     "version" | "--version" => print_line("git version 2.47.0 (moongit)")
-    // Fallback to system git
+    // Fallback to system git for unknown commands
     _ => run_system_git(prepend_arg(cmd, rest))
   }
   ignore(full_args)

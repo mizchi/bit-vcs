@@ -42,12 +42,15 @@ pub fn diff_worktree(
         let id = @git.hash_blob(content)
         if id != entry.id {
           let old = diff_read_blob(db, fs, entry.id)
-          out.push({
-            path,
-            kind: DiffKind::Modified,
-            old_content: Some(old),
-            new_content: Some(content),
-          })
+          // Skip if blob not found (e.g., submodule)
+          if old is Some(_) {
+            out.push({
+              path,
+              kind: DiffKind::Modified,
+              old_content: old,
+              new_content: Some(content),
+            })
+          }
         }
       }
     }
@@ -58,12 +61,15 @@ pub fn diff_worktree(
       let abs = join_path(root, path)
       if not(fs.is_file(abs)) {
         let old = diff_read_blob(db, fs, entry.id)
-        out.push({
-          path,
-          kind: DiffKind::Deleted,
-          old_content: Some(old),
-          new_content: None,
-        })
+        // Skip if blob not found (e.g., submodule)
+        if old is Some(_) {
+          out.push({
+            path,
+            kind: DiffKind::Deleted,
+            old_content: old,
+            new_content: None,
+          })
+        }
       }
     }
   }
@@ -91,23 +97,29 @@ pub fn diff_index(
     match head_entries.get(path) {
       None => {
         let new = diff_read_blob(db, fs, entry.id)
-        out.push({
-          path,
-          kind: DiffKind::Added,
-          old_content: None,
-          new_content: Some(new),
-        })
+        // Skip if blob not found (e.g., submodule)
+        if new is Some(_) {
+          out.push({
+            path,
+            kind: DiffKind::Added,
+            old_content: None,
+            new_content: new,
+          })
+        }
       }
       Some(h) =>
         if h.id != entry.id {
           let old = diff_read_blob(db, fs, h.id)
           let new = diff_read_blob(db, fs, entry.id)
-          out.push({
-            path,
-            kind: DiffKind::Modified,
-            old_content: Some(old),
-            new_content: Some(new),
-          })
+          // Skip if either blob not found (e.g., submodule)
+          if old is Some(_) && new is Some(_) {
+            out.push({
+              path,
+              kind: DiffKind::Modified,
+              old_content: old,
+              new_content: new,
+            })
+          }
         }
     }
   }
@@ -115,12 +127,15 @@ pub fn diff_index(
     let (path, h) = item
     if not(index_map.contains(path)) {
       let old = diff_read_blob(db, fs, h.id)
-      out.push({
-        path,
-        kind: DiffKind::Deleted,
-        old_content: Some(old),
-        new_content: None,
-      })
+      // Skip if blob not found (e.g., submodule)
+      if old is Some(_) {
+        out.push({
+          path,
+          kind: DiffKind::Deleted,
+          old_content: old,
+          new_content: None,
+        })
+      }
     }
   }
   out.sort_by(fn(a, b) { String::compare(a.path, b.path) })
@@ -243,15 +258,16 @@ fn diff_read_blob(
   db : ObjectDb,
   fs : &@git.RepoFileSystem,
   id : @git.ObjectId,
-) -> Bytes raise @git.GitError {
+) -> Bytes? raise @git.GitError {
   let obj = db.get(fs, id)
   match obj {
-    None => raise @git.GitError::InvalidObject("Missing blob object")
+    None => None // Object might be in a submodule or unavailable
     Some(o) => {
       if o.obj_type != @git.ObjectType::Blob {
-        raise @git.GitError::InvalidObject("Object is not a blob")
+        None // Submodule entries point to commits, not blobs
+      } else {
+        Some(o.data)
       }
-      o.data
     }
   }
 }
