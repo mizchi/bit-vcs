@@ -2,6 +2,49 @@
 # One test script per line; blank lines and comments are ignored.
 # These tests pass with SHIM_CMDS="pack-objects index-pack upload-pack receive-pack" SHIM_STRICT=1
 
+# basic / init
+t0000-basic.sh
+t0001-init.sh
+
+# plumbing commands
+t1007-hash-object.sh
+t1300-config.sh
+t1400-update-ref.sh
+t1401-symbolic-ref.sh
+t1403-show-ref.sh
+t1500-rev-parse.sh
+
+# checkout / switch
+t2006-checkout-index-basic.sh
+t2014-checkout-switch.sh
+t2060-switch.sh
+
+# ls-files / ls-tree
+t3000-ls-files-others.sh
+t3004-ls-files-basic.sh
+t3100-ls-tree-restrict.sh
+
+# diff
+t4000-diff-format.sh
+t4001-diff-rename.sh
+t4002-diff-basic.sh
+t4006-diff-mode.sh
+t4010-diff-pathspec.sh
+t4017-diff-retval.sh
+
+# rev-list / log
+t6000-rev-list-misc.sh
+t6003-rev-list-topo-order.sh
+
+# porcelain commands
+t7001-mv.sh
+t7004-tag.sh
+t7007-show.sh
+t7060-wtstatus.sh
+t7102-reset.sh
+t7500-commit-template-squash-signoff.sh
+t7508-status.sh
+
 # pack / idx (strict mode compatible)
 t5306-pack-nobase.sh
 t5307-pack-missing-commit.sh
