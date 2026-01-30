@@ -853,6 +853,8 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
   let mut show_others = false
   let mut show_deleted = false
   let mut show_directory = false
+  let mut recurse_submodules = false
+  let mut use_nul = false
   for arg in args {
     match arg {
       "-s" | "--stage" => show_stage = true
@@ -860,9 +862,12 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
       "-o" | "--others" => show_others = true
       "-d" | "--deleted" => show_deleted = true
       "--directory" => show_directory = true
+      "--recurse-submodules" => recurse_submodules = true
+      "-z" => use_nul = true
       _ => ()
     }
   }
+  let terminator = if use_nul { "\u0000" } else { "\n" }
   let entries = @gitlib.read_index_entries(fs, git_dir)
   if show_others {
     // Build set of tracked paths and their parent directories
@@ -887,14 +892,14 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
       // Show untracked directories (not individual files)
       let untracked_dirs = collect_untracked_dirs(fs, root, tracked_dirs)
       for dir in untracked_dirs {
-        print_line(dir + "/")
+        print_str(dir + "/" + terminator)
       }
     } else {
       // Show untracked files
       let all_files = @gitlib.list_working_files(fs, root)
       for path in all_files {
         if not(tracked.contains(path)) {
-          print_line(path)
+          print_str(path + terminator)
         }
       }
     }
@@ -905,23 +910,149 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
     for e in entries {
       let abs = root + "/" + e.path
       if not(fs.is_file(abs)) {
-        print_line(e.path)
+        print_str(e.path + terminator)
       }
     }
     return ()
   }
   // Default: show cached (indexed) files
+  // Parse submodules first if needed (to skip submodule entries)
+  let submodules = if recurse_submodules {
+    parse_gitmodules(fs, root)
+  } else {
+    []
+  }
+  let submod_paths : Map[String, Bool] = {}
+  for submod in submodules {
+    submod_paths[submod.path] = true
+  }
   if show_stage {
     for e in entries {
+      // Skip submodule entries (mode 160000) when recursing
+      if recurse_submodules && e.mode == 0o160000 {
+        continue
+      }
       let mode = format_mode(e.mode)
       // Stage is always 0 for normal entries (no merge conflict)
-      print_line("\{mode} \{e.id.to_hex()} 0\t\{e.path}")
+      print_str("\{mode} \{e.id.to_hex()} 0\t\{e.path}" + terminator)
+    }
+    // Recurse into submodules
+    for submod in submodules {
+      let sub_git_dir = root + "/" + submod.path + "/.git"
+      if fs.is_dir(sub_git_dir) || fs.is_file(sub_git_dir) {
+        let actual_git_dir = resolve_gitdir(fs, sub_git_dir)
+        let sub_entries = @gitlib.read_index_entries(fs, actual_git_dir)
+        for se in sub_entries {
+          let mode = format_mode(se.mode)
+          let full_path = submod.path + "/" + se.path
+          print_str("\{mode} \{se.id.to_hex()} 0\t\{full_path}" + terminator)
+        }
+      }
     }
   } else {
     for e in entries {
-      print_line(e.path)
+      // Skip submodule entries (mode 160000) when recursing
+      if recurse_submodules && e.mode == 0o160000 {
+        continue
+      }
+      print_str(e.path + terminator)
+    }
+    // Recurse into submodules
+    for submod in submodules {
+      let sub_git_dir = root + "/" + submod.path + "/.git"
+      if fs.is_dir(sub_git_dir) || fs.is_file(sub_git_dir) {
+        let actual_git_dir = resolve_gitdir(fs, sub_git_dir)
+        let sub_entries = @gitlib.read_index_entries(fs, actual_git_dir)
+        for se in sub_entries {
+          let full_path = submod.path + "/" + se.path
+          print_str(full_path + terminator)
+        }
+      }
     }
   }
+}
+
+///|
+struct SubmoduleInfo {
+  path : String
+}
+
+///|
+/// Parse .gitmodules file to extract submodule paths
+fn parse_gitmodules(
+  fs : &@git.RepoFileSystem,
+  root : String,
+) -> Array[SubmoduleInfo] {
+  let gitmodules_path = root + "/.gitmodules"
+  if not(fs.is_file(gitmodules_path)) {
+    return []
+  }
+  let content = decode_bytes(fs.read_file(gitmodules_path)) catch {
+    _ => return []
+  }
+  let result : Array[SubmoduleInfo] = []
+  let mut current_name = ""
+  let mut current_path = ""
+  for line_view in content.split("\n") {
+    let line = trim_string(line_view.to_string())
+    if line.has_prefix("[submodule \"") && line.has_suffix("\"]") {
+      // Save previous submodule if any
+      if current_name.length() > 0 && current_path.length() > 0 {
+        result.push({ path: current_path })
+      }
+      // Extract name from [submodule "name"]
+      current_name = String::unsafe_substring(
+        line,
+        start=12,
+        end=line.length() - 2,
+      )
+      current_path = ""
+    } else if line.has_prefix("path") {
+      let eq_idx = line.find("=")
+      match eq_idx {
+        Some(i) =>
+          current_path = trim_string(
+            String::unsafe_substring(line, start=i + 1, end=line.length()),
+          )
+        None => ()
+      }
+    }
+  }
+  // Don't forget the last one
+  if current_name.length() > 0 && current_path.length() > 0 {
+    result.push({ path: current_path })
+  }
+  result
+}
+
+///|
+/// Resolve .git file to actual git directory (for submodules)
+fn resolve_gitdir(fs : &@git.RepoFileSystem, git_path : String) -> String {
+  if fs.is_dir(git_path) {
+    return git_path
+  }
+  // It's a file with "gitdir: <path>" content
+  let content = decode_bytes(fs.read_file(git_path)) catch {
+    _ => return git_path
+  }
+  let trimmed = trim_string(content)
+  if trimmed.has_prefix("gitdir: ") {
+    let target = String::unsafe_substring(
+      trimmed,
+      start=8,
+      end=trimmed.length(),
+    )
+    // If relative path, resolve relative to parent of .git file
+    if not(target.has_prefix("/")) {
+      let parent = match git_path.rev_find("/") {
+        Some(i) => String::unsafe_substring(git_path, start=0, end=i)
+        None => "."
+      }
+      return parent + "/" + target
+    }
+    return target
+  }
+  git_path
 }
 
 ///|

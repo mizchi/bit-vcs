@@ -18,6 +18,8 @@ pub fn OsFs::new() -> Self
 pub impl @git.FileSystem for OsFs
 pub impl @git.RepoFileSystem for OsFs
 
+type SubmoduleInfo
+
 // Type aliases
 
 // Traits
