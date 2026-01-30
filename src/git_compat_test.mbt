@@ -131,7 +131,7 @@ test "git compat: zlib roundtrip" {
     FixedArray::makei(data.length(), fn(i) { data[i] }),
   )
   let compressed = @zlib.zlib_compress_stored(bytes)
-  let decompressed = @zlib.zlib_decompress_stored(compressed)
+  let decompressed = @zlib.zlib_decompress(compressed)
   assert_true(decompressed.length() == bytes.length())
   for i = 0; i < bytes.length(); i = i + 1 {
     assert_true(decompressed[i] == bytes[i])

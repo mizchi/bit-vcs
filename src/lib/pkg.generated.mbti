@@ -16,6 +16,8 @@ pub fn build_upload_pack_advertisement(&@git.RepoFileSystem, String, agent? : St
 
 pub fn checkout(&@git.FileSystem, &@git.RepoFileSystem, String, String, detach? : Bool, update_worktree? : Bool, update_index? : Bool) -> @git.ObjectId raise @git.GitError
 
+pub async fn clone_http(&@git.FileSystem, &@git.RepoFileSystem, String, String, Bool) -> @git.ObjectId? raise @git.GitError
+
 pub fn collect_reachable_objects(ObjectDb, &@git.RepoFileSystem, @git.ObjectId) -> Array[@git.PackObject] raise @git.GitError
 
 pub fn collect_reachable_objects_from_commits(ObjectDb, &@git.RepoFileSystem, Array[@git.ObjectId]) -> Array[@git.PackObject] raise @git.GitError
@@ -44,6 +46,8 @@ pub fn init_repo(&@git.FileSystem, String, default_branch? : String) -> Unit rai
 
 pub fn is_ignored_path(&@git.RepoFileSystem, String, String, Bool) -> Bool raise @git.GitError
 
+pub fn is_sparse_checkout_enabled(&@git.RepoFileSystem, String) -> Bool
+
 pub fn list_branches(&@git.RepoFileSystem, String) -> (HeadRef, Array[BranchInfo]) raise @git.GitError
 
 pub fn list_branches_text(&@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
@@ -55,6 +59,8 @@ pub fn load_object_store_from_fs(&@git.RepoFileSystem, String) -> @git.ObjectSto
 pub fn log_head(&@git.RepoFileSystem, String, max_count? : Int) -> Array[LogEntry] raise @git.GitError
 
 pub fn log_head_oneline(&@git.RepoFileSystem, String, max_count? : Int) -> Array[String] raise @git.GitError
+
+pub fn matches_sparse_pattern(String, Array[String]) -> Bool
 
 pub fn merge(&@git.FileSystem, &@git.RepoFileSystem, String, @git.ObjectId, String, String, Int64) -> MergeResult raise @git.GitError
 
@@ -71,6 +77,8 @@ pub async fn push_http(&@git.RepoFileSystem, String, String, String) -> String r
 pub fn read_head_ref(&@git.RepoFileSystem, String) -> HeadRef raise @git.GitError
 
 pub fn read_index_entries(&@git.RepoFileSystem, String) -> Array[IndexEntry] raise @git.GitError
+
+pub fn read_sparse_patterns(&@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
 
 pub fn rebase_onto(&@git.FileSystem, &@git.RepoFileSystem, String, @git.ObjectId) -> @git.ObjectId raise @git.GitError
 
@@ -96,6 +104,14 @@ pub fn show_ref(&@git.RepoFileSystem, String) -> Array[(String, @git.ObjectId)] 
 
 pub fn show_ref_text(&@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
 
+pub fn sparse_checkout_add(&@git.FileSystem, &@git.RepoFileSystem, String, Array[String]) -> Unit raise @git.GitError
+
+pub fn sparse_checkout_disable(&@git.FileSystem, &@git.RepoFileSystem, String) -> Unit raise @git.GitError
+
+pub fn sparse_checkout_init(&@git.FileSystem, &@git.RepoFileSystem, String, cone? : Bool) -> Unit raise @git.GitError
+
+pub fn sparse_checkout_set(&@git.FileSystem, &@git.RepoFileSystem, String, Array[String]) -> Unit raise @git.GitError
+
 pub fn status(&@git.RepoFileSystem, String) -> Status raise @git.GitError
 
 pub fn status_porcelain(&@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
@@ -117,6 +133,8 @@ pub fn write_index_entries(&@git.FileSystem, String, Array[IndexEntry]) -> Unit 
 pub fn write_loose_object(&@git.FileSystem, String, @git.ObjectType, Bytes) -> @git.ObjectId raise @git.GitError
 
 pub fn write_object_bytes(&@git.FileSystem, String, @git.ObjectId, Bytes) -> Unit raise @git.GitError
+
+pub fn write_sparse_patterns(&@git.FileSystem, String, Array[String]) -> Unit raise @git.GitError
 
 pub fn write_tree_from_index(&@git.FileSystem, String, Array[IndexEntry]) -> @git.ObjectId raise @git.GitError
 

@@ -1,82 +1,78 @@
 ///| Upload-pack dispatcher (wasm targets)
 
+///| For wasm, use *_with_http functions from upload_pack_http_common.mbt
+
+///| with your own HTTP client implementation.
+
 ///|
-fn ensure_http_remote(remote : String) -> Unit raise GitError {
-  let spec = parse_remote(remote)
-  if spec.kind != RemoteKind::Http {
-    raise GitError::ProtocolError("Non-HTTP transport requires native targets")
-  }
+fn[T] wasm_http_not_available() -> T raise GitError {
+  raise GitError::ProtocolError(
+    "HTTP client not available on wasm target. Use *_with_http functions with your own HTTP implementation.",
+  )
 }
 
 ///|
 pub async fn upload_pack_info_refs(
-  remote : String,
-  prefer_v2 : Bool,
+  _remote : String,
+  _prefer_v2 : Bool,
 ) -> Bytes raise GitError {
-  ensure_http_remote(remote)
-  upload_pack_info_refs_http(remote, prefer_v2)
+  wasm_http_not_available()
 }
 
 ///|
 pub async fn upload_pack_request(
-  remote : String,
-  body : Bytes,
-  prefer_v2 : Bool,
+  _remote : String,
+  _body : Bytes,
+  _prefer_v2 : Bool,
 ) -> Bytes raise GitError {
-  ensure_http_remote(remote)
-  upload_pack_request_http(remote, body, prefer_v2)
+  wasm_http_not_available()
 }
 
 ///|
 pub async fn discover_upload_refs(
-  remote : String,
-  prefer_v2 : Bool,
+  _remote : String,
+  _prefer_v2 : Bool,
 ) -> (
   Array[(ObjectId, String)],
   Array[String],
   ProtocolVersion,
   Map[String, String],
 ) raise GitError {
-  ensure_http_remote(remote)
-  discover_upload_refs_http(remote, prefer_v2)
+  wasm_http_not_available()
 }
 
 ///|
 pub async fn fetch_pack(
-  remote : String,
-  wants : Array[ObjectId],
-  prefer_v2 : Bool,
+  _remote : String,
+  _wants : Array[ObjectId],
+  _prefer_v2 : Bool,
 ) -> Bytes raise GitError {
-  ensure_http_remote(remote)
-  fetch_pack_http(remote, wants, prefer_v2)
+  wasm_http_not_available()
 }
 
 ///|
 pub async fn fetch_objects(
-  remote : String,
-  wants : Array[ObjectId],
-  prefer_v2 : Bool,
+  _remote : String,
+  _wants : Array[ObjectId],
+  _prefer_v2 : Bool,
 ) -> Array[PackObject] raise GitError {
-  ensure_http_remote(remote)
-  fetch_objects_http(remote, wants, prefer_v2)
+  wasm_http_not_available()
 }
 
 ///|
 pub async fn clone_remote(
-  remote : String,
-  prefer_v2 : Bool,
+  _remote : String,
+  _prefer_v2 : Bool,
 ) -> (Array[(ObjectId, String)], Array[PackObject]) raise GitError {
-  ensure_http_remote(remote)
-  clone_http(remote, prefer_v2)
+  wasm_http_not_available()
 }
 
 ///|
 pub async fn clone_remote_to_fs(
-  remote : String,
-  prefer_v2 : Bool,
-  fs : &FileSystem,
-  root : String,
+  _remote : String,
+  _prefer_v2 : Bool,
+  _fs : &FileSystem,
+  _root : String,
 ) -> Array[(ObjectId, String)] raise GitError {
-  ensure_http_remote(remote)
-  clone_http_to_fs(remote, prefer_v2, fs, root)
+  wasm_http_not_available()
 }

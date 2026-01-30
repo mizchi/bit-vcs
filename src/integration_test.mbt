@@ -85,7 +85,7 @@ test "integration: tree format is correct" {
   let (tree_id, compressed) = create_tree([entry])
 
   // Decompress and verify format
-  let decompressed = @zlib.zlib_decompress_stored(compressed)
+  let decompressed = @zlib.zlib_decompress(compressed)
 
   // Should start with "tree {size}\0"
   assert_true(decompressed[0] == b't')
@@ -117,7 +117,7 @@ test "integration: commit format is correct" {
   let (_, compressed) = create_commit(commit)
 
   // Decompress and verify format
-  let decompressed = @zlib.zlib_decompress_stored(compressed)
+  let decompressed = @zlib.zlib_decompress(compressed)
 
   // Should start with "commit {size}\0"
   assert_true(decompressed[0] == b'c')
@@ -408,7 +408,7 @@ test "integration: packfile hex for git verify-pack" {
   // This confirms our packfile is git-compatible!
   inspect(
     hex,
-    content="5041434b0000000200000001367801010600f9ff68656c6c6f0a084b021f007b4413ed03c6c9a5aa33859e2ae7d4d74449fc",
+    content="5041434b0000000200000001367801cb48cdc9c9e70200084b021f6522c3ff3330ea53ddd9a836cc12a02b4703877e",
   )
 }
 
@@ -429,6 +429,6 @@ test "integration: commit packfile for git verify-pack" {
   )
   inspect(
     hex,
-    content="5041434b0000000200000003367801010600f9ff68656c6c6f0a084b021fa5027801012500daff3130303634342068656c6c6f2e74787400ce013625030ba8dba906f756967f9e9ca394464adf740dbf9f0a780101af0050ff7472656520616161393663656432643961316338653732633536623235336130653266653738333933666562370a617574686f72205465737420417574686f72203c74657374406578616d706c652e636f6d3e2031373030303030303030202b303030300a636f6d6d6974746572205465737420417574686f72203c74657374406578616d706c652e636f6d3e2031373030303030303030202b303030300a0a496e697469616c20636f6d6d69740aec7836463a74cc4d8ce87231083fac171466248439796372",
+    content="5041434b0000000200000003367801cb48cdc9c9e70200084b021fa502780133343030333151c848cdc9c9d72ba9286138c768a6caccbde2f64ab6ef61d3eae7cd593cc5cd0b00df740dbf9f0a78012b294a4d55484c4cb4344b4e4d314ab14c344cb64835374a36354b3232354e3448354a4b35b730b6344e4b4d32e74a2c2dc9c82f5208492d2e517084b06d4a801c87d48ac4dc829c54bde4fc5c3b054373032850d006915c40d1dccc929254d2757279e665966426e628408ce00200ec78364652505865c4d37071986a62d6b9f163fe0f582589",
   )
 }

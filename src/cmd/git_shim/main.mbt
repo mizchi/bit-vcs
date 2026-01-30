@@ -43,6 +43,106 @@ async fn eprint_line(s : String) -> Unit {
 }
 
 ///|
+fn decode_bytes(data : Bytes) -> String {
+  @encoding.decoder(@encoding.Encoding::UTF8).decode_lossy(data[:])
+}
+
+///|
+fn trim_string(s : String) -> String {
+  let mut start = 0
+  let mut end = s.length()
+  while start < end {
+    let c = s.unsafe_get(start)
+    if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+      start += 1
+    } else {
+      break
+    }
+  }
+  while end > start {
+    let c = s.unsafe_get(end - 1)
+    if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+      end -= 1
+    } else {
+      break
+    }
+  }
+  if start == 0 && end == s.length() {
+    s
+  } else {
+    String::unsafe_substring(s, start~, end~)
+  }
+}
+
+///|
+priv struct ShowCommitInfo {
+  author : String
+  timestamp : Int64
+  message : String
+}
+
+///|
+fn parse_show_commit(data : Bytes) -> ShowCommitInfo {
+  let text = decode_bytes(data)
+  let mut author = ""
+  let mut timestamp = 0L
+  let mut in_message = false
+  let message_lines : Array[String] = []
+  for line_view in text.split("\n") {
+    let line = line_view.to_string()
+    if in_message {
+      message_lines.push(line)
+      continue
+    }
+    if line.length() == 0 {
+      in_message = true
+      continue
+    }
+    if line.has_prefix("author ") {
+      let rest = String::unsafe_substring(line, start=7, end=line.length())
+      // format: Name <email> 1700000000 +0000
+      let mut last_space = rest.rev_find(" ")
+      if last_space is Some(tz_idx) {
+        let before_tz = String::unsafe_substring(rest, start=0, end=tz_idx)
+        last_space = before_tz.rev_find(" ")
+        if last_space is Some(time_idx) {
+          author = String::unsafe_substring(before_tz, start=0, end=time_idx)
+          let time_str = String::unsafe_substring(
+            before_tz,
+            start=time_idx + 1,
+            end=before_tz.length(),
+          )
+          for c in time_str {
+            if c >= '0' && c <= '9' {
+              let digit = c.to_int() - '0'.to_int()
+              timestamp = timestamp * 10L + digit.to_int64()
+            }
+          }
+        } else {
+          author = before_tz
+        }
+      } else {
+        author = rest
+      }
+    }
+  }
+  let message = if message_lines.length() > 0 {
+    message_lines
+    .iter()
+    .fold(init="", fn(acc, line) {
+      if acc.length() == 0 {
+        line
+      } else {
+        acc + "\n" + line
+      }
+    })
+  } else {
+    ""
+  }
+  { author, timestamp, message }
+}
+
+///|
 fn parent_dir(path : String) -> String {
   if path.length() == 0 || path == "/" {
     return "/"
@@ -306,10 +406,76 @@ fn get_work_root() -> String {
 
 ///|
 async fn handle_init(args : Array[String]) -> Unit raise Error {
-  let path = if args.length() > 0 { args[0] } else { "." }
+  let root = get_work_root()
+  let path = if args.length() > 0 {
+    let arg = args[0]
+    if arg.has_prefix("/") {
+      arg
+    } else {
+      root + "/" + arg
+    }
+  } else {
+    root
+  }
   let fs = OsFs::new()
   @gitlib.init_repo(fs, path)
   print_line("Initialized empty Git repository in " + path + "/.git/")
+}
+
+///|
+async fn handle_clone(args : Array[String]) -> Unit raise Error {
+  // Parse: git clone <url> [<directory>]
+  let root = get_work_root()
+  let mut url : String? = None
+  let mut dest : String? = None
+  for arg in args {
+    if arg.has_prefix("-") {
+      continue
+    }
+    if url is None {
+      url = Some(arg)
+    } else if dest is None {
+      dest = Some(arg)
+    }
+  }
+  guard url is Some(remote_url) else {
+    raise @git.GitError::InvalidObject("repository URL required")
+  }
+  // Derive destination from URL if not specified
+  let relative_target = match dest {
+    Some(d) => d
+    None => {
+      // Extract repo name from URL
+      let name = if remote_url.has_suffix(".git") {
+        String::unsafe_substring(
+          remote_url,
+          start=0,
+          end=remote_url.length() - 4,
+        )
+      } else {
+        remote_url
+      }
+      match name.rev_find("/") {
+        Some(i) =>
+          String::unsafe_substring(name, start=i + 1, end=name.length())
+        None => name
+      }
+    }
+  }
+  let target = if relative_target.has_prefix("/") {
+    relative_target
+  } else {
+    root + "/" + relative_target
+  }
+  print_line("Cloning into '\{relative_target}'...")
+  let fs = OsFs::new()
+  // Use existing clone_http_to_fs from @git package
+  let refs = @git.clone_http_to_fs(remote_url, true, fs, target)
+  if refs.length() > 0 {
+    print_line("done.")
+  } else {
+    raise @git.GitError::InvalidObject("Clone failed: no refs found")
+  }
 }
 
 ///|
@@ -573,6 +739,523 @@ fn handle_checkout(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
+async fn handle_fetch(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  // Read remote URL from config (simple parsing)
+  let config_path = git_dir + "/config"
+  let mut remote_url : String? = None
+  if fs.is_file(config_path) {
+    let config_content = decode_bytes(fs.read_file(config_path))
+    let mut in_remote_section = false
+    for line_view in config_content.split("\n") {
+      let line = trim_string(line_view.to_string())
+      if line.has_prefix("[remote ") {
+        in_remote_section = true
+        continue
+      }
+      if line.has_prefix("[") {
+        in_remote_section = false
+        continue
+      }
+      if in_remote_section && line.has_prefix("url = ") {
+        remote_url = Some(
+          String::unsafe_substring(line, start=6, end=line.length()),
+        )
+        break
+      }
+    }
+  }
+  // Override with command line argument
+  for arg in args {
+    if not(arg.has_prefix("-")) {
+      remote_url = Some(arg)
+      break
+    }
+  }
+  guard remote_url is Some(url) else {
+    raise @git.GitError::InvalidObject("No remote configured")
+  }
+  print_line("Fetching from \{url}...")
+  // Fetch refs and pack
+  let (refs, _caps, _version, symrefs) = @git.discover_upload_refs_http(
+    url, true,
+  )
+  let default_ref = @git.select_default_ref(refs, symrefs)
+  match default_ref {
+    None => {
+      print_line("No refs to fetch")
+      return ()
+    }
+    Some((refname, commit_id)) => {
+      let pack = @git.fetch_pack_http(url, [commit_id], true)
+      let objects = @git.parse_packfile(pack)
+      @git.write_packfile_with_index(fs, git_dir, pack, objects)
+      // Update remote tracking ref
+      let remote_ref = if refname.has_prefix("refs/heads/") {
+        let name = String::unsafe_substring(
+          refname,
+          start=11,
+          end=refname.length(),
+        )
+        "refs/remotes/origin/" + name
+      } else {
+        "refs/remotes/origin/HEAD"
+      }
+      let remote_path = git_dir + "/" + remote_ref
+      let dir = match remote_path.rev_find("/") {
+        None => ""
+        Some(i) => String::unsafe_substring(remote_path, start=0, end=i)
+      }
+      if dir.length() > 0 {
+        fs.mkdir_p(dir)
+      }
+      fs.write_string(remote_path, commit_id.to_hex() + "\n")
+      print_line("From \{url}")
+      print_line(" * [new branch] \{refname} -> \{remote_ref}")
+    }
+  }
+}
+
+///|
+async fn handle_show(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  // Parse: git show [<commit>]
+  let mut rev = "HEAD"
+  for arg in args {
+    if not(arg.has_prefix("-")) {
+      rev = arg
+      break
+    }
+  }
+  // Resolve revision
+  let id = @gitlib.rev_parse(fs, git_dir, rev)
+  guard id is Some(commit_id) else {
+    raise @git.GitError::InvalidObject("unknown revision: \{rev}")
+  }
+  // Load object
+  let db = @gitlib.ObjectDb::load(fs, git_dir)
+  let obj = db.get(fs, commit_id)
+  guard obj is Some(o) else {
+    raise @git.GitError::InvalidObject(
+      "Object not found: \{commit_id.to_hex()}",
+    )
+  }
+  if o.obj_type != @git.ObjectType::Commit {
+    raise @git.GitError::InvalidObject("Not a commit: \{commit_id.to_hex()}")
+  }
+  // Parse commit for tree/parents
+  let commit_info = @git.parse_commit(o.data)
+  // Parse full commit details
+  let show_info = parse_show_commit(o.data)
+  // Print commit info
+  print_line("commit \{commit_id.to_hex()}")
+  print_line("Author: \{show_info.author}")
+  print_line("Date:   \{show_info.timestamp}")
+  print_line("")
+  // Print message with indentation
+  for line_view in show_info.message.split("\n") {
+    print_line("    \{line_view.to_string()}")
+  }
+  print_line("")
+  // Show diff against parent (simplified)
+  if commit_info.parents.length() > 0 {
+    let parent_id = commit_info.parents[0]
+    let parent_files = @gitlib.collect_tree_files_from_commit(db, fs, parent_id)
+    let current_files = @gitlib.collect_tree_files_from_commit(
+      db, fs, commit_id,
+    )
+    // Show changed files
+    for item in current_files.to_array() {
+      let (path, entry) = item
+      match parent_files.get(path) {
+        None => print_line("diff --git a/\{path} b/\{path}\nnew file")
+        Some(parent_entry) =>
+          if entry.id != parent_entry.id {
+            print_line("diff --git a/\{path} b/\{path}")
+          }
+      }
+    }
+    for item in parent_files.to_array() {
+      let (path, _) = item
+      if not(current_files.contains(path)) {
+        print_line("diff --git a/\{path} b/\{path}\ndeleted file")
+      }
+    }
+  }
+}
+
+///|
+async fn handle_pull(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  // Read remote URL from config
+  let config_path = git_dir + "/config"
+  let mut remote_url : String? = None
+  if fs.is_file(config_path) {
+    let config_content = decode_bytes(fs.read_file(config_path))
+    let mut in_remote_section = false
+    for line_view in config_content.split("\n") {
+      let line = trim_string(line_view.to_string())
+      if line.has_prefix("[remote ") {
+        in_remote_section = true
+        continue
+      }
+      if line.has_prefix("[") {
+        in_remote_section = false
+        continue
+      }
+      if in_remote_section && line.has_prefix("url = ") {
+        remote_url = Some(
+          String::unsafe_substring(line, start=6, end=line.length()),
+        )
+        break
+      }
+    }
+  }
+  // Override with command line argument
+  let mut rebase = false
+  for arg in args {
+    if arg == "--rebase" || arg == "-r" {
+      rebase = true
+      continue
+    }
+    if not(arg.has_prefix("-")) {
+      remote_url = Some(arg)
+      break
+    }
+  }
+  guard remote_url is Some(url) else {
+    raise @git.GitError::InvalidObject("No remote configured")
+  }
+  print_line("Pulling from \{url}...")
+  let result = @gitlib.pull_http(fs, fs, root, url, true, rebase~)
+  match result {
+    None => print_line("Already up to date.")
+    Some(id) => print_line("Updated to \{id.to_hex()}")
+  }
+}
+
+///|
+fn handle_reset(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let fs = OsFs::new()
+  let mut mode : @gitlib.ResetMode = @gitlib.ResetMode::Mixed
+  let mut rev = "HEAD"
+  for arg in args {
+    if arg == "--soft" {
+      mode = @gitlib.ResetMode::Soft
+      continue
+    }
+    if arg == "--mixed" {
+      mode = @gitlib.ResetMode::Mixed
+      continue
+    }
+    if arg == "--hard" {
+      mode = @gitlib.ResetMode::Hard
+      continue
+    }
+    if not(arg.has_prefix("-")) {
+      rev = arg
+    }
+  }
+  let commit_id = @gitlib.reset(fs, fs, root, rev, mode)
+  let short_id = String::unsafe_substring(commit_id.to_hex(), start=0, end=7)
+  println("HEAD is now at \{short_id}")
+}
+
+///|
+async fn handle_merge(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  let mut target_ref : String? = None
+  let mut message : String? = None
+  let mut i = 0
+  while i < args.length() {
+    let arg = args[i]
+    if arg == "-m" && i + 1 < args.length() {
+      message = Some(args[i + 1])
+      i += 2
+      continue
+    }
+    if arg.has_prefix("-m") {
+      message = Some((try! arg[2:]).to_string())
+      i += 1
+      continue
+    }
+    if not(arg.has_prefix("-")) {
+      target_ref = Some(arg)
+    }
+    i += 1
+  }
+  guard target_ref is Some(refspec) else {
+    raise @git.GitError::InvalidObject("No commit to merge specified")
+  }
+  // Resolve target
+  let target_id = @gitlib.rev_parse(fs, git_dir, refspec)
+  guard target_id is Some(tid) else {
+    raise @git.GitError::InvalidObject("unknown revision: \{refspec}")
+  }
+  let author = match @sys.get_env_var("GIT_AUTHOR_NAME") {
+    Some(name) => {
+      let email = @sys.get_env_var("GIT_AUTHOR_EMAIL").unwrap_or("unknown")
+      name + " <" + email + ">"
+    }
+    None =>
+      match @sys.get_env_var("USER") {
+        Some(u) => u + " <" + u + "@localhost>"
+        None => "Unknown <unknown@localhost>"
+      }
+  }
+  let timestamp = match @sys.get_env_var("GIT_COMMITTER_DATE") {
+    Some(s) => @strconv.parse_int64(s) catch { _ => get_current_timestamp() }
+    None => get_current_timestamp()
+  }
+  let msg = message.unwrap_or("Merge \{refspec}")
+  let result = @gitlib.merge(fs, fs, root, tid, msg, author, timestamp)
+  match result.status {
+    @gitlib.MergeStatus::AlreadyUpToDate => print_line("Already up to date.")
+    @gitlib.MergeStatus::FastForward =>
+      match result.commit_id {
+        Some(id) => {
+          let short = String::unsafe_substring(id.to_hex(), start=0, end=7)
+          print_line("Fast-forward to \{short}")
+        }
+        None => print_line("Fast-forward")
+      }
+    @gitlib.MergeStatus::Merged =>
+      match result.commit_id {
+        Some(id) => {
+          let short = String::unsafe_substring(id.to_hex(), start=0, end=7)
+          print_line("Merge made by the 'ort' strategy. [\{short}]")
+        }
+        None => print_line("Merged")
+      }
+    @gitlib.MergeStatus::Conflicted => {
+      print_line("CONFLICT (content): Merge conflict in the following files:")
+      for path in result.conflicts {
+        print_line("  \{path}")
+      }
+      print_line("Automatic merge failed; fix conflicts and then commit.")
+    }
+  }
+}
+
+///|
+fn handle_switch(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let fs = OsFs::new()
+  let mut branch : String? = None
+  let mut create = false
+  let mut i = 0
+  while i < args.length() {
+    let arg = args[i]
+    if arg == "-c" || arg == "--create" {
+      create = true
+      if i + 1 < args.length() && not(args[i + 1].has_prefix("-")) {
+        branch = Some(args[i + 1])
+        i += 2
+        continue
+      }
+      i += 1
+      continue
+    }
+    if not(arg.has_prefix("-")) {
+      branch = Some(arg)
+    }
+    i += 1
+  }
+  guard branch is Some(name) else {
+    raise @git.GitError::InvalidObject("No branch specified")
+  }
+  @gitlib.switch_branch(fs, fs, root, name, create~)
+  if create {
+    println("Switched to a new branch '\{name}'")
+  } else {
+    println("Switched to branch '\{name}'")
+  }
+}
+
+///|
+async fn handle_sparse_checkout(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  if args.length() == 0 {
+    raise @git.GitError::InvalidObject(
+      "usage: git sparse-checkout <init|set|add|list|disable>",
+    )
+  }
+  let subcmd = args[0]
+  let rest = if args.length() > 1 {
+    let arr : Array[String] = []
+    for i in 1..<args.length() {
+      arr.push(args[i])
+    }
+    arr
+  } else {
+    []
+  }
+  match subcmd {
+    "init" => {
+      let cone = rest.contains("--cone")
+      @gitlib.sparse_checkout_init(fs, fs, root, cone~)
+      print_line("Sparse checkout initialized")
+    }
+    "set" => {
+      let patterns : Array[String] = []
+      for arg in rest {
+        if not(arg.has_prefix("-")) {
+          patterns.push(arg)
+        }
+      }
+      if patterns.length() == 0 {
+        raise @git.GitError::InvalidObject("patterns required for set")
+      }
+      @gitlib.sparse_checkout_set(fs, fs, root, patterns)
+      print_line("Sparse checkout patterns set")
+    }
+    "add" => {
+      let patterns : Array[String] = []
+      for arg in rest {
+        if not(arg.has_prefix("-")) {
+          patterns.push(arg)
+        }
+      }
+      if patterns.length() == 0 {
+        raise @git.GitError::InvalidObject("patterns required for add")
+      }
+      @gitlib.sparse_checkout_add(fs, fs, root, patterns)
+      print_line("Sparse checkout patterns added")
+    }
+    "list" => {
+      let patterns = @gitlib.read_sparse_patterns(fs, git_dir)
+      for p in patterns {
+        print_line(p)
+      }
+    }
+    "disable" => {
+      @gitlib.sparse_checkout_disable(fs, fs, root)
+      print_line("Sparse checkout disabled")
+    }
+    _ =>
+      raise @git.GitError::InvalidObject(
+        "unknown sparse-checkout subcommand: \{subcmd}",
+      )
+  }
+}
+
+///|
+async fn handle_config(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  let config_path = git_dir + "/config"
+  // Parse arguments
+  let mut get_mode = false
+  let mut get_bool = false
+  let mut key : String? = None
+  let mut value : String? = None
+  for arg in args {
+    if arg == "--get" {
+      get_mode = true
+      continue
+    }
+    if arg == "--bool" {
+      get_bool = true
+      continue
+    }
+    if arg.has_prefix("-") {
+      continue
+    }
+    if key is None {
+      key = Some(arg)
+    } else if value is None {
+      value = Some(arg)
+    }
+  }
+  guard key is Some(k) else {
+    raise @git.GitError::InvalidObject("key required")
+  }
+  if get_mode || value is None {
+    // Read config
+    if not(fs.is_file(config_path)) {
+      raise @git.GitError::InvalidObject("config not found")
+    }
+    let content = decode_bytes(fs.read_file(config_path))
+    let parts = k.split(".")
+    let parts_arr : Array[String] = []
+    for p in parts {
+      parts_arr.push(p.to_string())
+    }
+    if parts_arr.length() != 2 {
+      raise @git.GitError::InvalidObject("invalid key format")
+    }
+    let section = parts_arr[0]
+    let name = parts_arr[1]
+    let mut in_section = false
+    for line_view in content.split("\n") {
+      let line = trim_string(line_view.to_string())
+      if line.has_prefix("[") && line.has_suffix("]") {
+        let sec_name = String::unsafe_substring(
+          line,
+          start=1,
+          end=line.length() - 1,
+        )
+        in_section = sec_name == section ||
+          sec_name.has_prefix(section + " ") ||
+          sec_name.has_prefix(section + "\t")
+        continue
+      }
+      if in_section && line.has_prefix(name + " = ") {
+        let val = String::unsafe_substring(
+          line,
+          start=name.length() + 3,
+          end=line.length(),
+        )
+        if get_bool {
+          if val == "true" || val == "1" {
+            print_line("true")
+          } else {
+            print_line("false")
+          }
+        } else {
+          print_line(val)
+        }
+        return
+      }
+      if in_section && line.has_prefix(name + "=") {
+        let val = String::unsafe_substring(
+          line,
+          start=name.length() + 1,
+          end=line.length(),
+        )
+        if get_bool {
+          if val == "true" || val == "1" {
+            print_line("true")
+          } else {
+            print_line("false")
+          }
+        } else {
+          print_line(val)
+        }
+        return
+      }
+    }
+    // Key not found
+    raise @git.GitError::InvalidObject("key not found: " + k)
+  } else {
+    // Write config - fallback to system git for now
+    raise @git.GitError::InvalidObject("config write not implemented")
+  }
+}
+
+///|
 async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
@@ -611,6 +1294,11 @@ async fn main_async() -> Unit {
   if args.length() < 2 {
     eprint_line("git-shim: missing subcommand")
     @sys.exit(2)
+  }
+  // Handle --version early
+  if args.length() >= 2 && (args[1] == "--version" || args[1] == "version") {
+    print_line("git version 2.47.0 (git-shim)")
+    return ()
   }
   let full_args = collect_args(args, 1)
   let mut i = 1
@@ -751,6 +1439,20 @@ async fn main_async() -> Unit {
               @sys.exit(1)
             }
           }
+        "clone" =>
+          handle_clone(rest) catch {
+            err => {
+              eprint_line("clone failed: " + err.to_string())
+              @sys.exit(1)
+            }
+          }
+        "fetch" =>
+          handle_fetch(rest) catch {
+            err => {
+              eprint_line("fetch failed: " + err.to_string())
+              @sys.exit(1)
+            }
+          }
         "init" =>
           handle_init(rest) catch {
             err => {
@@ -786,6 +1488,13 @@ async fn main_async() -> Unit {
               @sys.exit(1)
             }
           }
+        "show" =>
+          handle_show(rest) catch {
+            err => {
+              eprint_line("show failed: " + err.to_string())
+              @sys.exit(1)
+            }
+          }
         "branch" =>
           handle_branch(rest) catch {
             _ => run_system_git(prepend_arg("branch", rest))
@@ -801,9 +1510,43 @@ async fn main_async() -> Unit {
           handle_checkout(rest) catch {
             _ => run_system_git(prepend_arg("checkout", rest))
           }
+        "pull" =>
+          handle_pull(rest) catch {
+            err => {
+              eprint_line("pull failed: " + err.to_string())
+              @sys.exit(1)
+            }
+          }
+        "reset" =>
+          handle_reset(rest) catch {
+            err => {
+              eprint_line("reset failed: " + err.to_string())
+              @sys.exit(1)
+            }
+          }
+        "merge" =>
+          handle_merge(rest) catch {
+            _ => run_system_git(prepend_arg("merge", rest))
+          }
+        "switch" =>
+          handle_switch(rest) catch {
+            _ => run_system_git(prepend_arg("switch", rest))
+          }
         "rev-parse" =>
           handle_rev_parse(rest) catch {
             _ => run_system_git(prepend_arg("rev-parse", rest))
+          }
+        "version" | "--version" => print_line("git version 2.47.0 (git-shim)")
+        "config" =>
+          handle_config(rest) catch {
+            _ => run_system_git(prepend_arg("config", rest))
+          }
+        "sparse-checkout" =>
+          handle_sparse_checkout(rest) catch {
+            err => {
+              eprint_line("sparse-checkout failed: " + err.to_string())
+              @sys.exit(1)
+            }
           }
         _ => run_system_git(prepend_arg(subcmd, rest))
       }

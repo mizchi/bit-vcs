@@ -229,6 +229,13 @@ fn expand_paths(
   let all = list_working_files(fs, root)
   for p in paths {
     let path = normalize_rel_path(p)
+    // Handle "." specially - add all files
+    if path == "." {
+      for f in all {
+        result.push(f)
+      }
+      continue
+    }
     let abs = join_path(root, path)
     if fs.is_dir(abs) {
       let prefix = if path.has_suffix("/") { path } else { path + "/" }
