@@ -7,6 +7,7 @@ priv struct PackObjectsConfig {
   base_name : String?
   progress : Bool
   path_walk : Bool
+  index_version : Int
 }
 
 ///|
@@ -26,6 +27,7 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
   let mut base_name : String? = None
   let mut progress = false
   let mut path_walk = false
+  let mut index_version = 2
   let mut i = 0
   let mut in_opts = true
   let mut extra_args = 0
@@ -71,8 +73,29 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
               _ => return PackObjectsParse::Unsupported
             }
             window = parsed
-          } else if arg.has_prefix("--index-version") ||
-            arg.has_prefix("--stdin-packs") ||
+          } else if arg.has_prefix("--index-version=") {
+            let value = (try! arg[16:]).to_string()
+            let parsed = @strconv.parse_int(value) catch {
+              _ => return PackObjectsParse::Unsupported
+            }
+            if parsed != 1 && parsed != 2 {
+              return PackObjectsParse::Unsupported
+            }
+            index_version = parsed
+          } else if arg == "--index-version" {
+            if i + 1 >= args.length() {
+              return PackObjectsParse::Unsupported
+            }
+            let value = args[i + 1]
+            let parsed = @strconv.parse_int(value) catch {
+              _ => return PackObjectsParse::Unsupported
+            }
+            if parsed != 1 && parsed != 2 {
+              return PackObjectsParse::Unsupported
+            }
+            index_version = parsed
+            i += 1
+          } else if arg.has_prefix("--stdin-packs") ||
             arg.has_prefix("--write-bitmap-index") ||
             arg.has_prefix("--filter") ||
             arg.has_prefix("--name-hash-version") ||
@@ -114,6 +137,7 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
     base_name,
     progress,
     path_walk,
+    index_version,
   })
 }
 
@@ -365,7 +389,9 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
           let pack_path = base_name + "-" + hash_hex + ".pack"
           let idx_path = base_name + "-" + hash_hex + ".idx"
           fs.write_file(pack_path, pack)
-          @git.write_pack_index_from_objects(fs, idx_path, pack, group)
+          @git.write_pack_index_from_objects_versioned(
+            fs, idx_path, pack, group, cfg.index_version,
+          )
           @stdio.stdout.write(hash_hex + "\n")
         }
       }

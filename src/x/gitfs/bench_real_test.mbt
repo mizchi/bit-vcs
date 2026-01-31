@@ -154,11 +154,11 @@ test "bench_real: ObjectDb load_lazy" (b : @bench.T) {
 }
 
 ///|
-/// Benchmark: from_commit_lazy (shallow snapshot)
+/// Benchmark: from_commit (shallow snapshot)
 test "bench_real: snapshot_lazy from .git" (b : @bench.T) {
   b.bench(fn() {
     b.keep(
-      try! GitFs::from_commit_lazy(
+      try! GitFs::from_commit(
         bench_real_osfs, bench_real_git_dir, bench_real_commit,
       ),
     )
@@ -168,7 +168,7 @@ test "bench_real: snapshot_lazy from .git" (b : @bench.T) {
 ///|
 /// Benchmark: read files after lazy snapshot
 test "bench_real: read README.md (lazy)" (b : @bench.T) {
-  let gitfs = try! GitFs::from_commit_lazy(
+  let gitfs = try! GitFs::from_commit(
     bench_real_osfs, bench_real_git_dir, bench_real_commit,
   )
   b.bench(fn() { b.keep(try! gitfs.read_file(bench_real_osfs, "README.md")) })
@@ -180,7 +180,7 @@ test "bench_real: full workflow (lazy)" (b : @bench.T) {
   let content = Bytes::make(100, b'x')
   b.bench(fn() {
     // 1. Create lazy snapshot from HEAD
-    let gitfs = try! GitFs::from_commit_lazy(
+    let gitfs = try! GitFs::from_commit(
       bench_real_osfs, bench_real_git_dir, bench_real_commit,
     )
     // 2. Read some files

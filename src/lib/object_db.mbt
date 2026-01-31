@@ -8,6 +8,55 @@ pub struct PackIndex {
 }
 
 ///|
+/// Lazy pack index - loads index data on first access
+pub struct LazyPackIndex {
+  idx_path : String
+  pack_path : String
+  mut loaded : PackIndex?
+}
+
+///|
+pub fn LazyPackIndex::new(idx_path : String, pack_path : String) -> LazyPackIndex {
+  { idx_path, pack_path, loaded: None }
+}
+
+///|
+pub fn LazyPackIndex::get(
+  self : LazyPackIndex,
+  fs : &@git.RepoFileSystem,
+) -> PackIndex raise @git.GitError {
+  match self.loaded {
+    Some(idx) => idx
+    None => {
+      let data = fs.read_file(self.idx_path)
+      let idx = parse_pack_index(data, self.pack_path)
+      self.loaded = Some(idx)
+      idx
+    }
+  }
+}
+
+///|
+pub fn LazyPackIndex::find_offset(
+  self : LazyPackIndex,
+  fs : &@git.RepoFileSystem,
+  id : @git.ObjectId,
+) -> Int64? raise @git.GitError {
+  let idx = self.get(fs)
+  idx.find_offset(id)
+}
+
+///|
+pub fn LazyPackIndex::find_offset_hex(
+  self : LazyPackIndex,
+  fs : &@git.RepoFileSystem,
+  hex : String,
+) -> Int64? raise @git.GitError {
+  let idx = self.get(fs)
+  idx.find_offset_hex(hex)
+}
+
+///|
 pub fn PackIndex::find_offset(self : PackIndex, id : @git.ObjectId) -> Int64? {
   let target = id.to_hex()
   PackIndex::find_offset_hex(self, target)
@@ -36,6 +85,7 @@ pub struct ObjectDb {
   objects_dir : String // base path for objects
   loose_paths : Map[String, String] // hex -> path (cache)
   packs : Array[PackIndex]
+  lazy_packs : Array[LazyPackIndex] // lazily loaded pack indexes
 }
 
 ///|
@@ -60,27 +110,27 @@ pub fn ObjectDb::load(
   } else {
     []
   }
-  { objects_dir, loose_paths, packs }
+  { objects_dir, loose_paths, packs, lazy_packs: [] }
 }
 
 ///|
-/// Load ObjectDb lazily - don't scan loose objects upfront (shallow/fast)
+/// Load ObjectDb lazily - don't scan loose objects or load pack indexes upfront
 pub fn ObjectDb::load_lazy(
   fs : &@git.RepoFileSystem,
   git_dir : String,
 ) -> ObjectDb raise @git.GitError {
   let objects_dir = join_path(git_dir, "objects")
-  let packs = if fs.is_dir(objects_dir) {
+  let lazy_packs = if fs.is_dir(objects_dir) {
     let pack_dir = join_path(objects_dir, "pack")
     if fs.is_dir(pack_dir) {
-      load_pack_indexes(fs, pack_dir)
+      collect_lazy_pack_indexes(fs, pack_dir)
     } else {
       []
     }
   } else {
     []
   }
-  { objects_dir, loose_paths: {}, packs }
+  { objects_dir, loose_paths: {}, packs: [], lazy_packs }
 }
 
 ///|
@@ -139,7 +189,7 @@ fn get_by_hex(
     }
     None => ()
   }
-  // Try pack files
+  // Try pack files (eagerly loaded)
   for pack in db.packs {
     match PackIndex::find_offset_hex(pack, hex) {
       None => ()
@@ -148,6 +198,22 @@ fn get_by_hex(
         let obj = read_pack_object_at(data, pack, offset, db, fs, seen)
         return Some(obj)
       }
+    }
+  }
+  // Try lazy pack files (loaded on first access)
+  for lazy_pack in db.lazy_packs {
+    try {
+      match lazy_pack.find_offset_hex(fs, hex) {
+        None => ()
+        Some(offset) => {
+          let pack = lazy_pack.get(fs) // ensure loaded
+          let data = fs.read_file(pack.pack_path)
+          let obj = read_pack_object_at(data, pack, offset, db, fs, seen)
+          return Some(obj)
+        }
+      }
+    } catch {
+      _ => ()
     }
   }
   None
@@ -252,6 +318,32 @@ fn load_pack_indexes(
     let data = fs.read_file(idx_path)
     let idx = parse_pack_index(data, pack_path)
     result.push(idx)
+  }
+  result
+}
+
+///|
+/// Collect pack index paths without loading them (for lazy loading)
+fn collect_lazy_pack_indexes(
+  fs : &@git.RepoFileSystem,
+  pack_dir : String,
+) -> Array[LazyPackIndex] raise @git.GitError {
+  let result : Array[LazyPackIndex] = []
+  let entries = fs.readdir(pack_dir)
+  for entry in entries {
+    if not(entry.has_suffix(".idx")) {
+      continue
+    }
+    let idx_path = join_path(pack_dir, entry)
+    if not(fs.is_file(idx_path)) {
+      continue
+    }
+    let base = String::unsafe_substring(entry, start=0, end=entry.length() - 4)
+    let pack_path = join_path(pack_dir, base + ".pack")
+    if not(fs.is_file(pack_path)) {
+      continue
+    }
+    result.push(LazyPackIndex::new(idx_path, pack_path))
   }
   result
 }

@@ -1,13 +1,19 @@
 ///| GitFs construction and initialization
 
 ///|
+/// Create GitFs from a commit.
+/// Uses config.lazy_load to determine loading strategy (default: lazy).
 pub fn GitFs::from_commit(
   backing_fs : &@git.RepoFileSystem,
   git_dir : String,
   commit_id : @git.ObjectId,
   config? : GitFsConfig = GitFsConfig::default(),
 ) -> GitFs raise @git.GitError {
-  let db = @lib.ObjectDb::load(backing_fs, git_dir)
+  let db = if config.lazy_load {
+    @lib.ObjectDb::load_lazy(backing_fs, git_dir)
+  } else {
+    @lib.ObjectDb::load(backing_fs, git_dir)
+  }
   let obj = db.get(backing_fs, commit_id)
   guard obj is Some(commit_obj) else {
     raise @git.GitError::InvalidObject("Commit not found: \{commit_id}")
@@ -25,40 +31,14 @@ pub fn GitFs::from_commit(
     cache: ObjectCache::new(config.max_cache_bytes),
     config,
     cached_db: Some(db),
+    cached_promisor_db: None,
+    lazy_mode: config.lazy_load,
   }
 }
 
 ///|
-/// Create GitFs from commit using lazy object loading (shallow/fast)
-/// This is much faster than from_commit for large repositories
-pub fn GitFs::from_commit_lazy(
-  backing_fs : &@git.RepoFileSystem,
-  git_dir : String,
-  commit_id : @git.ObjectId,
-  config? : GitFsConfig = GitFsConfig::default(),
-) -> GitFs raise @git.GitError {
-  let db = @lib.ObjectDb::load_lazy(backing_fs, git_dir)
-  let obj = db.get(backing_fs, commit_id)
-  guard obj is Some(commit_obj) else {
-    raise @git.GitError::InvalidObject("Commit not found: \{commit_id}")
-  }
-  if commit_obj.obj_type != @git.ObjectType::Commit {
-    raise @git.GitError::InvalidObject("Object is not a commit")
-  }
-  let info = @git.parse_commit(commit_obj.data)
-  {
-    git_dir,
-    base_tree: info.tree,
-    base_commit: Some(commit_id),
-    working: WorkingLayer::new(),
-    layers: [],
-    cache: ObjectCache::new(config.max_cache_bytes),
-    config,
-    cached_db: Some(db),
-  }
-}
-
-///|
+/// Create GitFs from a tree ID.
+/// Uses config.lazy_load to determine loading strategy (default: lazy).
 pub fn GitFs::from_tree(
   git_dir : String,
   tree_id : @git.ObjectId,
@@ -73,10 +53,14 @@ pub fn GitFs::from_tree(
     cache: ObjectCache::new(config.max_cache_bytes),
     config,
     cached_db: None,
+    cached_promisor_db: None,
+    lazy_mode: config.lazy_load,
   }
 }
 
 ///|
+/// Create GitFs from a branch name.
+/// Uses config.lazy_load to determine loading strategy (default: lazy).
 pub fn GitFs::from_branch(
   backing_fs : &@git.RepoFileSystem,
   git_dir : String,
@@ -94,6 +78,8 @@ pub fn GitFs::from_branch(
 }
 
 ///|
+/// Create an empty GitFs (no base tree).
+/// Uses config.lazy_load to determine loading strategy (default: lazy).
 pub fn GitFs::empty(
   git_dir : String,
   config? : GitFsConfig = GitFsConfig::default(),
@@ -107,11 +93,14 @@ pub fn GitFs::empty(
     cache: ObjectCache::new(config.max_cache_bytes),
     config,
     cached_db: None,
+    cached_promisor_db: None,
+    lazy_mode: config.lazy_load,
   }
 }
 
 ///|
-/// Get or load the ObjectDb (cached for performance)
+/// Get or load the ObjectDb (cached for performance).
+/// Respects lazy_mode: uses lazy loading when true, eager loading when false.
 pub fn GitFs::get_db(
   self : GitFs,
   backing_fs : &@git.RepoFileSystem,
@@ -119,11 +108,59 @@ pub fn GitFs::get_db(
   match self.cached_db {
     Some(db) => db
     None => {
-      let db = @lib.ObjectDb::load(backing_fs, self.git_dir)
+      let db = if self.lazy_mode {
+        @lib.ObjectDb::load_lazy(backing_fs, self.git_dir)
+      } else {
+        @lib.ObjectDb::load(backing_fs, self.git_dir)
+      }
       self.cached_db = Some(db)
       db
     }
   }
+}
+
+///|
+/// Get or load the PromisorDb (cached for performance).
+/// Returns None if promisor support is disabled in config.
+pub fn GitFs::get_promisor_db(
+  self : GitFs,
+  backing_fs : &@git.RepoFileSystem,
+) -> @lib.PromisorDb? raise @git.GitError {
+  if not(self.config.enable_promisor) {
+    return None
+  }
+  match self.cached_promisor_db {
+    Some(db) => Some(db)
+    None => {
+      let db = @lib.PromisorDb::new(backing_fs, self.git_dir, lazy=self.lazy_mode)
+      self.cached_promisor_db = Some(db)
+      Some(db)
+    }
+  }
+}
+
+///|
+/// Check if this GitFs is backed by a partial clone with promisor remote
+pub fn GitFs::has_promisor(
+  self : GitFs,
+  backing_fs : &@git.RepoFileSystem,
+) -> Bool {
+  if not(self.config.enable_promisor) {
+    return false
+  }
+  @lib.is_partial_clone(backing_fs, self.git_dir)
+}
+
+///|
+/// Get the promisor remote URL if available
+pub fn GitFs::get_promisor_remote(
+  self : GitFs,
+  backing_fs : &@git.RepoFileSystem,
+) -> String? {
+  if not(self.config.enable_promisor) {
+    return None
+  }
+  @lib.read_promisor_remote(backing_fs, self.git_dir)
 }
 
 ///|
@@ -144,4 +181,16 @@ pub fn GitFs::base_tree(self : GitFs) -> @git.ObjectId {
 ///|
 pub fn GitFs::base_commit(self : GitFs) -> @git.ObjectId? {
   self.base_commit
+}
+
+///|
+/// Check if lazy loading is enabled
+pub fn GitFs::is_lazy(self : GitFs) -> Bool {
+  self.lazy_mode
+}
+
+///|
+/// Check if promisor support is enabled
+pub fn GitFs::is_promisor_enabled(self : GitFs) -> Bool {
+  self.config.enable_promisor
 }

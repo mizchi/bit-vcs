@@ -116,6 +116,81 @@ pub fn write_pack_index_from_objects(
 }
 
 ///|
+/// Write a pack index using pre-parsed objects with specific version.
+pub fn write_pack_index_from_objects_versioned(
+  fs : &FileSystem,
+  idx_path : String,
+  pack : Bytes,
+  objects : Array[PackObject],
+  version : Int,
+) -> Unit raise GitError {
+  let idx = if version == 1 {
+    build_pack_index_v1_from_objects(pack, objects)
+  } else {
+    build_pack_index_from_objects(pack, objects)
+  }
+  fs.write_file(idx_path, idx)
+}
+
+///|
+/// Build a pack index (v1) from packfile bytes and parsed objects.
+fn build_pack_index_v1_from_objects(
+  pack : Bytes,
+  objects : Array[PackObject],
+) -> Bytes raise GitError {
+  let entries : Array[PackIndexEntry] = []
+  for obj in objects {
+    if obj.offset >= 0 {
+      entries.push({ id: obj.id, offset: obj.offset, crc: obj.crc32 })
+    } else {
+      let id = hash_object_content(obj.obj_type, obj.data)
+      entries.push({ id, offset: 0, crc: 0U })
+    }
+  }
+  entries.sort_by(fn(a, b) { compare_object_id(a.id, b.id) })
+
+  // Build fanout table (counts per first byte)
+  let counts : Array[Int] = Array::make(256, 0)
+  for entry in entries {
+    let first = entry.id.bytes[0].to_int()
+    counts[first] = counts[first] + 1
+  }
+
+  let out : Array[Byte] = []
+
+  // v1 format: no header, starts directly with fanout
+  // Fanout table (cumulative counts)
+  let mut sum = 0
+  for i in 0..<256 {
+    sum = sum + counts[i]
+    push_u32_be_from_int(out, sum)
+  }
+
+  // v1 entries: each entry is offset(4) + sha1(20) = 24 bytes
+  for entry in entries {
+    if entry.offset < 0 {
+      raise GitError::PackfileError("Negative pack offset")
+    }
+    push_u32_be_from_int(out, entry.offset)
+    for b in entry.id.bytes {
+      out.push(b)
+    }
+  }
+
+  // Packfile checksum (trailer)
+  if pack.length() < 20 {
+    raise GitError::PackfileError("Packfile too short")
+  }
+  let trailer_offset = pack.length() - 20
+  let pack_checksum = read_trailer_id(pack, trailer_offset)
+  for b in pack_checksum.bytes {
+    out.push(b)
+  }
+
+  bytes_from_array(out)
+}
+
+///|
 fn scan_pack_entry_offsets(
   data : Bytes,
 ) -> (Array[Int], Array[Int]) raise GitError {

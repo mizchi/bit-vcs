@@ -4,11 +4,40 @@
 pub struct GitFsConfig {
   max_cache_bytes : Int
   max_cache_entries : Int
+  lazy_load : Bool // If true, defer object/pack loading until first access
+  enable_promisor : Bool // If true, enable on-demand fetch from promisor remote
 }
 
 ///|
 pub fn GitFsConfig::default() -> GitFsConfig {
-  { max_cache_bytes: 64 * 1024 * 1024, max_cache_entries: 1000 }
+  {
+    max_cache_bytes: 64 * 1024 * 1024,
+    max_cache_entries: 1000,
+    lazy_load: true,
+    enable_promisor: true,
+  }
+}
+
+///|
+/// Create config with eager loading (load all packs upfront)
+pub fn GitFsConfig::eager() -> GitFsConfig {
+  {
+    max_cache_bytes: 64 * 1024 * 1024,
+    max_cache_entries: 1000,
+    lazy_load: false,
+    enable_promisor: true,
+  }
+}
+
+///|
+/// Create config for local-only access (no network fetches)
+pub fn GitFsConfig::local_only() -> GitFsConfig {
+  {
+    max_cache_bytes: 64 * 1024 * 1024,
+    max_cache_entries: 1000,
+    lazy_load: true,
+    enable_promisor: false,
+  }
 }
 
 ///|
@@ -21,6 +50,8 @@ pub struct GitFs {
   cache : ObjectCache
   config : GitFsConfig
   mut cached_db : @lib.ObjectDb?
+  mut cached_promisor_db : @lib.PromisorDb?
+  lazy_mode : Bool // If true, use lazy object loading
 }
 
 ///|

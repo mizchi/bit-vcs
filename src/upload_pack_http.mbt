@@ -39,9 +39,11 @@ pub async fn fetch_pack_http(
   remote : String,
   wants : Array[ObjectId],
   prefer_v2 : Bool,
+  depth~ : Int = 0,
+  filter~ : FilterSpec = FilterSpec::NoFilter,
 ) -> Bytes raise GitError {
   fetch_pack_with_http(
-    remote, wants, prefer_v2, native_http_get, native_http_post,
+    remote, wants, prefer_v2, depth, filter, native_http_get, native_http_post,
   )
 }
 
@@ -50,9 +52,11 @@ pub async fn fetch_objects_http(
   remote : String,
   wants : Array[ObjectId],
   prefer_v2 : Bool,
+  depth~ : Int = 0,
+  filter~ : FilterSpec = FilterSpec::NoFilter,
 ) -> Array[PackObject] raise GitError {
   fetch_objects_with_http(
-    remote, wants, prefer_v2, native_http_get, native_http_post,
+    remote, wants, prefer_v2, depth, filter, native_http_get, native_http_post,
   )
 }
 
@@ -60,19 +64,27 @@ pub async fn fetch_objects_http(
 pub async fn clone_http(
   remote : String,
   prefer_v2 : Bool,
+  depth~ : Int = 0,
+  filter~ : FilterSpec = FilterSpec::NoFilter,
 ) -> (Array[(ObjectId, String)], Array[PackObject]) raise GitError {
-  clone_with_http(remote, prefer_v2, native_http_get, native_http_post)
+  clone_with_http(
+    remote, prefer_v2, depth, filter, native_http_get, native_http_post,
+  )
 }
 
 ///|
 /// Clone and checkout into filesystem under `root`.
+/// - depth > 0: shallow clone with that depth
+/// - filter: partial clone filter (e.g., FilterSpec::BlobNone)
 pub async fn clone_http_to_fs(
   remote : String,
   prefer_v2 : Bool,
   fs : &FileSystem,
   root : String,
+  depth~ : Int = 0,
+  filter~ : FilterSpec = FilterSpec::NoFilter,
 ) -> Array[(ObjectId, String)] raise GitError {
   clone_to_fs_with_http(
-    remote, prefer_v2, fs, root, native_http_get, native_http_post,
+    remote, prefer_v2, depth, filter, fs, root, native_http_get, native_http_post,
   )
 }
