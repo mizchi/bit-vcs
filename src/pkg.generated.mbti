@@ -6,7 +6,7 @@ pub fn apply_delta(Bytes, Bytes) -> Bytes raise GitError
 
 pub fn build_fetch_request_v0(String, Array[ObjectId], Array[String]) -> Bytes
 
-pub fn build_fetch_request_v2(String, Array[ObjectId]) -> Bytes
+pub fn build_fetch_request_v2(String, Array[ObjectId], Int, filter? : FilterSpec) -> Bytes
 
 pub fn build_ls_refs_request(String, Array[String]) -> Bytes
 
@@ -24,9 +24,9 @@ pub fn checkout_commit(ObjectStore, ObjectId) -> Map[String, Bytes] raise GitErr
 
 pub fn checkout_commit_to_fs(ObjectStore, ObjectId, &FileSystem, String) -> Unit raise GitError
 
-pub async fn clone_http(String, Bool) -> (Array[(ObjectId, String)], Array[PackObject]) raise GitError
+pub async fn clone_http(String, Bool, depth? : Int, filter? : FilterSpec) -> (Array[(ObjectId, String)], Array[PackObject]) raise GitError
 
-pub async fn clone_http_to_fs(String, Bool, &FileSystem, String) -> Array[(ObjectId, String)] raise GitError
+pub async fn clone_http_to_fs(String, Bool, &FileSystem, String, depth? : Int, filter? : FilterSpec) -> Array[(ObjectId, String)] raise GitError
 
 pub async fn clone_process(String, Bool) -> (Array[(ObjectId, String)], Array[PackObject]) raise GitError
 
@@ -36,9 +36,11 @@ pub async fn clone_remote(String, Bool) -> (Array[(ObjectId, String)], Array[Pac
 
 pub async fn clone_remote_to_fs(String, Bool, &FileSystem, String) -> Array[(ObjectId, String)] raise GitError
 
-pub async fn clone_to_fs_with_http(String, Bool, &FileSystem, String, async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError, async (String, Bytes, Map[String, String]) -> (HttpResponse, Bytes) raise GitError) -> Array[(ObjectId, String)] raise GitError
+pub async fn clone_to_fs_with_http(String, Bool, Int, FilterSpec, &FileSystem, String, async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError, async (String, Bytes, Map[String, String]) -> (HttpResponse, Bytes) raise GitError) -> Array[(ObjectId, String)] raise GitError
 
-pub async fn clone_with_http(String, Bool, async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError, async (String, Bytes, Map[String, String]) -> (HttpResponse, Bytes) raise GitError) -> (Array[(ObjectId, String)], Array[PackObject]) raise GitError
+pub async fn clone_with_http(String, Bool, Int, FilterSpec, async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError, async (String, Bytes, Map[String, String]) -> (HttpResponse, Bytes) raise GitError) -> (Array[(ObjectId, String)], Array[PackObject]) raise GitError
+
+pub fn crc32_range(Bytes, Int, Int) -> UInt raise GitError
 
 pub fn create_blob(Bytes) -> (ObjectId, Bytes)
 
@@ -88,19 +90,19 @@ pub fn extract_pack_from_v2_response(Bytes) -> Bytes raise GitError
 
 pub async fn fetch_objects(String, Array[ObjectId], Bool) -> Array[PackObject] raise GitError
 
-pub async fn fetch_objects_http(String, Array[ObjectId], Bool) -> Array[PackObject] raise GitError
+pub async fn fetch_objects_http(String, Array[ObjectId], Bool, depth? : Int, filter? : FilterSpec) -> Array[PackObject] raise GitError
 
 pub async fn fetch_objects_process(String, Array[ObjectId], Bool) -> Array[PackObject] raise GitError
 
-pub async fn fetch_objects_with_http(String, Array[ObjectId], Bool, async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError, async (String, Bytes, Map[String, String]) -> (HttpResponse, Bytes) raise GitError) -> Array[PackObject] raise GitError
+pub async fn fetch_objects_with_http(String, Array[ObjectId], Bool, Int, FilterSpec, async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError, async (String, Bytes, Map[String, String]) -> (HttpResponse, Bytes) raise GitError) -> Array[PackObject] raise GitError
 
 pub async fn fetch_pack(String, Array[ObjectId], Bool) -> Bytes raise GitError
 
-pub async fn fetch_pack_http(String, Array[ObjectId], Bool) -> Bytes raise GitError
+pub async fn fetch_pack_http(String, Array[ObjectId], Bool, depth? : Int, filter? : FilterSpec) -> Bytes raise GitError
 
 pub async fn fetch_pack_process(String, Array[ObjectId], Bool) -> Bytes raise GitError
 
-pub async fn fetch_pack_with_http(String, Array[ObjectId], Bool, async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError, async (String, Bytes, Map[String, String]) -> (HttpResponse, Bytes) raise GitError) -> Bytes raise GitError
+pub async fn fetch_pack_with_http(String, Array[ObjectId], Bool, Int, FilterSpec, async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError, async (String, Bytes, Map[String, String]) -> (HttpResponse, Bytes) raise GitError) -> Bytes raise GitError
 
 pub fn generate_commit_packfile() -> (ObjectId, Bytes)
 
@@ -202,6 +204,8 @@ pub fn write_pack_index(&FileSystem, String, Bytes) -> Unit raise GitError
 
 pub fn write_pack_index_from_objects(&FileSystem, String, Bytes, Array[PackObject]) -> Unit raise GitError
 
+pub fn write_pack_index_from_objects_versioned(&FileSystem, String, Bytes, Array[PackObject], Int) -> Unit raise GitError
+
 pub fn write_packfile_with_index(&FileSystem, String, Bytes, Array[PackObject]) -> Unit raise GitError
 
 // Errors
@@ -233,6 +237,15 @@ pub struct CommitInfo {
   tree : ObjectId
   parents : Array[ObjectId]
 }
+
+pub(all) enum FilterSpec {
+  NoFilter
+  BlobNone
+  BlobLimit(Int64)
+  TreeDepth(Int)
+}
+pub fn FilterSpec::is_partial(Self) -> Bool
+pub fn FilterSpec::to_string(Self) -> String
 
 pub struct HttpResponse {
   code : Int
@@ -301,8 +314,12 @@ pub(all) enum PackDeltaMode {
 pub struct PackObject {
   obj_type : ObjectType
   data : Bytes
+  id : ObjectId
+  offset : Int
+  crc32 : UInt
 }
 pub fn PackObject::new(ObjectType, Bytes) -> Self
+pub fn PackObject::with_metadata(ObjectType, Bytes, ObjectId, Int, UInt) -> Self
 
 pub(all) enum ProtocolVersion {
   V0

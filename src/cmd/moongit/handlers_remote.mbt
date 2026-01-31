@@ -368,12 +368,76 @@ async fn handle_receive_pack(args : Array[String]) -> Unit {
 }
 
 ///|
+/// Parse filter specification from command line
+fn parse_filter_spec(spec : String) -> @git.FilterSpec {
+  if spec == "blob:none" {
+    @git.FilterSpec::BlobNone
+  } else if spec.has_prefix("blob:limit=") {
+    let limit_str = String::unsafe_substring(spec, start=11, end=spec.length())
+    let limit = try {
+      @strconv.parse_int64!(limit_str)
+    } catch {
+      _ => 0L
+    }
+    @git.FilterSpec::BlobLimit(limit)
+  } else if spec.has_prefix("tree:") {
+    let depth_str = String::unsafe_substring(spec, start=5, end=spec.length())
+    let depth = try {
+      @strconv.parse_int!(depth_str)
+    } catch {
+      _ => 0
+    }
+    @git.FilterSpec::TreeDepth(depth)
+  } else {
+    @git.FilterSpec::NoFilter
+  }
+}
+
+///|
 async fn handle_clone(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let mut url : String? = None
   let mut dest : String? = None
-  for arg in args {
+  let mut depth = 0
+  let mut filter = @git.FilterSpec::NoFilter
+  let mut i = 0
+  while i < args.length() {
+    let arg = args[i]
+    if arg == "--depth" && i + 1 < args.length() {
+      // Parse depth value
+      let depth_str = args[i + 1]
+      depth = try {
+        @strconv.parse_int!(depth_str)
+      } catch {
+        _ => 0
+      }
+      i += 2
+      continue
+    }
+    if arg.has_prefix("--depth=") {
+      let depth_str = String::unsafe_substring(arg, start=8, end=arg.length())
+      depth = try {
+        @strconv.parse_int!(depth_str)
+      } catch {
+        _ => 0
+      }
+      i += 1
+      continue
+    }
+    // Parse --filter option
+    if arg == "--filter" && i + 1 < args.length() {
+      filter = parse_filter_spec(args[i + 1])
+      i += 2
+      continue
+    }
+    if arg.has_prefix("--filter=") {
+      let filter_str = String::unsafe_substring(arg, start=9, end=arg.length())
+      filter = parse_filter_spec(filter_str)
+      i += 1
+      continue
+    }
     if arg.has_prefix("-") {
+      i += 1
       continue
     }
     if url is None {
@@ -381,6 +445,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
     } else if dest is None {
       dest = Some(arg)
     }
+    i += 1
   }
   guard url is Some(remote_url) else {
     raise @git.GitError::InvalidObject("repository URL required")
@@ -410,9 +475,17 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
   } else {
     root + "/" + relative_target
   }
-  print_line("Cloning into '\{relative_target}'...")
+  // Show what kind of clone we're doing
+  let clone_type = if filter.is_partial() {
+    "partial clone (\{filter.to_string()})"
+  } else if depth > 0 {
+    "shallow clone (depth=\{depth})"
+  } else {
+    "full clone"
+  }
+  print_line("Cloning into '\{relative_target}'... (\{clone_type})")
   let fs = OsFs::new()
-  let refs = @git.clone_http_to_fs(remote_url, true, fs, target)
+  let refs = @git.clone_http_to_fs(remote_url, true, fs, target, depth~, filter~)
   if refs.length() > 0 {
     print_line("done.")
   } else {

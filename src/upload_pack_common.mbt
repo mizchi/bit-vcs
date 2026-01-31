@@ -182,7 +182,42 @@ pub fn select_default_ref(
 }
 
 ///|
-pub fn build_fetch_request_v2(agent : String, wants : Array[ObjectId]) -> Bytes {
+/// Filter specification for partial clone
+pub(all) enum FilterSpec {
+  NoFilter // No filter (full clone)
+  BlobNone // blob:none - exclude all blobs
+  BlobLimit(Int64) // blob:limit=<n> - exclude blobs > n bytes
+  TreeDepth(Int) // tree:<depth> - limit tree depth
+}
+
+///|
+pub fn FilterSpec::to_string(self : FilterSpec) -> String {
+  match self {
+    NoFilter => ""
+    BlobNone => "blob:none"
+    BlobLimit(n) => "blob:limit=\{n}"
+    TreeDepth(d) => "tree:\{d}"
+  }
+}
+
+///|
+pub fn FilterSpec::is_partial(self : FilterSpec) -> Bool {
+  match self {
+    NoFilter => false
+    _ => true
+  }
+}
+
+///|
+/// Build a fetch request for protocol v2.
+/// - depth > 0: shallow clone with that depth
+/// - filter: partial clone filter specification
+pub fn build_fetch_request_v2(
+  agent : String,
+  wants : Array[ObjectId],
+  depth : Int,
+  filter~ : FilterSpec = FilterSpec::NoFilter,
+) -> Bytes {
   let chunks : Array[Bytes] = []
   chunks.push(pktline_encode("command=fetch\n"))
   chunks.push(pktline_encode("agent=\{agent}\n"))
@@ -191,6 +226,13 @@ pub fn build_fetch_request_v2(agent : String, wants : Array[ObjectId]) -> Bytes 
   chunks.push(pktline_encode("thin-pack\n"))
   chunks.push(pktline_encode("no-progress\n"))
   chunks.push(pktline_encode("ofs-delta\n"))
+  if depth > 0 {
+    chunks.push(pktline_encode("deepen \{depth}\n"))
+  }
+  // Partial clone filter
+  if filter.is_partial() {
+    chunks.push(pktline_encode("filter \{filter.to_string()}\n"))
+  }
   for want in wants {
     chunks.push(pktline_encode("want \{want.to_hex()}\n"))
   }

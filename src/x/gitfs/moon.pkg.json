@@ -8,7 +8,8 @@
     { "path": "mizchi/git/lib", "alias": "lib" },
     { "path": "mizchi/git/osfs", "alias": "osfs" },
     "mizchi/zlib",
-    { "path": "moonbitlang/core/bench", "alias": "bench" }
+    { "path": "moonbitlang/core/bench", "alias": "bench" },
+    "moonbitlang/async"
   ],
   "targets": {
     "bench_real_test.mbt": ["native"]

@@ -30,7 +30,7 @@ fn get_helix_head() -> @git.ObjectId raise @git.GitError {
 }
 
 ///|
-/// Test: Mount large repo and read files
+/// Test: Mount large repo and read files (lazy - default)
 test "integration: mount helix repo (lazy)" {
   let osfs = @osfs.OsFs::new()
   let git_dir = get_helix_git_dir()
@@ -41,8 +41,9 @@ test "integration: mount helix repo (lazy)" {
   }
   let commit_id = get_helix_head()
 
-  // Create lazy snapshot - should be fast
-  let gitfs = GitFs::from_commit_lazy(osfs, git_dir, commit_id)
+  // Create lazy snapshot - should be fast (default config uses lazy_load: true)
+  let gitfs = GitFs::from_commit(osfs, git_dir, commit_id)
+  assert_true(gitfs.is_lazy()) // Verify lazy mode is enabled
   assert_false(gitfs.is_dirty())
 
   // Read root directory
@@ -61,6 +62,31 @@ test "integration: mount helix repo (lazy)" {
 }
 
 ///|
+/// Test: Mount large repo with eager loading
+test "integration: mount helix repo (eager)" {
+  let osfs = @osfs.OsFs::new()
+  let git_dir = get_helix_git_dir()
+
+  // Skip if helix repo not available
+  if not(osfs.is_dir(git_dir)) {
+    return
+  }
+  let commit_id = get_helix_head()
+
+  // Create eager snapshot - loads all pack indexes upfront
+  let config = GitFsConfig::eager()
+  let gitfs = GitFs::from_commit(osfs, git_dir, commit_id, config~)
+  assert_false(gitfs.is_lazy()) // Verify eager mode
+  assert_false(gitfs.is_dirty())
+
+  // Should work the same as lazy
+  let root_entries = gitfs.readdir(osfs, "")
+  assert_true(root_entries.length() > 0)
+  let readme = gitfs.read_file(osfs, "README.md")
+  assert_true(readme.length() > 0)
+}
+
+///|
 /// Test: Mount, modify, and get changes
 test "integration: mount, modify, get changes" {
   let osfs = @osfs.OsFs::new()
@@ -69,7 +95,7 @@ test "integration: mount, modify, get changes" {
     return
   }
   let commit_id = get_helix_head()
-  let gitfs = GitFs::from_commit_lazy(osfs, git_dir, commit_id)
+  let gitfs = GitFs::from_commit(osfs, git_dir, commit_id)
 
   // Read original content
   let original = gitfs.read_file(osfs, "README.md")
@@ -124,7 +150,7 @@ test "integration: generate diff" {
     return
   }
   let commit_id = get_helix_head()
-  let gitfs = GitFs::from_commit_lazy(osfs, git_dir, commit_id)
+  let gitfs = GitFs::from_commit(osfs, git_dir, commit_id)
 
   // Make some changes
   gitfs.write_string(
@@ -231,7 +257,7 @@ test "integration: demo workflow output" {
   println("HEAD: \{commit_id.to_hex()}")
 
   // Mount
-  let gitfs = GitFs::from_commit_lazy(osfs, git_dir, commit_id)
+  let gitfs = GitFs::from_commit(osfs, git_dir, commit_id)
   println("Mounted helix repo (lazy)")
 
   // Read some files
@@ -263,7 +289,7 @@ test "bench_integration: helix lazy mount" (b : @bench.T) {
   }
   let commit_id = try! get_helix_head()
   b.bench(fn() {
-    b.keep(try! GitFs::from_commit_lazy(osfs, git_dir, commit_id))
+    b.keep(try! GitFs::from_commit(osfs, git_dir, commit_id))
   })
 }
 
@@ -276,7 +302,7 @@ test "bench_integration: helix read files" (b : @bench.T) {
     return
   }
   let commit_id = try! get_helix_head()
-  let gitfs = try! GitFs::from_commit_lazy(osfs, git_dir, commit_id)
+  let gitfs = try! GitFs::from_commit(osfs, git_dir, commit_id)
 
   // Warm up cache
   let _ = try! gitfs.read_file(osfs, "README.md")
@@ -299,7 +325,7 @@ test "bench_integration: helix full workflow" (b : @bench.T) {
   let content = Bytes::make(1000, b'x')
   b.bench(fn() {
     // Mount
-    let gitfs = try! GitFs::from_commit_lazy(osfs, git_dir, commit_id)
+    let gitfs = try! GitFs::from_commit(osfs, git_dir, commit_id)
 
     // Read
     let _ = try! gitfs.readdir(osfs, "")

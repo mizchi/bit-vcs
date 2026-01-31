@@ -82,6 +82,8 @@ pub fn is_branch_checked_out(&@git.RepoFileSystem, String, String) -> String? ra
 
 pub fn is_ignored_path(&@git.RepoFileSystem, String, String, Bool) -> Bool raise @git.GitError
 
+pub fn is_partial_clone(&@git.RepoFileSystem, String) -> Bool
+
 pub fn is_rebase_in_progress(&@git.RepoFileSystem, String) -> Bool
 
 pub fn is_sparse_checkout_enabled(&@git.RepoFileSystem, String) -> Bool
@@ -133,6 +135,8 @@ pub async fn push_http(&@git.RepoFileSystem, String, String, String) -> String r
 pub fn read_head_ref(&@git.RepoFileSystem, String) -> HeadRef raise @git.GitError
 
 pub fn read_index_entries(&@git.RepoFileSystem, String) -> Array[IndexEntry] raise @git.GitError
+
+pub fn read_promisor_remote(&@git.RepoFileSystem, String) -> String?
 
 pub fn read_reflog(&@git.RepoFileSystem, String, String) -> Array[ReflogEntry] raise @git.GitError
 
@@ -291,6 +295,16 @@ pub(all) struct InitOptions {
 }
 pub fn InitOptions::new() -> Self
 
+pub struct LazyPackIndex {
+  idx_path : String
+  pack_path : String
+  mut loaded : PackIndex?
+}
+pub fn LazyPackIndex::find_offset(Self, &@git.RepoFileSystem, @git.ObjectId) -> Int64? raise @git.GitError
+pub fn LazyPackIndex::find_offset_hex(Self, &@git.RepoFileSystem, String) -> Int64? raise @git.GitError
+pub fn LazyPackIndex::get(Self, &@git.RepoFileSystem) -> PackIndex raise @git.GitError
+pub fn LazyPackIndex::new(String, String) -> Self
+
 pub struct LogEntry {
   id : @git.ObjectId
   message : String
@@ -315,6 +329,7 @@ pub struct ObjectDb {
   objects_dir : String
   loose_paths : Map[String, String]
   packs : Array[PackIndex]
+  lazy_packs : Array[LazyPackIndex]
 }
 pub fn ObjectDb::get(Self, &@git.RepoFileSystem, @git.ObjectId) -> @git.PackObject? raise @git.GitError
 pub fn ObjectDb::load(&@git.RepoFileSystem, String) -> Self raise @git.GitError
@@ -327,6 +342,21 @@ pub struct PackIndex {
 }
 pub fn PackIndex::find_offset(Self, @git.ObjectId) -> Int64?
 pub fn PackIndex::find_offset_hex(Self, String) -> Int64?
+
+pub struct PromisorDb {
+  db : ObjectDb
+  git_dir : String
+  promisor_remote : String?
+  fetched : Map[String, Bool]
+}
+pub async fn PromisorDb::fetch_missing(Self, &@git.FileSystem, Array[@git.ObjectId]) -> Array[@git.PackObject] raise @git.GitError
+pub async fn PromisorDb::fetch_one(Self, &@git.FileSystem, @git.ObjectId) -> @git.PackObject? raise @git.GitError
+pub fn PromisorDb::get(Self, &@git.RepoFileSystem, @git.ObjectId) -> @git.PackObject? raise @git.GitError
+pub async fn PromisorDb::get_or_fetch(Self, &@git.RepoFileSystem, &@git.FileSystem, @git.ObjectId) -> @git.PackObject? raise @git.GitError
+pub fn PromisorDb::get_promisor_remote(Self) -> String?
+pub fn PromisorDb::has_local(Self, &@git.RepoFileSystem, @git.ObjectId) -> Bool raise @git.GitError
+pub fn PromisorDb::has_promisor(Self) -> Bool
+pub fn PromisorDb::new(&@git.RepoFileSystem, String, lazy? : Bool) -> Self raise @git.GitError
 
 pub struct PruneResult {
   pruned : Array[@git.ObjectId]

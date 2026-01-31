@@ -102,11 +102,15 @@ pub async fn discover_upload_refs_with_http(
 }
 
 ///|
-/// Fetch pack using provided HTTP client
+/// Fetch pack using provided HTTP client.
+/// - depth > 0: shallow clone with that depth (v2 only)
+/// - filter: partial clone filter (v2 only)
 pub async fn fetch_pack_with_http(
   remote : String,
   wants : Array[ObjectId],
   prefer_v2 : Bool,
+  depth : Int,
+  filter : FilterSpec,
   http_get : async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError,
   http_post : async (String, Bytes, Map[String, String]) -> (
     HttpResponse,
@@ -127,36 +131,47 @@ pub async fn fetch_pack_with_http(
     wants
   }
   if version == ProtocolVersion::V2 {
-    let req = build_fetch_request_v2("git/moonbit", wants)
+    let req = build_fetch_request_v2("git/moonbit", wants, depth, filter~)
     let resp = upload_pack_request_with_http(remote, req, true, http_post)
     return extract_pack_from_v2_response(resp)
   }
+  // v0 protocol doesn't support shallow/filter, ignore them
   let req = build_fetch_request_v0("git/moonbit", wants, caps)
   let resp = upload_pack_request_with_http(remote, req, false, http_post)
   extract_pack_from_v0_response(resp)
 }
 
 ///|
-/// Fetch objects using provided HTTP client
+/// Fetch objects using provided HTTP client.
+/// - depth > 0: shallow clone with that depth
+/// - filter: partial clone filter
 pub async fn fetch_objects_with_http(
   remote : String,
   wants : Array[ObjectId],
   prefer_v2 : Bool,
+  depth : Int,
+  filter : FilterSpec,
   http_get : async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError,
   http_post : async (String, Bytes, Map[String, String]) -> (
     HttpResponse,
     Bytes,
   ) raise GitError,
 ) -> Array[PackObject] raise GitError {
-  let pack = fetch_pack_with_http(remote, wants, prefer_v2, http_get, http_post)
+  let pack = fetch_pack_with_http(
+    remote, wants, prefer_v2, depth, filter, http_get, http_post,
+  )
   parse_packfile(pack)
 }
 
 ///|
-/// Clone using provided HTTP client
+/// Clone using provided HTTP client.
+/// - depth > 0: shallow clone with that depth
+/// - filter: partial clone filter
 pub async fn clone_with_http(
   remote : String,
   prefer_v2 : Bool,
+  depth : Int,
+  filter : FilterSpec,
   http_get : async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError,
   http_post : async (String, Bytes, Map[String, String]) -> (
     HttpResponse,
@@ -167,16 +182,22 @@ pub async fn clone_with_http(
     remote, prefer_v2, http_get, http_post,
   )
   let wants = select_default_wants(refs, symrefs)
-  let pack = fetch_pack_with_http(remote, wants, prefer_v2, http_get, http_post)
+  let pack = fetch_pack_with_http(
+    remote, wants, prefer_v2, depth, filter, http_get, http_post,
+  )
   let objects = parse_packfile(pack)
   (refs, objects)
 }
 
 ///|
-/// Clone and checkout into filesystem using provided HTTP client
+/// Clone and checkout into filesystem using provided HTTP client.
+/// - depth > 0: shallow clone with that depth
+/// - filter: partial clone filter (if BlobNone, skip checkout)
 pub async fn clone_to_fs_with_http(
   remote : String,
   prefer_v2 : Bool,
+  depth : Int,
+  filter : FilterSpec,
   fs : &FileSystem,
   root : String,
   http_get : async (String, Map[String, String]) -> (HttpResponse, Bytes) raise GitError,
@@ -201,7 +222,7 @@ pub async fn clone_to_fs_with_http(
   // This allows pack bytes to be released after writing
   let objects = {
     let pack = fetch_pack_with_http(
-      remote, wants, prefer_v2, http_get, http_post,
+      remote, wants, prefer_v2, depth, filter, http_get, http_post,
     )
     let objects = parse_packfile(pack)
     // Write pack and index to disk immediately
@@ -210,6 +231,10 @@ pub async fn clone_to_fs_with_http(
         let git_dir = join_path(root, ".git")
         fs.mkdir_p(join_path(git_dir, "objects/pack"))
         write_packfile_with_index(fs, git_dir, pack, objects)
+        // Write promisor file if partial clone
+        if filter.is_partial() {
+          write_promisor_file(fs, git_dir, remote)
+        }
       }
       None => ()
     }
@@ -217,12 +242,77 @@ pub async fn clone_to_fs_with_http(
     // pack goes out of scope here and can be GC'd
   }
   // Phase 2: Checkout (pack bytes no longer needed)
-  let store = ObjectStore::from_pack(objects)
-  match default_ref {
-    None => ()
-    Some((refname, commit_id)) => {
-      materialize_clone_to_fs(store, commit_id, refname, remote, fs, root)
+  // Skip checkout for partial clone with blob:none (no blobs to checkout)
+  match filter {
+    BlobNone => {
+      // For partial clone, only write refs and config, don't checkout files
+      match default_ref {
+        Some((refname, commit_id)) => {
+          let git_dir = join_path(root, ".git")
+          write_partial_clone_refs(fs, git_dir, refname, commit_id, remote)
+        }
+        None => ()
+      }
+    }
+    _ => {
+      let store = ObjectStore::from_pack(objects)
+      match default_ref {
+        None => ()
+        Some((refname, commit_id)) => {
+          materialize_clone_to_fs(store, commit_id, refname, remote, fs, root)
+        }
+      }
     }
   }
   refs
+}
+
+///|
+/// Write promisor file to mark this as a partial clone repository
+fn write_promisor_file(
+  fs : &FileSystem,
+  git_dir : String,
+  remote : String,
+) -> Unit raise GitError {
+  let promisor_dir = join_path(git_dir, "objects/info")
+  fs.mkdir_p(promisor_dir)
+  let promisor_path = join_path(promisor_dir, "promisor")
+  // Format: remote URL that can fulfill missing objects
+  fs.write_string(promisor_path, remote + "\n")
+}
+
+///|
+/// Write refs for partial clone (without checkout)
+fn write_partial_clone_refs(
+  fs : &FileSystem,
+  git_dir : String,
+  refname : String,
+  commit_id : ObjectId,
+  remote : String,
+) -> Unit raise GitError {
+  // Write HEAD
+  let head_path = join_path(git_dir, "HEAD")
+  fs.write_string(head_path, "ref: \{refname}\n")
+  // Write the ref - compute parent directory
+  let ref_path = join_path(git_dir, refname)
+  // Get parent directory by finding last /
+  let ref_dir = {
+    let mut last_slash = -1
+    for i, c in ref_path {
+      if c == '/' {
+        last_slash = i
+      }
+    }
+    if last_slash > 0 {
+      String::unsafe_substring(ref_path, start=0, end=last_slash)
+    } else {
+      git_dir
+    }
+  }
+  fs.mkdir_p(ref_dir)
+  fs.write_string(ref_path, commit_id.to_hex() + "\n")
+  // Write config with remote
+  let config_path = join_path(git_dir, "config")
+  let config = "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallaliases = false\n[remote \"origin\"]\n\turl = \{remote}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n\tpromisor = true\n\tpartialclonefilter = blob:none\n"
+  fs.write_string(config_path, config)
 }

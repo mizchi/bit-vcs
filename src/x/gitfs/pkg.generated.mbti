@@ -23,6 +23,8 @@ pub struct GitFs {
   cache : ObjectCache
   config : GitFsConfig
   mut cached_db : @lib.ObjectDb?
+  mut cached_promisor_db : @lib.PromisorDb?
+  lazy_mode : Bool
 }
 pub fn GitFs::add_layer(Self, &@git.RepoFileSystem, @git.ObjectId, String, commit_id? : @git.ObjectId?) -> Unit raise @git.GitError
 pub fn GitFs::add_layer_from_commit(Self, &@git.RepoFileSystem, @git.ObjectId, String) -> Unit raise @git.GitError
@@ -30,26 +32,37 @@ pub fn GitFs::base_commit(Self) -> @git.ObjectId?
 pub fn GitFs::base_tree(Self) -> @git.ObjectId
 pub fn GitFs::checkout_snapshot(Self, &@git.RepoFileSystem, @git.ObjectId) -> Unit raise @git.GitError
 pub fn GitFs::clear_layers(Self) -> Unit
+pub fn GitFs::collect_files_bfs(Self, &@git.RepoFileSystem, Int) -> Array[String] raise @git.GitError
 pub fn GitFs::discard_changes(Self) -> Unit
 pub fn GitFs::empty(String, config? : GitFsConfig) -> Self
 pub fn GitFs::exists_in_base(Self, &@git.RepoFileSystem, String) -> Bool
 pub fn GitFs::flatten_layers(Self, &@git.FileSystem, &@git.RepoFileSystem) -> @git.ObjectId raise @git.GitError
 pub fn GitFs::from_branch(&@git.RepoFileSystem, String, String, config? : GitFsConfig) -> Self raise @git.GitError
 pub fn GitFs::from_commit(&@git.RepoFileSystem, String, @git.ObjectId, config? : GitFsConfig) -> Self raise @git.GitError
-pub fn GitFs::from_commit_lazy(&@git.RepoFileSystem, String, @git.ObjectId, config? : GitFsConfig) -> Self raise @git.GitError
 pub fn GitFs::from_tree(String, @git.ObjectId, config? : GitFsConfig) -> Self
 pub fn GitFs::get_db(Self, &@git.RepoFileSystem) -> @lib.ObjectDb raise @git.GitError
 pub fn GitFs::get_deleted_files(Self) -> Array[String]
+pub fn GitFs::get_pending_fetches(Self, &@git.RepoFileSystem, Int) -> Array[String] raise @git.GitError
+pub fn GitFs::get_promisor_db(Self, &@git.RepoFileSystem) -> @lib.PromisorDb? raise @git.GitError
+pub fn GitFs::get_promisor_remote(Self, &@git.RepoFileSystem) -> String?
 pub fn GitFs::get_working_files(Self) -> Array[String]
 pub fn GitFs::git_dir(Self) -> String
 pub fn GitFs::has_layer(Self, String) -> Bool
+pub fn GitFs::has_promisor(Self, &@git.RepoFileSystem) -> Bool
 pub fn GitFs::is_dir(Self, &@git.RepoFileSystem, String) -> Bool
 pub fn GitFs::is_dirty(Self) -> Bool
 pub fn GitFs::is_file(Self, &@git.RepoFileSystem, String) -> Bool
+pub fn GitFs::is_lazy(Self) -> Bool
+pub fn GitFs::is_promisor_enabled(Self) -> Bool
 pub fn GitFs::list_layers(Self) -> Array[Layer]
 pub fn GitFs::list_snapshots(Self, &@git.RepoFileSystem, max_count? : Int) -> Array[Snapshot] raise @git.GitError
 pub fn GitFs::mkdir_p(Self, String) -> Unit
+pub fn GitFs::needs_fetch(Self, &@git.RepoFileSystem, String) -> Bool raise @git.GitError
+pub async fn GitFs::prefetch(Self, &@git.RepoFileSystem, &@git.FileSystem, Array[String]) -> Int raise @git.GitError
+pub async fn GitFs::prefetch_bfs(Self, &@git.RepoFileSystem, &@git.FileSystem, Int) -> Int raise @git.GitError
+pub async fn GitFs::prefetch_glob(Self, &@git.RepoFileSystem, &@git.FileSystem, String) -> Int raise @git.GitError
 pub fn GitFs::read_file(Self, &@git.RepoFileSystem, String) -> Bytes raise @git.GitError
+pub async fn GitFs::read_file_async(Self, &@git.RepoFileSystem, &@git.FileSystem, String) -> Bytes raise @git.GitError
 pub fn GitFs::readdir(Self, &@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
 pub fn GitFs::remove_dir(Self, String) -> Unit
 pub fn GitFs::remove_file(Self, String) -> Unit
@@ -62,8 +75,12 @@ pub fn GitFs::write_string(Self, String, String) -> Unit
 pub struct GitFsConfig {
   max_cache_bytes : Int
   max_cache_entries : Int
+  lazy_load : Bool
+  enable_promisor : Bool
 }
 pub fn GitFsConfig::default() -> Self
+pub fn GitFsConfig::eager() -> Self
+pub fn GitFsConfig::local_only() -> Self
 
 pub(all) struct Layer {
   tree_id : @git.ObjectId

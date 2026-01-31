@@ -281,7 +281,8 @@ pub async fn fetch_pack_process(
     wants
   }
   if version == ProtocolVersion::V2 {
-    let req = build_fetch_request_v2("git/moonbit", wants)
+    // Note: depth=0 means full clone (process transport doesn't support shallow yet)
+    let req = build_fetch_request_v2("git/moonbit", wants, 0)
     let resp = upload_pack_request_process(remote, req, true)
     return extract_pack_from_v2_response(resp)
   }

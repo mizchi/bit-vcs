@@ -148,6 +148,14 @@ git-t-one test_file:
     CPATH="$prefix/include" LDFLAGS="-L$prefix/lib" LIBRARY_PATH="$prefix/lib" \
     make -C third_party/git test T="{{test_file}}"
 
+# Compare moongit vs real git performance
+compare-real-git:
+    bash tools/compare-real-git.sh
+
+# Compare with custom repo (e.g., just compare-real-git-repo https://github.com/foo/bar.git)
+compare-real-git-repo repo_url:
+    REPO_URL="{{repo_url}}" bash tools/compare-real-git.sh
+
 # Run a single test with ALL moongit commands (no fallback)
 git-t-full test_file:
     @prefix=$(brew --prefix gettext); \
