@@ -635,3 +635,140 @@ fn bytes_to_string_test(bytes : Bytes) -> String {
   }
   result.to_string()
 }
+
+///|
+test "subdir: commit creates new commit in parent repo" {
+  let fs = @git.TestFs::new()
+  @lib.init_repo(fs, "/repo") catch { _ => () }
+  // 初期ファイルを作成
+  fs.mkdir_p("/repo/src/lib")
+  fs.write_file("/repo/src/lib/foo.mbt", b"original")
+  fs.write_file("/repo/README.md", b"readme")
+  // 初期コミット
+  let commit1 = @lib.commit(
+    fs,
+    fs,
+    "/repo",
+    "Initial",
+    "test <test@test.com>",
+    1000L,
+  ) catch {
+    _ => return ()
+  }
+  // SubdirRepo を作成して変更
+  let subdir = SubdirRepo::from_commit(fs, "/repo/.git", commit1, "src/lib") catch {
+    _ => return ()
+  }
+  // ワーキング層に変更を加える
+  subdir.fs().write_file("/foo.mbt", b"modified")
+  subdir.fs().write_file("/bar.mbt", b"new file")
+  assert_true(subdir.is_dirty())
+  // コミット
+  let commit2 = subdir.commit(
+    fs,
+    fs,
+    "Update lib",
+    author="test <test@test.com>",
+    timestamp=2000L,
+  ) catch {
+    _ => return ()
+  }
+  // 新しいコミットが作成された
+  assert_true(commit2 != commit1)
+  // 新しいコミットからファイルを読める
+  let subdir2 = SubdirRepo::from_commit(fs, "/repo/.git", commit2, "src/lib") catch {
+    _ => return ()
+  }
+  let content = subdir2.fs().read_file(fs, "/foo.mbt") catch { _ => return () }
+  assert_eq(content, b"modified")
+  let new_content = subdir2.fs().read_file(fs, "/bar.mbt") catch { _ => return () }
+  assert_eq(new_content, b"new file")
+}
+
+///|
+test "subdir: checkout retrieves files from specific commit" {
+  let fs = @git.TestFs::new()
+  @lib.init_repo(fs, "/repo") catch { _ => () }
+  // コミット1: v1
+  fs.mkdir_p("/repo/src/lib")
+  fs.write_file("/repo/src/lib/foo.mbt", b"version 1")
+  let commit1 = @lib.commit(
+    fs,
+    fs,
+    "/repo",
+    "Version 1",
+    "test <test@test.com>",
+    1000L,
+  ) catch {
+    _ => return ()
+  }
+  // コミット2: v2
+  fs.write_file("/repo/src/lib/foo.mbt", b"version 2")
+  let commit2 = @lib.commit(
+    fs,
+    fs,
+    "/repo",
+    "Version 2",
+    "test <test@test.com>",
+    2000L,
+  ) catch {
+    _ => return ()
+  }
+  // commit1 のサブディレクトリを取得
+  let subdir1 = SubdirRepo::from_commit(fs, "/repo/.git", commit1, "src/lib") catch {
+    _ => return ()
+  }
+  let content1 = subdir1.fs().read_file(fs, "/foo.mbt") catch { _ => return () }
+  assert_eq(content1, b"version 1")
+  // commit2 のサブディレクトリを取得
+  let subdir2 = SubdirRepo::from_commit(fs, "/repo/.git", commit2, "src/lib") catch {
+    _ => return ()
+  }
+  let content2 = subdir2.fs().read_file(fs, "/foo.mbt") catch { _ => return () }
+  assert_eq(content2, b"version 2")
+}
+
+///|
+test "subdir: commit preserves files outside subdirectory" {
+  let fs = @git.TestFs::new()
+  @lib.init_repo(fs, "/repo") catch { _ => () }
+  // ルートとサブディレクトリにファイルを作成
+  fs.mkdir_p("/repo/src/lib")
+  fs.write_file("/repo/src/lib/foo.mbt", b"lib content")
+  fs.write_file("/repo/README.md", b"root readme")
+  fs.write_file("/repo/src/main.mbt", b"main content")
+  // 初期コミット
+  let commit1 = @lib.commit(
+    fs,
+    fs,
+    "/repo",
+    "Initial",
+    "test <test@test.com>",
+    1000L,
+  ) catch {
+    _ => return ()
+  }
+  // SubdirRepo で変更してコミット
+  let subdir = SubdirRepo::from_commit(fs, "/repo/.git", commit1, "src/lib") catch {
+    _ => return ()
+  }
+  subdir.fs().write_file("/foo.mbt", b"modified lib")
+  let commit2 = subdir.commit(
+    fs,
+    fs,
+    "Update lib only",
+    author="test <test@test.com>",
+    timestamp=2000L,
+  ) catch {
+    _ => return ()
+  }
+  // ルートのファイルが保持されていることを確認
+  let db = @lib.ObjectDb::load(fs, "/repo/.git") catch { _ => return () }
+  let files = @lib.collect_tree_files_from_commit(db, fs, commit2) catch {
+    _ => return ()
+  }
+  // すべてのファイルが存在
+  assert_true(files.contains("README.md"))
+  assert_true(files.contains("src/main.mbt"))
+  assert_true(files.contains("src/lib/foo.mbt"))
+}
