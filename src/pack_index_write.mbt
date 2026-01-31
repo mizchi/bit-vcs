@@ -16,20 +16,21 @@ pub fn build_pack_index(pack : Bytes) -> Bytes raise GitError {
 
 ///|
 /// Build a pack index (v2) from packfile bytes and parsed objects.
+/// Uses cached metadata (id, offset, crc32) from PackObject when available.
 pub fn build_pack_index_from_objects(
   pack : Bytes,
   objects : Array[PackObject],
 ) -> Bytes raise GitError {
-  let (starts, ends) = scan_pack_entry_offsets(pack)
-  if objects.length() != starts.length() || starts.length() != ends.length() {
-    raise GitError::PackfileError("Pack entry count mismatch")
-  }
   let entries : Array[PackIndexEntry] = []
-  for i in 0..<objects.length() {
-    let obj = objects[i]
-    let id = hash_object_content(obj.obj_type, obj.data)
-    let crc = crc32_range(pack, starts[i], ends[i])
-    entries.push({ id, offset: starts[i], crc })
+  for obj in objects {
+    // Use cached metadata if available (offset >= 0 means parsed from pack)
+    if obj.offset >= 0 {
+      entries.push({ id: obj.id, offset: obj.offset, crc: obj.crc32 })
+    } else {
+      // Fallback: compute values (shouldn't happen for parsed pack objects)
+      let id = hash_object_content(obj.obj_type, obj.data)
+      entries.push({ id, offset: 0, crc: 0U })
+    }
   }
   entries.sort_by(fn(a, b) { compare_object_id(a.id, b.id) })
   let counts : Array[Int] = Array::make(256, 0)
@@ -214,7 +215,7 @@ fn compare_object_id(a : ObjectId, b : ObjectId) -> Int {
 }
 
 ///|
-fn crc32_range(data : Bytes, start : Int, end : Int) -> UInt raise GitError {
+pub fn crc32_range(data : Bytes, start : Int, end : Int) -> UInt raise GitError {
   if start < 0 || end < start || end > data.length() {
     raise GitError::PackfileError("Invalid CRC range")
   }

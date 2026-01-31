@@ -90,6 +90,8 @@ fn parse_packfile_internal(
   let mut offset = 12
   let objects : Array[PackObject] = []
   let resolved : Array[Bool] = []
+  let obj_offsets : Array[Int] = [] // Track offsets for CRC calculation
+  let obj_ends : Array[Int] = [] // Track end positions for CRC calculation
   let pending : Array[PendingDelta] = []
   for _ in 0..<count {
     let obj_offset = offset
@@ -122,12 +124,19 @@ fn parse_packfile_internal(
             "Delta size mismatch: expected=\{size}, got=\{delta.length()}",
           )
         }
-        let placeholder = PackObject::new(
+        // Compute CRC32 for this delta object
+        let crc = crc32_range(data, obj_offset, after)
+        let placeholder = PackObject::with_metadata(
           ObjectType::Blob,
           Bytes::from_array([]),
+          ObjectId::zero(),
+          obj_offset,
+          crc,
         )
         objects.push(placeholder)
         resolved.push(false)
+        obj_offsets.push(obj_offset)
+        obj_ends.push(after)
         let idx = objects.length() - 1
         by_offset[obj_offset] = idx
         match by_offset.get(base_offset) {
@@ -135,10 +144,16 @@ fn parse_packfile_internal(
             if resolved[base_index] {
               let base = objects[base_index]
               let content = apply_delta(base.data, delta)
-              let obj = PackObject::new(base.obj_type, content)
+              let obj_id = hash_object_content(base.obj_type, content)
+              let obj = PackObject::with_metadata(
+                base.obj_type,
+                content,
+                obj_id,
+                obj_offset,
+                crc,
+              )
               objects[idx] = obj
               resolved[idx] = true
-              let obj_id = hash_object_content(obj.obj_type, obj.data)
               by_id[obj_id.to_hex()] = obj
             } else {
               pending.push({
@@ -162,21 +177,34 @@ fn parse_packfile_internal(
             "Delta size mismatch: expected=\{size}, got=\{delta.length()}",
           )
         }
-        let placeholder = PackObject::new(
+        // Compute CRC32 for this delta object
+        let crc = crc32_range(data, obj_offset, after)
+        let placeholder = PackObject::with_metadata(
           ObjectType::Blob,
           Bytes::from_array([]),
+          ObjectId::zero(),
+          obj_offset,
+          crc,
         )
         objects.push(placeholder)
         resolved.push(false)
+        obj_offsets.push(obj_offset)
+        obj_ends.push(after)
         let idx = objects.length() - 1
         by_offset[obj_offset] = idx
         match by_id.get(base_id) {
           Some(base) => {
             let content = apply_delta(base.data, delta)
-            let obj = PackObject::new(base.obj_type, content)
+            let obj_id = hash_object_content(base.obj_type, content)
+            let obj = PackObject::with_metadata(
+              base.obj_type,
+              content,
+              obj_id,
+              obj_offset,
+              crc,
+            )
             objects[idx] = obj
             resolved[idx] = true
-            let obj_id = hash_object_content(obj.obj_type, obj.data)
             by_id[obj_id.to_hex()] = obj
           }
           None =>
@@ -191,11 +219,15 @@ fn parse_packfile_internal(
     }
     offset = after
     if type_id == 1 || type_id == 2 || type_id == 3 || type_id == 4 {
-      let obj = PackObject::new(obj_type, content)
+      // Compute CRC32 and hash for non-delta objects
+      let crc = crc32_range(data, obj_offset, after)
+      let obj_id = hash_object_content(obj_type, content)
+      let obj = PackObject::with_metadata(obj_type, content, obj_id, obj_offset, crc)
       objects.push(obj)
       resolved.push(true)
+      obj_offsets.push(obj_offset)
+      obj_ends.push(after)
       by_offset[obj_offset] = objects.length() - 1
-      let obj_id = hash_object_content(obj_type, content)
       by_id[obj_id.to_hex()] = obj
     }
   }
@@ -212,10 +244,18 @@ fn parse_packfile_internal(
             resolved[base_index] {
             let base = objects[base_index]
             let content = apply_delta(base.data, p.delta)
-            let obj = PackObject::new(base.obj_type, content)
+            let obj_id = hash_object_content(base.obj_type, content)
+            // Preserve offset and crc from placeholder
+            let old = objects[p.index]
+            let obj = PackObject::with_metadata(
+              base.obj_type,
+              content,
+              obj_id,
+              old.offset,
+              old.crc32,
+            )
             objects[p.index] = obj
             resolved[p.index] = true
-            let obj_id = hash_object_content(obj.obj_type, obj.data)
             by_id[obj_id.to_hex()] = obj
             progress = true
           } else {
@@ -225,10 +265,18 @@ fn parse_packfile_internal(
           match by_id.get(base_id) {
             Some(base) => {
               let content = apply_delta(base.data, p.delta)
-              let obj = PackObject::new(base.obj_type, content)
+              let obj_id = hash_object_content(base.obj_type, content)
+              // Preserve offset and crc from placeholder
+              let old = objects[p.index]
+              let obj = PackObject::with_metadata(
+                base.obj_type,
+                content,
+                obj_id,
+                old.offset,
+                old.crc32,
+              )
               objects[p.index] = obj
               resolved[p.index] = true
-              let obj_id = hash_object_content(obj.obj_type, obj.data)
               by_id[obj_id.to_hex()] = obj
               progress = true
             }

@@ -11,6 +11,10 @@ fn pack_array_to_bytes(arr : Array[Byte]) -> Bytes {
 pub struct PackObject {
   obj_type : ObjectType
   data : Bytes // Uncompressed object content (without header)
+  // Cached metadata for performance (computed during pack parsing)
+  id : ObjectId // Object hash (cached)
+  offset : Int // Offset in packfile (-1 if not from pack)
+  crc32 : UInt // CRC32 of compressed data (0 if not computed)
 }
 
 ///|
@@ -23,7 +27,19 @@ pub(all) enum PackDeltaMode {
 
 ///|
 pub fn PackObject::new(obj_type : ObjectType, data : Bytes) -> PackObject {
-  { obj_type, data }
+  let id = hash_object_content(obj_type, data)
+  { obj_type, data, id, offset: -1, crc32: 0U }
+}
+
+///|
+pub fn PackObject::with_metadata(
+  obj_type : ObjectType,
+  data : Bytes,
+  id : ObjectId,
+  offset : Int,
+  crc32 : UInt,
+) -> PackObject {
+  { obj_type, data, id, offset, crc32 }
 }
 
 ///|

@@ -23,7 +23,8 @@ pub fn ObjectStore::add_objects(
   objects : Array[PackObject],
 ) -> Unit {
   for obj in objects {
-    let id = hash_object_content(obj.obj_type, obj.data)
+    // Use cached id if available (offset >= 0 means it was parsed from pack)
+    let id = if obj.offset >= 0 { obj.id } else { hash_object_content(obj.obj_type, obj.data) }
     self.objects[id.to_hex()] = obj
   }
 }
