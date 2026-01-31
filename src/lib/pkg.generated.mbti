@@ -311,11 +311,13 @@ pub enum MergeStatus {
 }
 
 pub struct ObjectDb {
+  objects_dir : String
   loose_paths : Map[String, String]
   packs : Array[PackIndex]
 }
 pub fn ObjectDb::get(Self, &@git.RepoFileSystem, @git.ObjectId) -> @git.PackObject? raise @git.GitError
 pub fn ObjectDb::load(&@git.RepoFileSystem, String) -> Self raise @git.GitError
+pub fn ObjectDb::load_lazy(&@git.RepoFileSystem, String) -> Self raise @git.GitError
 
 pub struct PackIndex {
   pack_path : String

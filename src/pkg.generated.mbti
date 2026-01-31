@@ -336,6 +336,21 @@ pub struct RemoteSpec {
   base_url : String?
 }
 
+pub struct Sha1State {
+  h : FixedArray[Int]
+  block : FixedArray[Byte]
+  w : FixedArray[Int]
+  mut block_len : Int
+  mut total_len : Int64
+}
+pub fn Sha1State::finish(Self) -> ObjectId
+pub fn Sha1State::new() -> Self
+pub fn Sha1State::reset(Self) -> Unit
+pub fn Sha1State::update(Self, Bytes) -> Unit
+pub fn Sha1State::update_byte(Self, Byte) -> Unit
+pub fn Sha1State::update_slice(Self, Bytes, Int, Int) -> Unit
+pub fn Sha1State::update_string(Self, String) -> Unit
+
 pub struct TestFs {
   files : Map[String, Bytes]
   dirs : Map[String, Bool]

@@ -33,11 +33,13 @@ pub fn PackIndex::find_offset_hex(self : PackIndex, hex : String) -> Int64? {
 
 ///|
 pub struct ObjectDb {
-  loose_paths : Map[String, String] // hex -> path (lazy loading)
+  objects_dir : String // base path for objects
+  loose_paths : Map[String, String] // hex -> path (cache)
   packs : Array[PackIndex]
 }
 
 ///|
+/// Load ObjectDb with full loose object scan (slower but complete)
 pub fn ObjectDb::load(
   fs : &@git.RepoFileSystem,
   git_dir : String,
@@ -58,7 +60,27 @@ pub fn ObjectDb::load(
   } else {
     []
   }
-  { loose_paths, packs }
+  { objects_dir, loose_paths, packs }
+}
+
+///|
+/// Load ObjectDb lazily - don't scan loose objects upfront (shallow/fast)
+pub fn ObjectDb::load_lazy(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> ObjectDb raise @git.GitError {
+  let objects_dir = join_path(git_dir, "objects")
+  let packs = if fs.is_dir(objects_dir) {
+    let pack_dir = join_path(objects_dir, "pack")
+    if fs.is_dir(pack_dir) {
+      load_pack_indexes(fs, pack_dir)
+    } else {
+      []
+    }
+  } else {
+    []
+  }
+  { objects_dir, loose_paths: {}, packs }
 }
 
 ///|
@@ -82,8 +104,26 @@ fn get_by_hex(
     raise @git.GitError::InvalidObject("Delta cycle detected: \{hex}")
   }
   seen[hex] = true
-  // Try to load from loose objects (lazy)
-  match db.loose_paths.get(hex) {
+  // Try to load from loose objects - first check cache, then try direct path
+  let loose_path = match db.loose_paths.get(hex) {
+    Some(path) => Some(path)
+    None =>
+      // Try constructing path directly (lazy loading)
+      if hex.length() == 40 {
+        let prefix = String::unsafe_substring(hex, start=0, end=2)
+        let suffix = String::unsafe_substring(hex, start=2, end=40)
+        let path = db.objects_dir + "/" + prefix + "/" + suffix
+        if fs.is_file(path) {
+          db.loose_paths[hex] = path // cache for future lookups
+          Some(path)
+        } else {
+          None
+        }
+      } else {
+        None
+      }
+  }
+  match loose_path {
     Some(path) => {
       let compressed = fs.read_file(path)
       let raw = @zlib.zlib_decompress(compressed) catch {

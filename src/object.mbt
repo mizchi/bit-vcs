@@ -3,7 +3,17 @@
 ///|
 /// Helper to convert Array[Byte] to Bytes
 fn array_to_bytes(arr : Array[Byte]) -> Bytes {
-  Bytes::from_array(FixedArray::makei(arr.length(), fn(i) { arr[i] }))
+  Bytes::from_iter(arr.iter())
+}
+
+///|
+/// Helper to convert String to byte array (ASCII encoding)
+fn string_to_byte_array(s : String) -> Array[Byte] {
+  let arr : Array[Byte] = []
+  for c in s {
+    arr.push(c.to_int().to_byte())
+  }
+  arr
 }
 
 ///|
@@ -20,10 +30,13 @@ pub fn create_object(
 }
 
 ///|
-/// Hash object content (without compression)
+/// Hash object content (without compression) - optimized with incremental SHA1
 pub fn hash_object_content(obj_type : ObjectType, content : Bytes) -> ObjectId {
-  let raw = format_object(obj_type, content)
-  sha1(raw)
+  let state = Sha1State::new()
+  let header = "\{obj_type.to_string()} \{content.length()}\u0000"
+  state.update_string(header)
+  state.update(content)
+  state.finish()
 }
 
 ///|
@@ -49,11 +62,7 @@ pub fn create_blob(content : Bytes) -> (ObjectId, Bytes) {
 ///|
 /// Create a blob from string content
 pub fn create_blob_string(content : String) -> (ObjectId, Bytes) {
-  let bytes : Array[Byte] = []
-  for c in content {
-    bytes.push(c.to_int().to_byte())
-  }
-  create_blob(array_to_bytes(bytes))
+  create_blob(array_to_bytes(string_to_byte_array(content)))
 }
 
 ///|
@@ -122,27 +131,26 @@ pub fn create_commit(commit : Commit) -> (ObjectId, Bytes) {
 
   // message
   content.write_string(commit.message)
-  let content_str = content.to_string()
-  let bytes : Array[Byte] = []
-  for c in content_str {
-    bytes.push(c.to_int().to_byte())
-  }
-  create_object(ObjectType::Commit, array_to_bytes(bytes))
+  create_object(
+    ObjectType::Commit,
+    array_to_bytes(string_to_byte_array(content.to_string())),
+  )
 }
 
 ///|
-/// Hash a blob without creating the compressed object
+/// Hash a blob without creating the compressed object - optimized with incremental SHA1
 pub fn hash_blob(content : Bytes) -> ObjectId {
-  let raw = format_object(ObjectType::Blob, content)
-  sha1(raw)
+  hash_object_content(ObjectType::Blob, content)
 }
 
 ///|
-/// Hash a blob from string
+/// Hash a blob from string - optimized with incremental SHA1
 pub fn hash_blob_string(content : String) -> ObjectId {
-  let bytes : Array[Byte] = []
-  for c in content {
-    bytes.push(c.to_int().to_byte())
-  }
-  hash_blob(array_to_bytes(bytes))
+  let state = Sha1State::new()
+  // Count bytes for header (ASCII only, same as original behavior)
+  let byte_len = content.iter().count()
+  let header = "blob \{byte_len}\u0000"
+  state.update_string(header)
+  state.update_string(content)
+  state.finish()
 }

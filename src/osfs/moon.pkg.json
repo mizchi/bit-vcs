@@ -1,0 +1,9 @@
+{
+  "import": [
+    "mizchi/git",
+    "moonbitlang/x/fs"
+  ],
+  "targets": {
+    "osfs.mbt": ["native"]
+  }
+}

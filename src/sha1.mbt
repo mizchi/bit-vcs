@@ -37,51 +37,92 @@ fn rotl32(x : Int, n : Int) -> Int {
 }
 
 ///|
-/// Process a single 512-bit (64-byte) block
-fn sha1_process_block(block : FixedArray[Byte], h : FixedArray[Int]) -> Unit {
-  // Prepare message schedule
-  let w : FixedArray[Int] = FixedArray::make(80, 0)
+/// Incremental SHA-1 state
+pub struct Sha1State {
+  h : FixedArray[Int]
+  block : FixedArray[Byte]
+  w : FixedArray[Int]
+  mut block_len : Int
+  mut total_len : Int64
+}
 
-  // Copy block into first 16 words (big-endian)
+///|
+pub fn Sha1State::new() -> Sha1State {
+  {
+    h: [sha1_h0, sha1_h1, sha1_h2, sha1_h3, sha1_h4],
+    block: FixedArray::make(64, b'\x00'),
+    w: FixedArray::make(80, 0),
+    block_len: 0,
+    total_len: 0L,
+  }
+}
+
+///|
+pub fn Sha1State::reset(self : Sha1State) -> Unit {
+  self.h[0] = sha1_h0
+  self.h[1] = sha1_h1
+  self.h[2] = sha1_h2
+  self.h[3] = sha1_h3
+  self.h[4] = sha1_h4
+  self.block_len = 0
+  self.total_len = 0L
+}
+
+///|
+fn Sha1State::process_block(self : Sha1State) -> Unit {
+  let h = self.h
+  let w = self.w
+  let block = self.block
   for i = 0; i < 16; i = i + 1 {
     w[i] = (block[i * 4].to_int() << 24) |
       (block[i * 4 + 1].to_int() << 16) |
       (block[i * 4 + 2].to_int() << 8) |
       block[i * 4 + 3].to_int()
   }
-
-  // Extend the sixteen 32-bit words into eighty 32-bit words
   for i = 16; i < 80; i = i + 1 {
     w[i] = rotl32(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1)
   }
-
-  // Initialize working variables
   let mut a = h[0]
   let mut b = h[1]
   let mut c = h[2]
   let mut d = h[3]
   let mut e = h[4]
-
-  // Main loop
-  for i = 0; i < 80; i = i + 1 {
-    let (f, k) = if i < 20 {
-      ((b & c) | (b.lnot() & d), sha1_k0)
-    } else if i < 40 {
-      (b ^ c ^ d, sha1_k1)
-    } else if i < 60 {
-      ((b & c) | (b & d) | (c & d), sha1_k2)
-    } else {
-      (b ^ c ^ d, sha1_k3)
-    }
-    let temp = (rotl32(a, 5) + f + e + k + w[i]) & 0xffffffff
+  for i = 0; i < 20; i = i + 1 {
+    let f = (b & c) | (b.lnot() & d)
+    let temp = (rotl32(a, 5) + f + e + sha1_k0 + w[i]) & 0xffffffff
     e = d
     d = c
     c = rotl32(b, 30)
     b = a
     a = temp
   }
-
-  // Add to hash
+  for i = 20; i < 40; i = i + 1 {
+    let f = b ^ c ^ d
+    let temp = (rotl32(a, 5) + f + e + sha1_k1 + w[i]) & 0xffffffff
+    e = d
+    d = c
+    c = rotl32(b, 30)
+    b = a
+    a = temp
+  }
+  for i = 40; i < 60; i = i + 1 {
+    let f = (b & c) | (b & d) | (c & d)
+    let temp = (rotl32(a, 5) + f + e + sha1_k2 + w[i]) & 0xffffffff
+    e = d
+    d = c
+    c = rotl32(b, 30)
+    b = a
+    a = temp
+  }
+  for i = 60; i < 80; i = i + 1 {
+    let f = b ^ c ^ d
+    let temp = (rotl32(a, 5) + f + e + sha1_k3 + w[i]) & 0xffffffff
+    e = d
+    d = c
+    c = rotl32(b, 30)
+    b = a
+    a = temp
+  }
   h[0] = (h[0] + a) & 0xffffffff
   h[1] = (h[1] + b) & 0xffffffff
   h[2] = (h[2] + c) & 0xffffffff
@@ -90,9 +131,92 @@ fn sha1_process_block(block : FixedArray[Byte], h : FixedArray[Int]) -> Unit {
 }
 
 ///|
+pub fn Sha1State::update(self : Sha1State, data : Bytes) -> Unit {
+  self.update_slice(data, 0, data.length())
+}
+
+///|
+pub fn Sha1State::update_slice(
+  self : Sha1State,
+  data : Bytes,
+  offset : Int,
+  len : Int,
+) -> Unit {
+  let mut pos = offset
+  let end = offset + len
+  self.total_len += len.to_int64()
+  while pos < end {
+    let space = 64 - self.block_len
+    let to_copy = if end - pos < space { end - pos } else { space }
+    for i = 0; i < to_copy; i = i + 1 {
+      self.block[self.block_len + i] = data[pos + i]
+    }
+    self.block_len += to_copy
+    pos += to_copy
+    if self.block_len == 64 {
+      self.process_block()
+      self.block_len = 0
+    }
+  }
+}
+
+///|
+pub fn Sha1State::update_byte(self : Sha1State, b : Byte) -> Unit {
+  self.block[self.block_len] = b
+  self.block_len += 1
+  self.total_len += 1L
+  if self.block_len == 64 {
+    self.process_block()
+    self.block_len = 0
+  }
+}
+
+///|
+pub fn Sha1State::update_string(self : Sha1State, s : String) -> Unit {
+  for c in s {
+    self.update_byte(c.to_int().to_byte())
+  }
+}
+
+///|
+pub fn Sha1State::finish(self : Sha1State) -> ObjectId {
+  let bit_len = self.total_len * 8L
+  self.block[self.block_len] = b'\x80'
+  self.block_len += 1
+  if self.block_len > 56 {
+    while self.block_len < 64 {
+      self.block[self.block_len] = b'\x00'
+      self.block_len += 1
+    }
+    self.process_block()
+    self.block_len = 0
+  }
+  while self.block_len < 56 {
+    self.block[self.block_len] = b'\x00'
+    self.block_len += 1
+  }
+  self.block[56] = ((bit_len >> 56) & 0xffL).to_byte()
+  self.block[57] = ((bit_len >> 48) & 0xffL).to_byte()
+  self.block[58] = ((bit_len >> 40) & 0xffL).to_byte()
+  self.block[59] = ((bit_len >> 32) & 0xffL).to_byte()
+  self.block[60] = ((bit_len >> 24) & 0xffL).to_byte()
+  self.block[61] = ((bit_len >> 16) & 0xffL).to_byte()
+  self.block[62] = ((bit_len >> 8) & 0xffL).to_byte()
+  self.block[63] = (bit_len & 0xffL).to_byte()
+  self.process_block()
+  let result : FixedArray[Byte] = FixedArray::make(20, b'\x00')
+  for i = 0; i < 5; i = i + 1 {
+    result[i * 4] = ((self.h[i] >> 24) & 0xff).to_byte()
+    result[i * 4 + 1] = ((self.h[i] >> 16) & 0xff).to_byte()
+    result[i * 4 + 2] = ((self.h[i] >> 8) & 0xff).to_byte()
+    result[i * 4 + 3] = (self.h[i] & 0xff).to_byte()
+  }
+  ObjectId::new(result)
+}
+
+///|
 /// Compute SHA-1 hash of data prefix (first `len` bytes).
 pub fn sha1_prefix(data : Bytes, len : Int) -> ObjectId {
-  let h : FixedArray[Int] = [sha1_h0, sha1_h1, sha1_h2, sha1_h3, sha1_h4]
   let msg_len = if len < 0 {
     0
   } else if len > data.length() {
@@ -100,54 +224,9 @@ pub fn sha1_prefix(data : Bytes, len : Int) -> ObjectId {
   } else {
     len
   }
-  let bit_len = msg_len * 8
-  let full_blocks = msg_len / 64
-  let rem = msg_len % 64
-
-  // Process full blocks directly from input
-  for i = 0; i < full_blocks; i = i + 1 {
-    let block : FixedArray[Byte] = FixedArray::make(64, b'\x00')
-    for j = 0; j < 64; j = j + 1 {
-      block[j] = data[i * 64 + j]
-    }
-    sha1_process_block(block, h)
-  }
-
-  // Pad remaining bytes
-  let pad_len = if rem < 56 { 56 - rem } else { 64 + 56 - rem }
-  let tail_len = rem + pad_len + 8
-  let tail : FixedArray[Byte] = FixedArray::make(tail_len, b'\x00')
-  for i = 0; i < rem; i = i + 1 {
-    tail[i] = data[full_blocks * 64 + i]
-  }
-  tail[rem] = b'\x80'
-  let len_offset = tail_len - 8
-  tail[len_offset] = b'\x00'
-  tail[len_offset + 1] = b'\x00'
-  tail[len_offset + 2] = b'\x00'
-  tail[len_offset + 3] = b'\x00'
-  tail[len_offset + 4] = ((bit_len >> 24) & 0xff).to_byte()
-  tail[len_offset + 5] = ((bit_len >> 16) & 0xff).to_byte()
-  tail[len_offset + 6] = ((bit_len >> 8) & 0xff).to_byte()
-  tail[len_offset + 7] = (bit_len & 0xff).to_byte()
-  let tail_blocks = tail_len / 64
-  for i = 0; i < tail_blocks; i = i + 1 {
-    let block : FixedArray[Byte] = FixedArray::make(64, b'\x00')
-    for j = 0; j < 64; j = j + 1 {
-      block[j] = tail[i * 64 + j]
-    }
-    sha1_process_block(block, h)
-  }
-
-  // Convert hash to bytes
-  let result : FixedArray[Byte] = FixedArray::make(20, b'\x00')
-  for i = 0; i < 5; i = i + 1 {
-    result[i * 4] = ((h[i] >> 24) & 0xff).to_byte()
-    result[i * 4 + 1] = ((h[i] >> 16) & 0xff).to_byte()
-    result[i * 4 + 2] = ((h[i] >> 8) & 0xff).to_byte()
-    result[i * 4 + 3] = (h[i] & 0xff).to_byte()
-  }
-  ObjectId::new(result)
+  let state = Sha1State::new()
+  state.update_slice(data, 0, msg_len)
+  state.finish()
 }
 
 ///|
@@ -159,7 +238,6 @@ pub fn sha1(data : Bytes) -> ObjectId {
 ///|
 /// Compute SHA-1 hash of Array prefix (first `len` bytes).
 pub fn sha1_array_prefix(data : Array[Byte], len : Int) -> ObjectId {
-  let h : FixedArray[Int] = [sha1_h0, sha1_h1, sha1_h2, sha1_h3, sha1_h4]
   let msg_len = if len < 0 {
     0
   } else if len > data.length() {
@@ -167,48 +245,11 @@ pub fn sha1_array_prefix(data : Array[Byte], len : Int) -> ObjectId {
   } else {
     len
   }
-  let bit_len = msg_len * 8
-  let full_blocks = msg_len / 64
-  let rem = msg_len % 64
-  for i = 0; i < full_blocks; i = i + 1 {
-    let block : FixedArray[Byte] = FixedArray::make(64, b'\x00')
-    for j = 0; j < 64; j = j + 1 {
-      block[j] = data[i * 64 + j]
-    }
-    sha1_process_block(block, h)
+  let state = Sha1State::new()
+  for i = 0; i < msg_len; i = i + 1 {
+    state.update_byte(data[i])
   }
-  let pad_len = if rem < 56 { 56 - rem } else { 64 + 56 - rem }
-  let tail_len = rem + pad_len + 8
-  let tail : FixedArray[Byte] = FixedArray::make(tail_len, b'\x00')
-  for i = 0; i < rem; i = i + 1 {
-    tail[i] = data[full_blocks * 64 + i]
-  }
-  tail[rem] = b'\x80'
-  let len_offset = tail_len - 8
-  tail[len_offset] = b'\x00'
-  tail[len_offset + 1] = b'\x00'
-  tail[len_offset + 2] = b'\x00'
-  tail[len_offset + 3] = b'\x00'
-  tail[len_offset + 4] = ((bit_len >> 24) & 0xff).to_byte()
-  tail[len_offset + 5] = ((bit_len >> 16) & 0xff).to_byte()
-  tail[len_offset + 6] = ((bit_len >> 8) & 0xff).to_byte()
-  tail[len_offset + 7] = (bit_len & 0xff).to_byte()
-  let tail_blocks = tail_len / 64
-  for i = 0; i < tail_blocks; i = i + 1 {
-    let block : FixedArray[Byte] = FixedArray::make(64, b'\x00')
-    for j = 0; j < 64; j = j + 1 {
-      block[j] = tail[i * 64 + j]
-    }
-    sha1_process_block(block, h)
-  }
-  let result : FixedArray[Byte] = FixedArray::make(20, b'\x00')
-  for i = 0; i < 5; i = i + 1 {
-    result[i * 4] = ((h[i] >> 24) & 0xff).to_byte()
-    result[i * 4 + 1] = ((h[i] >> 16) & 0xff).to_byte()
-    result[i * 4 + 2] = ((h[i] >> 8) & 0xff).to_byte()
-    result[i * 4 + 3] = (h[i] & 0xff).to_byte()
-  }
-  ObjectId::new(result)
+  state.finish()
 }
 
 ///|

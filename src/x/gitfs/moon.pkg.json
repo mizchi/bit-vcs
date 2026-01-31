@@ -1,0 +1,16 @@
+{
+  "import": [
+    "mizchi/git",
+    { "path": "mizchi/git/lib", "alias": "lib" },
+    { "path": "moonbitlang/core/encoding/utf8", "alias": "utf8" }
+  ],
+  "test-import": [
+    { "path": "mizchi/git/lib", "alias": "lib" },
+    { "path": "mizchi/git/osfs", "alias": "osfs" },
+    "mizchi/zlib",
+    { "path": "moonbitlang/core/bench", "alias": "bench" }
+  ],
+  "targets": {
+    "bench_real_test.mbt": ["native"]
+  }
+}

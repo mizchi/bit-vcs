@@ -1,0 +1,113 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/git/x/gitfs"
+
+import {
+  "mizchi/git",
+  "mizchi/git/lib",
+}
+
+// Values
+pub fn build_tree_from_working(&@git.FileSystem, &@git.RepoFileSystem, String, @git.ObjectId, WorkingLayer) -> @git.ObjectId raise @git.GitError
+
+pub fn join_path(String, String) -> String
+
+// Errors
+
+// Types and methods
+pub struct GitFs {
+  git_dir : String
+  mut base_tree : @git.ObjectId
+  mut base_commit : @git.ObjectId?
+  working : WorkingLayer
+  layers : Array[Layer]
+  cache : ObjectCache
+  config : GitFsConfig
+  mut cached_db : @lib.ObjectDb?
+}
+pub fn GitFs::add_layer(Self, &@git.RepoFileSystem, @git.ObjectId, String, commit_id? : @git.ObjectId?) -> Unit raise @git.GitError
+pub fn GitFs::add_layer_from_commit(Self, &@git.RepoFileSystem, @git.ObjectId, String) -> Unit raise @git.GitError
+pub fn GitFs::base_commit(Self) -> @git.ObjectId?
+pub fn GitFs::base_tree(Self) -> @git.ObjectId
+pub fn GitFs::checkout_snapshot(Self, &@git.RepoFileSystem, @git.ObjectId) -> Unit raise @git.GitError
+pub fn GitFs::clear_layers(Self) -> Unit
+pub fn GitFs::discard_changes(Self) -> Unit
+pub fn GitFs::empty(String, config? : GitFsConfig) -> Self
+pub fn GitFs::flatten_layers(Self, &@git.FileSystem, &@git.RepoFileSystem) -> @git.ObjectId raise @git.GitError
+pub fn GitFs::from_branch(&@git.RepoFileSystem, String, String, config? : GitFsConfig) -> Self raise @git.GitError
+pub fn GitFs::from_commit(&@git.RepoFileSystem, String, @git.ObjectId, config? : GitFsConfig) -> Self raise @git.GitError
+pub fn GitFs::from_commit_lazy(&@git.RepoFileSystem, String, @git.ObjectId, config? : GitFsConfig) -> Self raise @git.GitError
+pub fn GitFs::from_tree(String, @git.ObjectId, config? : GitFsConfig) -> Self
+pub fn GitFs::get_db(Self, &@git.RepoFileSystem) -> @lib.ObjectDb raise @git.GitError
+pub fn GitFs::get_deleted_files(Self) -> Array[String]
+pub fn GitFs::get_working_files(Self) -> Array[String]
+pub fn GitFs::git_dir(Self) -> String
+pub fn GitFs::has_layer(Self, String) -> Bool
+pub fn GitFs::is_dir(Self, &@git.RepoFileSystem, String) -> Bool
+pub fn GitFs::is_dirty(Self) -> Bool
+pub fn GitFs::is_file(Self, &@git.RepoFileSystem, String) -> Bool
+pub fn GitFs::list_layers(Self) -> Array[Layer]
+pub fn GitFs::list_snapshots(Self, &@git.RepoFileSystem, max_count? : Int) -> Array[Snapshot] raise @git.GitError
+pub fn GitFs::mkdir_p(Self, String) -> Unit
+pub fn GitFs::read_file(Self, &@git.RepoFileSystem, String) -> Bytes raise @git.GitError
+pub fn GitFs::readdir(Self, &@git.RepoFileSystem, String) -> Array[String] raise @git.GitError
+pub fn GitFs::remove_dir(Self, String) -> Unit
+pub fn GitFs::remove_file(Self, String) -> Unit
+pub fn GitFs::remove_layer(Self, String) -> Bool
+pub fn GitFs::rollback(Self) -> Unit
+pub fn GitFs::snapshot(Self, &@git.FileSystem, &@git.RepoFileSystem, String, String, Int64) -> Snapshot raise @git.GitError
+pub fn GitFs::write_file(Self, String, Bytes) -> Unit
+pub fn GitFs::write_string(Self, String, String) -> Unit
+
+pub struct GitFsConfig {
+  max_cache_bytes : Int
+  max_cache_entries : Int
+}
+pub fn GitFsConfig::default() -> Self
+
+pub(all) struct Layer {
+  tree_id : @git.ObjectId
+  commit_id : @git.ObjectId?
+  name : String
+}
+
+pub(all) struct ObjectCache {
+  blobs : Map[String, Bytes]
+  trees : Map[String, Array[@git.TreeEntry]]
+  path_cache : Map[String, @git.ObjectId?]
+  max_blob_bytes : Int
+  mut blob_bytes : Int
+  blob_order : Array[String]
+}
+pub fn ObjectCache::clear(Self) -> Unit
+pub fn ObjectCache::get_blob(Self, String) -> Bytes?
+pub fn ObjectCache::get_path(Self, String) -> @git.ObjectId??
+pub fn ObjectCache::get_tree(Self, @git.ObjectId) -> Array[@git.TreeEntry]?
+pub fn ObjectCache::invalidate_path(Self, String) -> Unit
+pub fn ObjectCache::new(Int) -> Self
+pub fn ObjectCache::set_blob(Self, String, Bytes) -> Unit
+pub fn ObjectCache::set_path(Self, String, @git.ObjectId?) -> Unit
+pub fn ObjectCache::set_tree(Self, @git.ObjectId, Array[@git.TreeEntry]) -> Unit
+
+pub(all) struct Snapshot {
+  commit_id : @git.ObjectId
+  tree_id : @git.ObjectId
+  message : String
+  author : String
+  timestamp : Int64
+}
+pub fn Snapshot::new(@git.ObjectId, @git.ObjectId, String, String, Int64) -> Self
+
+pub(all) struct WorkingLayer {
+  files : Map[String, Bytes]
+  deleted : Map[String, Bool]
+  dirs : Map[String, Bool]
+  mut dirty : Bool
+}
+pub fn WorkingLayer::clear(Self) -> Unit
+pub fn WorkingLayer::is_dirty(Self) -> Bool
+pub fn WorkingLayer::new() -> Self
+
+// Type aliases
+
+// Traits
+
