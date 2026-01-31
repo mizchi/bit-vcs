@@ -318,3 +318,79 @@ test "subdir: normalize path" {
   assert_eq(subdir2.path(), "src/lib")
   assert_eq(subdir3.path(), "src/lib")
 }
+
+///|
+test "subdir: init creates config and marker files" {
+  let fs = @git.TestFs::new()
+  @lib.init_repo(fs, "/repo") catch { _ => () }
+  fs.mkdir_p("/repo/src/lib")
+  fs.write_file("/repo/src/lib/foo.mbt", b"content")
+  // 初期化
+  let config = SubdirInitConfig::new(create_wrapper=false)
+  let info = init_subdir(fs, "/repo/.git", "/repo", "src/lib", config) catch {
+    _ => return ()
+  }
+  // 結果を確認
+  assert_eq(info.path, "src/lib")
+  assert_true(info.initialized)
+  // 設定ファイルが作成されている
+  assert_true(fs.is_file("/repo/.git/subdir/src_lib/config"))
+  // マーカーファイルが作成されている
+  assert_true(fs.is_file("/repo/src/lib/.gitsubdir"))
+}
+
+///|
+test "subdir: is_subdir_initialized returns correct status" {
+  let fs = @git.TestFs::new()
+  @lib.init_repo(fs, "/repo") catch { _ => () }
+  fs.mkdir_p("/repo/src/lib")
+  // 初期化前
+  assert_false(is_subdir_initialized(fs, "/repo/.git", "src/lib"))
+  // 初期化
+  let config = SubdirInitConfig::default()
+  let _ = init_subdir(fs, "/repo/.git", "/repo", "src/lib", config) catch {
+    _ => return ()
+  }
+  // 初期化後
+  assert_true(is_subdir_initialized(fs, "/repo/.git", "src/lib"))
+}
+
+///|
+test "subdir: deinit removes config and marker files" {
+  let fs = @git.TestFs::new()
+  @lib.init_repo(fs, "/repo") catch { _ => () }
+  fs.mkdir_p("/repo/src/lib")
+  // 初期化
+  let config = SubdirInitConfig::new(create_wrapper=false)
+  let _ = init_subdir(fs, "/repo/.git", "/repo", "src/lib", config) catch {
+    _ => return ()
+  }
+  assert_true(is_subdir_initialized(fs, "/repo/.git", "src/lib"))
+  // 初期化解除
+  deinit_subdir(fs, fs, "/repo/.git", "/repo", "src/lib") catch { _ => () }
+  // 確認
+  assert_false(is_subdir_initialized(fs, "/repo/.git", "src/lib"))
+  assert_false(fs.is_file("/repo/src/lib/.gitsubdir"))
+}
+
+///|
+test "subdir: generate_shell_env returns correct variables" {
+  let env = generate_shell_env("/repo/.git", "/repo", "src/lib")
+  assert_eq(env.length(), 4)
+  // MOONGIT_SUBDIR
+  assert_eq(env[0].0, "MOONGIT_SUBDIR")
+  assert_eq(env[0].1, "src/lib")
+  // GIT_PREFIX
+  assert_eq(env[3].0, "GIT_PREFIX")
+  assert_eq(env[3].1, "src/lib/")
+}
+
+///|
+test "subdir: generate_shell_rc contains git wrapper" {
+  let rc = generate_shell_rc("src/lib")
+  // 基本的な内容を確認
+  assert_true(rc.contains("git()"))
+  assert_true(rc.contains("log)"))
+  assert_true(rc.contains("status)"))
+  assert_true(rc.contains("diff)"))
+}

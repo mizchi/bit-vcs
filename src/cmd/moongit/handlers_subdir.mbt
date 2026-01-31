@@ -10,6 +10,9 @@ async fn handle_subdir(args : Array[String]) -> Unit raise Error {
   let subcommand = args[0]
   let rest = array_view_to_array(args[1:])
   match subcommand {
+    "init" => handle_subdir_init(rest) catch { e => raise e }
+    "deinit" => handle_subdir_deinit(rest) catch { e => raise e }
+    "shell" => handle_subdir_shell(rest) catch { e => raise e }
     "show" => handle_subdir_show(rest) catch { e => raise e }
     "log" => handle_subdir_log(rest) catch { e => raise e }
     "diff" => handle_subdir_diff(rest) catch { e => raise e }
@@ -36,6 +39,9 @@ async fn print_subdir_usage() -> Unit raise Error {
   print_line("Usage: moongit subdir <command> [options]")
   print_line("")
   print_line("Commands:")
+  print_line("  init <path>      Initialize subdirectory for transparent git operations")
+  print_line("  deinit <path>    Remove subdirectory initialization")
+  print_line("  shell <path>     Start a shell with git scoped to subdirectory")
   print_line("  show <path>      Show subdirectory info")
   print_line("  log <path>       Show commits that affected the subdirectory")
   print_line("  diff <path>      Show working changes in subdirectory")
@@ -246,4 +252,157 @@ fn subdir_short_hex(hex : String) -> String {
 fn format_timestamp_simple(timestamp : Int64) -> String {
   // Unix タイムスタンプを簡易的に表示
   timestamp.to_string()
+}
+
+///|
+async fn handle_subdir_init(args : Array[String]) -> Unit raise Error {
+  if args.length() < 1 {
+    print_line("Usage: moongit subdir init <path> [--no-wrapper]")
+    return
+  }
+  let subdir_path = args[0]
+  let mut create_wrapper = true
+  // オプション解析
+  let mut i = 1
+  while i < args.length() {
+    let arg = args[i]
+    if arg == "--no-wrapper" {
+      create_wrapper = false
+    }
+    i += 1
+  }
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  // サブディレクトリが存在するか確認
+  let subdir_abs = root + "/" + subdir_path
+  if not(fs.is_dir(subdir_abs)) {
+    print_line("Error: subdirectory does not exist: " + subdir_path)
+    return
+  }
+  // 初期化
+  let config = @gitsubdir.SubdirInitConfig::new(create_wrapper~)
+  let info = @gitsubdir.init_subdir(fs, git_dir, root, subdir_path, config) catch {
+    err => raise @git.GitError::IoError("Failed to init: " + err.to_string())
+  }
+  print_line("Initialized subdirectory: " + info.path)
+  print_line("Config: " + info.config_path)
+  if create_wrapper {
+    print_line("Wrapper script: " + subdir_abs + "/git-subdir")
+  }
+  print_line("")
+  print_line("You can now:")
+  print_line("  - Run 'moongit subdir shell " + subdir_path + "' to enter scoped shell")
+  print_line("  - Use ./git-subdir in the subdirectory for scoped git commands")
+}
+
+///|
+async fn handle_subdir_deinit(args : Array[String]) -> Unit raise Error {
+  if args.length() < 1 {
+    print_line("Usage: moongit subdir deinit <path>")
+    return
+  }
+  let subdir_path = args[0]
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  // 初期化済みか確認
+  if not(@gitsubdir.is_subdir_initialized(fs, git_dir, subdir_path)) {
+    print_line("Subdirectory is not initialized: " + subdir_path)
+    return
+  }
+  // 初期化解除
+  @gitsubdir.deinit_subdir(fs, fs, git_dir, root, subdir_path) catch {
+    err => raise @git.GitError::IoError("Failed to deinit: " + err.to_string())
+  }
+  print_line("Deinitialized subdirectory: " + subdir_path)
+}
+
+///|
+async fn handle_subdir_shell(args : Array[String]) -> Unit raise Error {
+  if args.length() < 1 {
+    print_line("Usage: moongit subdir shell <path>")
+    return
+  }
+  let subdir_path = args[0]
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  let subdir_abs = root + "/" + subdir_path
+  // サブディレクトリが存在するか確認
+  if not(fs.is_dir(subdir_abs)) {
+    print_line("Error: subdirectory does not exist: " + subdir_path)
+    return
+  }
+  // 環境変数を取得
+  let env_vars = @gitsubdir.generate_shell_env(git_dir, root, subdir_path)
+  // RC スクリプトを生成
+  let rc_script = @gitsubdir.generate_shell_rc(subdir_path)
+  // 一時ファイルに RC を書き込み
+  let rc_path = "/tmp/moongit-subdir-rc-" + subdir_path_to_id(subdir_path)
+  fs.write_file(rc_path, string_to_bytes_subdir(rc_script)) catch { _ => () }
+  // シェルを起動
+  print_line("Starting subdir shell for: " + subdir_path)
+  print_line("git commands will be scoped to this directory.")
+  print_line("")
+  // 環境変数を設定してシェルを起動
+  let shell = get_user_shell()
+  let shell_args = build_shell_args(shell, rc_path)
+  // 環境変数を設定
+  for pair in env_vars {
+    @sys.set_env_var(pair.0, pair.1)
+  }
+  // シェルプロセスを起動（サブディレクトリで）
+  // カレントディレクトリを変更してシェルを起動
+  @sys.set_env_var("MOONGIT_SUBDIR_RC", rc_path)
+  let exit_code = @process.run(shell, shell_args)
+  if exit_code != 0 {
+    print_line("Shell exited with code: " + exit_code.to_string())
+  }
+  // 一時ファイルを削除
+  fs.remove_file(rc_path) catch { _ => () }
+  print_line("Exited subdir shell.")
+}
+
+///|
+fn get_user_shell() -> String {
+  match @sys.get_env_var("SHELL") {
+    Some(s) => s
+    None => "/bin/sh"
+  }
+}
+
+///|
+fn build_shell_args(shell : String, rc_path : String) -> Array[String] {
+  // bash/zsh の場合は --rcfile を使用
+  if shell.has_suffix("bash") {
+    ["--rcfile", rc_path]
+  } else if shell.has_suffix("zsh") {
+    // zsh は ZDOTDIR を使うのが標準だが、簡易的に -i で対応
+    ["-i"]
+  } else {
+    []
+  }
+}
+
+///|
+fn subdir_path_to_id(path : String) -> String {
+  let result = StringBuilder::new()
+  for c in path {
+    if c == '/' {
+      result.write_char('-')
+    } else if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+      result.write_char(c)
+    }
+  }
+  result.to_string()
+}
+
+///|
+fn string_to_bytes_subdir(s : String) -> Bytes {
+  let bytes : Array[Byte] = []
+  for c in s {
+    bytes.push(c.to_int().to_byte())
+  }
+  Bytes::from_array(bytes)
 }

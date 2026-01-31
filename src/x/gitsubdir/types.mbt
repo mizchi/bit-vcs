@@ -98,3 +98,38 @@ pub fn SubdirError::to_string(self : SubdirError) -> String {
     IoError(msg) => "io error: " + msg
   }
 }
+
+///|
+/// サブディレクトリ初期化の設定
+pub struct SubdirInitConfig {
+  /// git ラッパースクリプトを生成するか
+  create_wrapper : Bool
+  /// .gitsubdir ファイルに追加情報を書き込むか
+  verbose_marker : Bool
+}
+
+///|
+pub fn SubdirInitConfig::default() -> SubdirInitConfig {
+  { create_wrapper: true, verbose_marker: true }
+}
+
+///|
+pub fn SubdirInitConfig::new(
+  create_wrapper~ : Bool = true,
+  verbose_marker~ : Bool = true
+) -> SubdirInitConfig {
+  { create_wrapper, verbose_marker }
+}
+
+///|
+/// 初期化済みサブディレクトリの情報
+pub struct SubdirInfo {
+  /// サブディレクトリパス（正規化済み）
+  path : String
+  /// 元リポジトリの .git ディレクトリ
+  git_dir : String
+  /// 設定ファイルパス
+  config_path : String
+  /// 初期化済みかどうか
+  initialized : Bool
+}
