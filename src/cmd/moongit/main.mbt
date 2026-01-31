@@ -415,6 +415,38 @@ async fn dispatch_command(cmd : String, rest : Array[String]) -> Unit {
       handle_bundle(rest) catch {
         err => exit_with_error("bundle", err)
       }
+    "read-tree" =>
+      handle_read_tree(rest) catch {
+        err => exit_with_error("read-tree", err)
+      }
+    "update-index" =>
+      handle_update_index(rest) catch {
+        err => exit_with_error("update-index", err)
+      }
+    "mktree" =>
+      handle_mktree(rest) catch {
+        err => exit_with_error("mktree", err)
+      }
+    "request-pull" =>
+      handle_request_pull(rest) catch {
+        err => exit_with_error("request-pull", err)
+      }
+    "send-pack" =>
+      handle_send_pack(rest) catch {
+        err => exit_with_error("send-pack", err)
+      }
+    "range-diff" =>
+      handle_range_diff(rest) catch {
+        err => exit_with_error("range-diff", err)
+      }
+    "multi-pack-index" =>
+      handle_multi_pack_index(rest) catch {
+        err => exit_with_error("multi-pack-index", err)
+      }
+    "cherry" =>
+      handle_cherry(rest) catch {
+        err => exit_with_error("cherry", err)
+      }
     "version" | "--version" => print_line("git version 2.47.0 (moongit)")
     // Error for unknown commands
     _ => {

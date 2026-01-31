@@ -19,9 +19,9 @@ A pure MoonBit implementation of Git commands, passing the official Git test sui
 
 **Remote Operations**: `remote`, `fetch`, `pull`, `push`, `clone`
 
-**Plumbing**: `pack-objects`, `index-pack`, `receive-pack`, `upload-pack`, `cat-file`, `hash-object`, `ls-files`, `ls-tree`, `rev-parse`, `rev-list`, `show-ref`, `symbolic-ref`, `update-ref`, `write-tree`, `verify-pack`, `unpack-objects`, `bundle`, `config`, `reflog`
+**Plumbing**: `pack-objects`, `index-pack`, `receive-pack`, `upload-pack`, `cat-file`, `hash-object`, `ls-files`, `ls-tree`, `rev-parse`, `rev-list`, `show-ref`, `symbolic-ref`, `update-ref`, `write-tree`, `verify-pack`, `unpack-objects`, `bundle`, `config`, `reflog`, `read-tree`, `update-index`, `mktree`, `send-pack`, `request-pull`, `range-diff`, `multi-pack-index`
 
-**Other**: `tag`, `stash`, `worktree`, `rm`, `mv`, `grep`, `blame`, `describe`, `bisect`, `notes`, `format-patch`, `shortlog`, `gc`, `clean`, `revert`, `sparse-checkout`, `submodule`
+**Other**: `tag`, `stash`, `worktree`, `rm`, `mv`, `grep`, `blame`, `describe`, `bisect`, `notes`, `format-patch`, `shortlog`, `gc`, `clean`, `revert`, `sparse-checkout`, `submodule`, `cherry`
 
 ### Protocol Support
 - Git protocol v1/v2
@@ -165,9 +165,6 @@ The following Git commands are not yet implemented in moongit:
 - `replace` - Replace objects
 
 **Plumbing Commands**
-- `read-tree` - Read tree into index
-- `update-index` - Modify index directly
-- `mktree` - Build tree from ls-tree output
 - `name-rev` - Find symbolic names for revs
 - `var` - Show Git logical variables
 
@@ -178,18 +175,13 @@ The following Git commands are not yet implemented in moongit:
 - `gui`, `citool` - Graphical interfaces
 
 **Collaboration**
-- `request-pull` - Generate pull request summary
-- `send-pack` - Push objects over git protocol
 - `imap-send` - Send patches via IMAP
 - `credential` - Credential helpers
 
 **Other**
 - `rerere` - Reuse recorded resolution
-- `cherry` - Find commits not merged upstream
 - `show-branch` - Show branches and commits
 - `whatchanged` - Show commit logs with diff
-- `range-diff` - Compare two commit ranges
-- `multi-pack-index` - Multi-pack index management
 
 ## License
 

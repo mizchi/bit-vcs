@@ -94,10 +94,9 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
   let exclude_ids : Map[String, Bool] = {}
   for spec in excludes {
     match @gitlib.rev_parse(fs, git_dir, spec) {
-      Some(id) => {
+      Some(id) =>
         // Walk the exclude commit and all its ancestors
         walk_commits_to_map(fs, git_dir, id, exclude_ids)
-      }
       None => ()
     }
   }
@@ -382,6 +381,7 @@ async fn handle_unpack_objects(args : Array[String]) -> Unit raise Error {
   // Write objects to the repository
   for obj in objects {
     let _ = @gitlib.write_loose_object(fs, git_dir, obj.obj_type, obj.data)
+
   }
 }
 
@@ -425,13 +425,12 @@ async fn handle_bundle_create(args : Array[String]) -> Unit raise Error {
     match arg {
       "--all" => all = true
       _ if arg.has_prefix("^") => excludes.push(arg.substring(start=1))
-      _ if not(arg.has_prefix("-")) => {
+      _ if not(arg.has_prefix("-")) =>
         if bundle_file is None {
           bundle_file = Some(arg)
         } else {
           refs.push(arg)
         }
-      }
       _ => ()
     }
     i += 1
@@ -662,6 +661,7 @@ async fn handle_bundle_unbundle(args : Array[String]) -> Unit raise Error {
   let objects = @git.parse_packfile(pack_data)
   for obj in objects {
     let _ = @gitlib.write_loose_object(fs, git_dir, obj.obj_type, obj.data)
+
   }
   // Print refs
   for item in refs {

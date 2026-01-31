@@ -16,7 +16,10 @@ options(
   targets: {
     "handlers_branch.mbt": [ "native" ],
     "handlers_core.mbt": [ "native" ],
+    "handlers_maintenance.mbt": [ "native" ],
     "handlers_misc.mbt": [ "native" ],
+    "handlers_pack.mbt": [ "native" ],
+    "handlers_plumbing.mbt": [ "native" ],
     "handlers_remote.mbt": [ "native" ],
     "handlers_worktree.mbt": [ "native" ],
     "helpers.mbt": [ "native" ],
