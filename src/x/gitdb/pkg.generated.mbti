@@ -42,6 +42,7 @@ pub fn GitDb::pending_object_count(Self) -> Int
 pub fn GitDb::remove_peer(Self, NodeId) -> Bool
 pub fn GitDb::rollback(Self) -> Unit
 pub fn GitDb::select_gossip_peers(Self, Int, Int64) -> Array[PeerInfo]
+pub fn GitDb::serialize_snapshot(Self, &@git.RepoFileSystem) -> SerializedSnapshot
 pub fn GitDb::set(Self, String, Bytes) -> Unit
 pub fn GitDb::set_string(Self, String, String) -> Unit
 
@@ -102,6 +103,33 @@ pub(all) struct PeerInfo {
   head : @git.ObjectId
   endpoint : String
 }
+
+pub(all) struct SerializationStats {
+  total_bytes : Int
+  object_count : Int
+  commit_count : Int
+  tree_count : Int
+  blob_count : Int
+  blob_bytes : Int
+}
+
+pub(all) struct SerializedObject {
+  id : Bytes
+  obj_type : Int
+  data : Bytes
+}
+
+pub(all) struct SerializedSnapshot {
+  version : Int
+  node_id : String
+  head : Bytes
+  clock : Array[(String, Int64)]
+  objects : Array[SerializedObject]
+}
+pub fn SerializedSnapshot::byte_size(Self) -> Int
+pub fn SerializedSnapshot::from_bytes(Bytes) -> Self
+pub fn SerializedSnapshot::stats(Self) -> SerializationStats
+pub fn SerializedSnapshot::to_bytes(Self) -> Bytes
 
 pub(all) struct SyncResult {
   objects_sent : Int
