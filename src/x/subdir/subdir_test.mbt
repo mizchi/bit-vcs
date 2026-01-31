@@ -339,9 +339,7 @@ test "subdir: deinit removes config and marker files" {
   }
   assert_true(is_subdir_initialized(fs, "/repo/.git", "src/lib"))
   // 初期化解除
-  deinit_subdir(fs, fs, "/repo/.git", "/repo", "src/lib") catch {
-    _ => ()
-  }
+  deinit_subdir(fs, fs, "/repo/.git", "/repo", "src/lib")
   // 確認
   assert_false(is_subdir_initialized(fs, "/repo/.git", "src/lib"))
   assert_false(fs.is_file("/repo/src/lib/.gitsubdir"))
@@ -487,9 +485,7 @@ test "subdir: full workflow init -> check -> deinit" {
   assert_true(is_subdir_initialized(fs, "/repo/.git", "src/lib"))
   assert_true(is_subdir_initialized(fs, "/repo/.git", "src/cli"))
   // lib だけ解除
-  deinit_subdir(fs, fs, "/repo/.git", "/repo", "src/lib") catch {
-    _ => ()
-  }
+  deinit_subdir(fs, fs, "/repo/.git", "/repo", "src/lib")
   // lib は解除され、cli はまだ初期化されている
   assert_false(is_subdir_initialized(fs, "/repo/.git", "src/lib"))
   assert_true(is_subdir_initialized(fs, "/repo/.git", "src/cli"))
@@ -735,9 +731,7 @@ test "module: deinit removes module structure" {
   }
   assert_true(is_module_initialized(fs, "/repo/.git", "src/lib"))
   // 削除
-  deinit_module(fs, fs, "/repo/.git", "/repo", "src/lib") catch {
-    _ => ()
-  }
+  deinit_module(fs, fs, "/repo/.git", "/repo", "src/lib")
   // 確認
   assert_false(is_module_initialized(fs, "/repo/.git", "src/lib"))
   assert_false(fs.is_file("/repo/src/lib/.git"))
@@ -1155,9 +1149,7 @@ test "workflow: init -> commit -> checkout -> deinit" {
     }
   assert_eq(new_content, b"v2")
   // 6. モジュール削除
-  deinit_module(fs, fs, "/repo/.git", "/repo", "src/lib") catch {
-    _ => ()
-  }
+  deinit_module(fs, fs, "/repo/.git", "/repo", "src/lib")
   assert_false(is_module_initialized(fs, "/repo/.git", "src/lib"))
 }
 
@@ -1875,9 +1867,7 @@ test "module: deinit removes .gitmodules entry" {
   }
   assert_true(fs.is_file("/repo/.gitmodules"))
   // モジュールを削除
-  deinit_module(fs, fs, "/repo/.git", "/repo", "src/lib") catch {
-    _ => return ()
-  }
+  deinit_module(fs, fs, "/repo/.git", "/repo", "src/lib")
   // .gitmodules が削除されたことを確認（空になった場合）
   assert_false(fs.is_file("/repo/.gitmodules"))
 }
@@ -1900,9 +1890,7 @@ test "module: deinit removes gitlink from index" {
     _ => return ()
   }
   // モジュールを削除
-  deinit_module(fs, fs, "/repo/.git", "/repo", "src/lib") catch {
-    _ => return ()
-  }
+  deinit_module(fs, fs, "/repo/.git", "/repo", "src/lib")
   // index から gitlink が削除されていることを確認
   let entries = @lib.read_index_entries(fs, "/repo/.git") catch {
     _ => return ()
@@ -1966,9 +1954,7 @@ test "module: deinit one of multiple modules" {
     _ => return ()
   }
   // 1つだけ削除
-  deinit_module(fs, fs, "/repo/.git", "/repo", "src/lib") catch {
-    _ => return ()
-  }
+  deinit_module(fs, fs, "/repo/.git", "/repo", "src/lib")
   // .gitmodules に残りのエントリがあることを確認
   let content = fs.read_file("/repo/.gitmodules") catch { _ => return () }
   let text = bytes_to_string_test(content)

@@ -67,7 +67,7 @@ pub fn Den::get_note(
   guard obj is Some(blob_obj) else { return None }
   let text = @utf8.decode_lossy(blob_obj.data[:])
   // Try to parse as Den note (with metadata), fall back to plain
-  let note = parse_note(text) catch { _ => parse_note_plain(commit_id, text) }
+  let note = parse_note(text)
   Some(note)
 }
 
@@ -234,7 +234,7 @@ fn collect_notes_from_tree(
       let blob_obj = db.get(backing_fs, entry.id)
       guard blob_obj is Some(blob) else { continue }
       let text = @utf8.decode_lossy(blob.data[:])
-      let commit_id = @git.ObjectId::from_hex(commit_hex) catch {
+      let _commit_id = @git.ObjectId::from_hex(commit_hex) catch {
         _ => continue
       }
       let note = parse_note(text)

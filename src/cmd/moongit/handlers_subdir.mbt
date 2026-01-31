@@ -380,9 +380,7 @@ async fn handle_subdir_deinit(args : Array[String]) -> Unit raise Error {
     return
   }
   // モジュール構造を削除
-  @subdir.deinit_module(fs, fs, git_dir, root, subdir_path) catch {
-    err => raise @git.GitError::IoError("Failed to deinit: " + err.to_string())
-  }
+  @subdir.deinit_module(fs, fs, git_dir, root, subdir_path)
   print_line("Deinitialized subdirectory: " + subdir_path)
   print_line(
     "Removed .git/modules/" + subdir_path_to_safe_name(subdir_path) + "/",
@@ -576,9 +574,7 @@ async fn handle_subdir_checkout(args : Array[String]) -> Unit raise Error {
     _ => raise @git.GitError::IoError("Failed to read subdirectory")
   }
   // 既存のファイルを削除（.gitsubdir と git-subdir は保持）
-  clear_subdir_worktree(fs, subdir_abs) catch {
-    _ => ()
-  }
+  clear_subdir_worktree(fs, subdir_abs)
   // ファイルを展開
   let mut count = 0
   for file in files {
@@ -674,9 +670,7 @@ async fn handle_subdir_push(args : Array[String]) -> Unit raise Error {
   } else {
     print_line("Push completed.")
     // リモートURLを設定に保存
-    save_subdir_remote(fs, git_dir, subdir_path, url) catch {
-      _ => ()
-    }
+    save_subdir_remote(fs, git_dir, subdir_path, url)
   }
 }
 
@@ -744,22 +738,16 @@ async fn handle_subdir_pull(args : Array[String]) -> Unit raise Error {
   // サブディレクトリにコピー
   let subdir_abs = root + "/" + subdir_path
   // 既存ファイルをクリア
-  clear_subdir_worktree(fs, subdir_abs) catch {
-    _ => ()
-  }
+  clear_subdir_worktree(fs, subdir_abs)
   // ファイルをコピー（.git を除く）
   copy_dir_recursive(fs, temp_dir, subdir_abs) catch {
     e => raise e
   }
   // 一時ディレクトリを削除
-  remove_dir_recursive(fs, temp_dir) catch {
-    _ => ()
-  }
+  remove_dir_recursive(fs, temp_dir)
   print_line("Pull completed.")
   // リモートURLを設定に保存
-  save_subdir_remote(fs, git_dir, subdir_path, url) catch {
-    _ => ()
-  }
+  save_subdir_remote(fs, git_dir, subdir_path, url)
 }
 
 ///|
@@ -797,7 +785,7 @@ fn resolve_commit_ref(
 }
 
 ///|
-fn clear_subdir_worktree(fs : OsFs, subdir_abs : String) -> Unit raise Error {
+fn clear_subdir_worktree(fs : OsFs, subdir_abs : String) -> Unit {
   // ディレクトリ内のファイルを削除（.gitsubdir と git-subdir は保持）
   let entries = fs.readdir(subdir_abs) catch { _ => return () }
   for entry in entries {
@@ -806,9 +794,7 @@ fn clear_subdir_worktree(fs : OsFs, subdir_abs : String) -> Unit raise Error {
     }
     let path = subdir_abs + "/" + entry
     if fs.is_dir(path) {
-      subdir_remove_dir_recursive(fs, path) catch {
-        _ => ()
-      }
+      subdir_remove_dir_recursive(fs, path)
     } else {
       fs.remove_file(path) catch {
         _ => ()
@@ -818,14 +804,12 @@ fn clear_subdir_worktree(fs : OsFs, subdir_abs : String) -> Unit raise Error {
 }
 
 ///|
-fn subdir_remove_dir_recursive(fs : OsFs, path : String) -> Unit raise Error {
+fn subdir_remove_dir_recursive(fs : OsFs, path : String) -> Unit {
   let entries = fs.readdir(path) catch { _ => return () }
   for entry in entries {
     let child_path = path + "/" + entry
     if fs.is_dir(child_path) {
-      subdir_remove_dir_recursive(fs, child_path) catch {
-        _ => ()
-      }
+      subdir_remove_dir_recursive(fs, child_path)
     } else {
       fs.remove_file(child_path) catch {
         _ => ()
@@ -885,7 +869,7 @@ fn save_subdir_remote(
   git_dir : String,
   subdir_path : String,
   url : String,
-) -> Unit raise Error {
+) -> Unit {
   let safe_name = subdir_path_to_safe_name(subdir_path)
   let config_dir = git_dir + "/subdir/" + safe_name
   fs.mkdir_p(config_dir) catch {

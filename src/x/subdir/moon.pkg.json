@@ -1,4 +1,5 @@
 {
+  "warn-list": "-unused_constructor",
   "import": [
     "mizchi/git",
     "mizchi/git/lib",

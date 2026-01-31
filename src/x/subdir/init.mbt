@@ -68,7 +68,7 @@ pub fn is_subdir_initialized(
 pub fn get_subdir_info(
   rfs : &@git.RepoFileSystem,
   git_dir : String,
-  repo_root : String,
+  _repo_root : String,
   subdir_path : String,
 ) -> SubdirInfo? {
   let normalized_path = normalize_subdir_path(subdir_path)
@@ -89,7 +89,7 @@ pub fn deinit_subdir(
   git_dir : String,
   repo_root : String,
   subdir_path : String,
-) -> Unit raise SubdirError {
+) -> Unit {
   let normalized_path = normalize_subdir_path(subdir_path)
   let subdir_abs = repo_root + "/" + normalized_path
   // 設定ディレクトリを削除

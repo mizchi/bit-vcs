@@ -471,7 +471,7 @@ async fn handle_bundle_create(args : Array[String]) -> Unit raise Error {
   }
   lines.push("") // Empty line before pack data
   let header = lines.join("\n")
-  let header_bytes = header.to_bytes()
+  let header_bytes = @utf8.encode(header[:])
   // Collect objects for pack
   let start_ids : Array[@git.ObjectId] = []
   for spec in refs {

@@ -401,7 +401,7 @@ fn cleanup_filter_driver(
   git_dir : String,
   repo_root : String,
   subdir_path : String,
-) -> Unit raise SubdirError {
+) -> Unit {
   let filter_name = "moongit-subdir-" + path_to_module_name(subdir_path)
   // 1. filter スクリプトを削除
   let hooks_dir = git_dir + "/moongit-filters"
@@ -804,7 +804,7 @@ pub fn deinit_module(
   git_dir : String,
   repo_root : String,
   subdir_path : String,
-) -> Unit raise SubdirError {
+) -> Unit {
   let normalized_path = normalize_subdir_path(subdir_path)
   let module_name = path_to_module_name(normalized_path)
   let module_dir = git_dir + "/modules/" + module_name
@@ -818,9 +818,7 @@ pub fn deinit_module(
     remove_module_dir(fs, rfs, module_dir)
   }
   // 3. filter スクリプトと設定を削除
-  cleanup_filter_driver(fs, rfs, git_dir, repo_root, normalized_path) catch {
-    _ => ()
-  }
+  cleanup_filter_driver(fs, rfs, git_dir, repo_root, normalized_path)
 }
 
 ///|

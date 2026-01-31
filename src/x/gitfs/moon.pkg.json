@@ -1,4 +1,5 @@
 {
+  "warn-list": "-unused_value",
   "import": [
     "mizchi/git",
     { "path": "mizchi/git/lib", "alias": "lib" },
