@@ -179,13 +179,16 @@ fn parse_global_options(args : Array[String]) -> GlobalOptions {
       match kv.find("=") {
         Some(eq_idx) => {
           let key = String::unsafe_substring(kv, start=0, end=eq_idx)
-          let value = String::unsafe_substring(kv, start=eq_idx + 1, end=kv.length())
+          let value = String::unsafe_substring(
+            kv,
+            start=eq_idx + 1,
+            end=kv.length(),
+          )
           config_overrides.push((key, value))
         }
-        None => {
+        None =>
           // Key without value (treated as empty string in git)
           config_overrides.push((kv, ""))
-        }
       }
       i += 2
       continue
@@ -375,6 +378,22 @@ async fn dispatch_command(cmd : String, rest : Array[String]) -> Unit {
     "shortlog" =>
       handle_shortlog(rest) catch {
         err => exit_with_error("shortlog", err)
+      }
+    "am" => handle_am(rest) catch { err => exit_with_error("am", err) }
+    "apply" => handle_apply(rest) catch { err => exit_with_error("apply", err) }
+    "fsck" => handle_fsck(rest) catch { err => exit_with_error("fsck", err) }
+    "prune" => handle_prune(rest) catch { err => exit_with_error("prune", err) }
+    "pack-refs" =>
+      handle_pack_refs(rest) catch {
+        err => exit_with_error("pack-refs", err)
+      }
+    "repack" =>
+      handle_repack(rest) catch {
+        err => exit_with_error("repack", err)
+      }
+    "maintenance" =>
+      handle_maintenance(rest) catch {
+        err => exit_with_error("maintenance", err)
       }
     "version" | "--version" => print_line("git version 2.47.0 (moongit)")
     // Error for unknown commands
