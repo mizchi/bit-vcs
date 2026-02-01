@@ -66,6 +66,17 @@ receive-pack upload-pack pack-objects index-pack
 
 ## 完了した項目
 
+### ✅ Protocol v2 filter/packfile-uris 対応 (2026-02-01)
+
+**修正済み:**
+- `src/cmd/bit/pack_objects.mbt`: `--filter` オプション対応 (blob:none, blob:limit, tree:depth)
+- `src/cmd/bit/handlers_remote.mbt`: `GIT_CONFIG_OVERRIDES` 環境変数からの設定読み込み
+- `src/lib/upload_pack.mbt`: filter spec のパースと適用
+
+**テスト結果:**
+- t5702-protocol-v2.sh テスト 42 (filter): パス
+- t5702-protocol-v2.sh テスト 60 (packfile-uris): パス
+
 ### ✅ `-h` オプション対応
 
 **修正済み:** `src/cmd/moongit/handlers_remote.mbt`
@@ -77,6 +88,14 @@ receive-pack upload-pack pack-objects index-pack
 **修正済み:** `tools/git-shim/bin/git`
 - `git branch -c` が config オプションとして誤認識される問題を修正
 - サブコマンド検出後のみ `-c` 検証を行うように変更
+
+### ✅ CRC32 バグ修正 (2026-02-01)
+
+**修正済み:** pack ファイルの CRC32 計算が正しく動作するよう修正
+
+### ✅ index-pack SHA1 collision detection 対応 (2026-02-01)
+
+**修正済み:** pack 解析時に SHA1 collision を検出して失敗するよう修正
 
 ---
 
@@ -93,6 +112,8 @@ moongit の index-pack が SHA1 collision を検出していない
 **修正箇所:**
 - `src/lib/pack_index.mbt` または関連ファイル
 
+**状況:** 対応済み (2026-02-01)
+
 ---
 
 ### 中優先度: index-pack outside sha256 repository
@@ -103,12 +124,16 @@ moongit の index-pack が SHA1 collision を検出していない
 **原因:**
 sha256 フォーマットの pack ファイルを repository 外で処理できない
 
+**状況:** 対応済み (2026-02-01)
+
 ---
 
 ### 低優先度: fetch deepen-since with commit-graph
 
 **失敗テスト:** t5500-fetch-pack.sh (allowlist 外)
 - 1件失敗 (deepen-since + commit-graph 関連)
+
+**状況:** 対応済み (2026-02-01)
 
 ---
 
@@ -117,6 +142,60 @@ sha256 フォーマットの pack ファイルを repository 外で処理でき�
 1. [x] `receive-pack -h` と `upload-pack -h` の実装
 2. [x] strict モードでの allowlist テスト実行 (3216 テスト通過)
 3. [x] git-shim `-c` オプション修正
-4. [ ] SHA1 collision detection の実装
-5. [ ] sha256 pack 対応の確認
-6. [ ] allowlist に更にテストを追加
+4. [x] Protocol v2 filter/packfile-uris 対応
+5. [x] SHA1 collision detection の実装
+6. [x] sha256 pack 対応の確認 (2026-02-01)
+7. [ ] allowlist に更にテストを追加
+
+---
+
+## 新機能: Git-Native PR システム (src/x/pr)
+
+**計画ファイル:** `~/.claude/plans/lexical-beaming-valley.md`
+
+GitHub/GitLab に依存しない、Git ネイティブな Pull Request システム。
+専用ブランチ `_prs` に全 PR データを Git オブジェクト（blob/tree）として保存し、標準の fetch/push で同期。
+
+### 実装ステップ
+
+- [ ] **Step 1: 基盤 (types.mbt, format.mbt)**
+  - 型定義 (PullRequest, PrComment, PrReview, PrState, ReviewVerdict)
+  - Git スタイルテキストのシリアライズ/パース
+
+- [ ] **Step 2: PR 操作 (pr.mbt)**
+  - PrSystem 構造体
+  - create, get, list, close
+
+- [ ] **Step 3: コメント・レビュー (comment.mbt, review.mbt)**
+  - add_comment, list_comments
+  - submit_review, is_approved
+
+- [ ] **Step 4: マージ (merge.mbt)**
+  - can_merge, merge_pr
+  - 既存の src/lib/merge.mbt を活用
+
+- [ ] **Step 5: 同期 (sync.mbt)**
+  - push, fetch
+  - conflict resolution
+
+### ファイル構成
+
+```
+src/x/pr/
+├── moon.pkg.json
+├── types.mbt          # 型定義
+├── format.mbt         # シリアライズ/デシリアライズ
+├── pr.mbt             # PrSystem, create/list/show/close
+├── comment.mbt        # コメント操作
+├── review.mbt         # レビュー操作
+├── merge.mbt          # PR マージ
+├── sync.mbt           # fetch/push 同期
+└── pr_test.mbt        # テスト
+```
+
+### 検証方法
+
+```bash
+moon check
+moon test --target native -p mizchi/git/x/pr
+```

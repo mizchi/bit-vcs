@@ -1,6 +1,7 @@
 # Git upstream test allowlist for this repo (strict mode compatible)
 # One test script per line; blank lines and comments are ignored.
 # These tests pass with SHIM_CMDS="pack-objects index-pack upload-pack receive-pack" SHIM_STRICT=1
+# Note: SHA-256 related subtests are skipped (SHA-1 only).
 
 # basic / init
 t0000-basic.sh
@@ -75,12 +76,15 @@ t7500-commit-template-squash-signoff.sh
 t7508-status.sh
 
 # pack / idx (strict mode compatible)
+t5300-pack-object.sh
+t5302-pack-index.sh
 t5306-pack-nobase.sh
 t5307-pack-missing-commit.sh
 t5308-pack-detect-duplicates.sh
 t5313-pack-bounds-checks.sh
 
 # fetch / push / refs (strict mode compatible)
+t5500-fetch-pack.sh
 t5501-fetch-push-alternates.sh
 t5502-quickfetch.sh
 t5503-tagfollow.sh

@@ -47,6 +47,11 @@ bit commit -m "changes"
 bit push origin feature
 ```
 
+## Compatibility
+
+- Hash algorithm: SHA-1 only.
+- SHA-256 repositories and `--object-format=sha256` are not supported.
+
 ## Extensions
 
 ### Fs - Virtual Filesystem
