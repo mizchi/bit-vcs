@@ -78,7 +78,7 @@ t7508-status.sh
 t5306-pack-nobase.sh
 t5307-pack-missing-commit.sh
 t5308-pack-detect-duplicates.sh
-# t5313-pack-bounds-checks.sh - excluded: test 9 depends on exact pack byte layout
+t5313-pack-bounds-checks.sh
 
 # fetch / push / refs (strict mode compatible)
 t5501-fetch-push-alternates.sh
