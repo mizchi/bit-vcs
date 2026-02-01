@@ -4,9 +4,17 @@ Git implementation in [MoonBit](https://docs.moonbitlang.com) - fully compatible
 
 ## Install
 
+**Supported platforms**: Linux x64, macOS arm64/x64
+
 ```bash
+# One-line install
 curl -fsSL https://raw.githubusercontent.com/mizchi/bit/main/install.sh | bash
+
+# Or download from GitHub Releases
+# https://github.com/mizchi/bit/releases
 ```
+
+Installs to `~/.local/bin/bit`. macOS x64 (Intel) runs arm64 binary via Rosetta.
 
 ## Subdirectory Clone
 
