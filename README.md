@@ -190,10 +190,10 @@ just git-t-allowlist  # Git compatibility tests
 
 ```bash
 # One-line install (Linux, macOS)
-curl -fsSL https://raw.githubusercontent.com/mizchi/git.mbt/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mizchi/bit/main/install.sh | bash
 
 # Or download from GitHub Releases
-# https://github.com/mizchi/git.mbt/releases
+# https://github.com/mizchi/bit/releases
 ```
 
 ### Build from source
