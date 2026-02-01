@@ -434,6 +434,36 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
   guard url is Some(remote_url) else {
     raise @git.GitError::InvalidObject("repository URL required")
   }
+  // Check for subdir shorthand: user/repo/path/to/subdir
+  // Detected when: no "://", no "@", and 3+ path components
+  if not(remote_url.contains("://")) &&
+    not(remote_url.contains("@")) &&
+    not(remote_url.has_suffix(".git")) {
+    let parts : Array[String] = remote_url
+      .split("/")
+      .filter(fn(s) { s.length() > 0 })
+      .map(fn(s) { s.to_string() })
+      .collect()
+    if parts.length() >= 3 {
+      // Shorthand detected: owner/repo/subdir/path
+      let owner = parts[0]
+      let repo = parts[1]
+      let subdir_parts : Array[String] = []
+      for j = 2; j < parts.length(); j = j + 1 {
+        subdir_parts.push(parts[j])
+      }
+      let subdir = subdir_parts.join("/")
+      let github_url = "https://github.com/\{owner}/\{repo}"
+      // Build args for subdir-clone: [url, subdir, optional dest]
+      let subdir_args : Array[String] = [github_url, subdir]
+      match dest {
+        Some(d) => subdir_args.push(d)
+        None => ()
+      }
+      print_line("Detected subdir shorthand: \{owner}/\{repo} → \{subdir}")
+      return handle_subdir_clone(subdir_args)
+    }
+  }
   // Derive destination from URL if not specified
   let relative_target = match dest {
     Some(d) => d

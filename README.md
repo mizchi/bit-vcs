@@ -57,7 +57,21 @@ bit commit -m "changes"
 bit push origin feature
 ```
 
-### 4. Subdir - Work with Subdirectories as Independent Repos
+### 4. GitHub Subdir Shorthand
+
+Clone a subdirectory directly using shorthand syntax:
+
+```bash
+# Clone user/repo's src/lib directory
+bit clone user/repo/src/lib
+
+# With custom destination
+bit clone user/repo/src/lib mylib
+```
+
+This automatically expands to `bit subdir-clone https://github.com/user/repo src/lib`.
+
+### 5. Subdir - Work with Subdirectories as Independent Repos
 
 Treat any subdirectory as an independent git repository while keeping it in the parent repo:
 
