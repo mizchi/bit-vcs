@@ -5,6 +5,11 @@ priv struct IndexPackConfig {
   output_path : String?
   keep_msg : String?
   pack_path : String?
+  object_format : String?
+  strict : Bool
+  fsck_objects : Bool
+  ignore_missing_email : Bool
+  delegate_to_real_git : Bool
 }
 
 ///|
@@ -15,12 +20,27 @@ priv enum IndexPackParse {
 }
 
 ///|
+fn normalize_object_format(value : String) -> String? {
+  let lower = value.to_lower()
+  match lower {
+    "sha1" => Some("sha1")
+    "sha256" => Some("sha256")
+    _ => None
+  }
+}
+
+///|
 fn parse_index_pack_args(args : Array[String]) -> IndexPackParse {
   let mut stdin = false
   let mut verify = false
   let mut output_path : String? = None
   let mut keep_msg : String? = None
   let mut pack_path : String? = None
+  let mut object_format : String? = None
+  let mut strict = false
+  let mut fsck_objects = false
+  let mut ignore_missing_email = false
+  let mut delegate_to_real_git = false
   let mut i = 0
   let mut in_opts = true
   let mut extra_args = 0
@@ -37,6 +57,38 @@ fn parse_index_pack_args(args : Array[String]) -> IndexPackParse {
         "--verify" => verify = true
         "--fix-thin" => ()
         "--keep" => keep_msg = Some("")
+        "--strict" => {
+          strict = true
+          delegate_to_real_git = true
+        }
+        "--fsck-objects" => {
+          fsck_objects = true
+          delegate_to_real_git = true
+        }
+        "--index-version" => {
+          delegate_to_real_git = true
+          if i + 1 < args.length() {
+            i += 1
+          }
+        }
+        "--max-input-size" => {
+          delegate_to_real_git = true
+          if i + 1 < args.length() {
+            i += 1
+          }
+        }
+        "-v" => delegate_to_real_git = true
+        "--verbose" => delegate_to_real_git = true
+        "--object-format" => {
+          if i + 1 >= args.length() {
+            return IndexPackParse::Unsupported
+          }
+          object_format = normalize_object_format(args[i + 1])
+          if object_format is None {
+            return IndexPackParse::Unsupported
+          }
+          i += 1
+        }
         "-o" => {
           if i + 1 >= args.length() {
             return IndexPackParse::Unsupported
@@ -47,9 +99,30 @@ fn parse_index_pack_args(args : Array[String]) -> IndexPackParse {
         _ =>
           if arg.has_prefix("--keep=") {
             keep_msg = Some((try! arg[7:]).to_string())
+          } else if arg.has_prefix("--object-format=") {
+            object_format = normalize_object_format((try! arg[16:]).to_string())
+            if object_format is None {
+              return IndexPackParse::Unsupported
+            }
+          } else if arg.has_prefix("--strict=") {
+            strict = true
+            delegate_to_real_git = true
+            if arg.contains("missingEmail=ignore") {
+              ignore_missing_email = true
+            }
+          } else if arg.has_prefix("--fsck-objects=") {
+            fsck_objects = true
+            delegate_to_real_git = true
+            if arg.contains("missingEmail=ignore") {
+              ignore_missing_email = true
+            }
+          } else if arg.has_prefix("--index-version=") {
+            delegate_to_real_git = true
+          } else if arg.has_prefix("--max-input-size=") {
+            delegate_to_real_git = true
+          } else if arg.has_prefix("--threads") {
+            delegate_to_real_git = true
           } else if arg.has_prefix("--object-format") ||
-            arg.has_prefix("--strict") ||
-            arg.has_prefix("--fsck-objects") ||
             arg.has_prefix("--threads") {
             return IndexPackParse::Unsupported
           } else {
@@ -66,16 +139,29 @@ fn parse_index_pack_args(args : Array[String]) -> IndexPackParse {
     }
     i += 1
   }
-  if extra_args > 0 {
-    return IndexPackParse::Error("fatal: too many arguments")
+  if !delegate_to_real_git {
+    if extra_args > 0 {
+      return IndexPackParse::Error("fatal: too many arguments")
+    }
+    if !stdin && !verify && pack_path is None {
+      return IndexPackParse::Unsupported
+    }
+    if verify && pack_path is None {
+      return IndexPackParse::Error("fatal: --verify requires a pack file")
+    }
   }
-  if !stdin && !verify && pack_path is None {
-    return IndexPackParse::Unsupported
-  }
-  if verify && pack_path is None {
-    return IndexPackParse::Error("fatal: --verify requires a pack file")
-  }
-  IndexPackParse::Ok({ stdin, verify, output_path, keep_msg, pack_path })
+  IndexPackParse::Ok({
+    stdin,
+    verify,
+    output_path,
+    keep_msg,
+    pack_path,
+    object_format,
+    strict,
+    fsck_objects,
+    ignore_missing_email,
+    delegate_to_real_git,
+  })
 }
 
 ///|
@@ -89,6 +175,173 @@ fn write_keep_file(
     Some(text) => {
       let content = if text.length() == 0 { "" } else { text + "\n" }
       fs.write_string(path, content)
+    }
+  }
+}
+
+///|
+fn real_git_path() -> String? {
+  match @sys.get_env_var("SHIM_REAL_GIT") {
+    Some(path) => Some(path)
+    None => @sys.get_env_var("GIT_SHIM_REAL_GIT")
+  }
+}
+
+///|
+fn check_sha1_collisions_with_repo(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+  objects : Array[@git.PackObject],
+) -> Unit raise @git.GitError {
+  let db = @gitlib.ObjectDb::load(fs, git_dir)
+  for obj in objects {
+    let existing = db.get(fs, obj.id) catch {
+      @git.GitError::HashMismatch(_, _) =>
+        raise @git.GitError::PackfileError("SHA1 COLLISION FOUND")
+      err => raise err
+    }
+    match existing {
+      Some(base) =>
+        if base.obj_type != obj.obj_type ||
+          not(Bytes::equal(base.data, obj.data)) {
+          raise @git.GitError::PackfileError("SHA1 COLLISION FOUND")
+        }
+      None => ()
+    }
+  }
+}
+
+///|
+fn commit_has_missing_email(content : Bytes) -> Bool {
+  let text = @utf8.decode_lossy(content[:])
+  for line_view in text.split("\n") {
+    let line = line_view.to_string()
+    if line.length() == 0 {
+      break
+    }
+    if line.has_prefix("author ") || line.has_prefix("committer ") {
+      let lt = line.find("<")
+      let gt = line.find(">")
+      match (lt, gt) {
+        (Some(li), Some(gi)) => if li >= gi { return true }
+        _ => return true
+      }
+    }
+  }
+  false
+}
+
+///|
+fn parse_tag_object_id(data : Bytes) -> @git.ObjectId? raise @git.GitError {
+  let text = @utf8.decode_lossy(data[:])
+  let mut object_hex : String? = None
+  for line_view in text.split("\n") {
+    let line = line_view.to_string()
+    if line.length() == 0 {
+      break
+    }
+    if line.has_prefix("object ") {
+      let hex = String::unsafe_substring(line, start=7, end=line.length())
+      object_hex = Some(hex)
+      break
+    }
+  }
+  match object_hex {
+    None => None
+    Some(hex) => Some(@git.ObjectId::from_hex(hex))
+  }
+}
+
+///|
+fn ensure_object_exists(
+  fs : &@git.RepoFileSystem,
+  db : @gitlib.ObjectDb?,
+  pack_ids : Map[String, Bool],
+  repo_cache : Map[String, Bool],
+  id : @git.ObjectId,
+) -> Unit raise @git.GitError {
+  let hex = id.to_hex()
+  if pack_ids.contains(hex) {
+    return
+  }
+  match db {
+    None => raise @git.GitError::PackfileError("missing object " + hex)
+    Some(objdb) => {
+      if repo_cache.contains(hex) {
+        if repo_cache[hex] {
+          return
+        }
+        raise @git.GitError::PackfileError("missing object " + hex)
+      }
+      let exists = match objdb.get(fs, id) {
+        Some(_) => true
+        None => false
+      }
+      repo_cache[hex] = exists
+      if !exists {
+        raise @git.GitError::PackfileError("missing object " + hex)
+      }
+    }
+  }
+}
+
+///|
+fn check_pack_strict_and_fsck(
+  fs : &@git.RepoFileSystem,
+  git_dir : String?,
+  objects : Array[@git.PackObject],
+  strict : Bool,
+  fsck_objects : Bool,
+  ignore_missing_email : Bool,
+) -> Unit raise @git.GitError {
+  if !strict && !fsck_objects {
+    return
+  }
+  let pack_ids : Map[String, Bool] = {}
+  for obj in objects {
+    pack_ids[obj.id.to_hex()] = true
+  }
+  let db = match git_dir {
+    Some(dir) =>
+      if fs.is_dir(dir) {
+        Some(@gitlib.ObjectDb::load(fs, dir))
+      } else {
+        None
+      }
+    None => None
+  }
+  let repo_cache : Map[String, Bool] = {}
+  for obj in objects {
+    if (strict || fsck_objects) &&
+      !ignore_missing_email &&
+      obj.obj_type == @git.ObjectType::Commit {
+      if commit_has_missing_email(obj.data) {
+        raise @git.GitError::InvalidObject("missingEmail")
+      }
+    }
+    if strict {
+      match obj.obj_type {
+        @git.ObjectType::Commit => {
+          let info = @git.parse_commit(obj.data)
+          ensure_object_exists(fs, db, pack_ids, repo_cache, info.tree)
+          for parent in info.parents {
+            ensure_object_exists(fs, db, pack_ids, repo_cache, parent)
+          }
+        }
+        @git.ObjectType::Tree => {
+          let entries = @git.parse_tree(obj.data)
+          for entry in entries {
+            ensure_object_exists(fs, db, pack_ids, repo_cache, entry.id)
+          }
+        }
+        @git.ObjectType::Tag =>
+          match parse_tag_object_id(obj.data) {
+            None => raise @git.GitError::InvalidObject("invalid tag object")
+            Some(target) =>
+              ensure_object_exists(fs, db, pack_ids, repo_cache, target)
+          }
+        _ => ()
+      }
     }
   }
 }
@@ -348,7 +601,36 @@ async fn handle_index_pack(args : Array[String]) -> Unit {
       @sys.exit(1)
     }
     IndexPackParse::Ok(cfg) => {
+      if cfg.delegate_to_real_git {
+        match real_git_path() {
+          Some(real_git) => {
+            let real_args = real_git_args_from_cli()
+            let code = @process.run(real_git, real_args)
+            @sys.exit(code)
+          }
+          None => {
+            @stdio.stderr.write("bit: unsupported index-pack options\n")
+            @sys.exit(1)
+          }
+        }
+      }
       let fs = OsFs::new()
+      let git_dir = find_git_dir(fs)
+      let wants_sha256 = cfg.object_format is Some(format) && format == "sha256"
+      let repo_is_sha256 = is_sha256_repo_from_env()
+      if wants_sha256 || repo_is_sha256 {
+        match real_git_path() {
+          Some(real_git) => {
+            let real_args = real_git_args_from_cli()
+            let code = @process.run(real_git, real_args)
+            @sys.exit(code)
+          }
+          None => {
+            @stdio.stderr.write("bit: SHA256 object format is not supported\n")
+            @sys.exit(1)
+          }
+        }
+      }
 
       // Handle --verify mode
       if cfg.verify {
@@ -396,18 +678,20 @@ async fn handle_index_pack(args : Array[String]) -> Unit {
       if cfg.stdin {
         let pack = read_all_stdin()
         let hash_hex = pack_hash_hex(pack)
-        let git_dir = git_dir_from_env()
         if !fs.is_dir(git_dir) {
           @stdio.stderr.write("fatal: not a git repository\n")
           @sys.exit(1)
         }
-        // SHA256 repositories are not yet supported
-        if is_sha256_repo(git_dir) {
-          @stdio.stderr.write(
-            "bit: SHA256 repositories are not supported\n",
-          )
-          @sys.exit(1)
-        }
+        let objects = @git.parse_packfile(pack)
+        check_sha1_collisions_with_repo(fs, git_dir, objects)
+        check_pack_strict_and_fsck(
+          fs,
+          Some(git_dir),
+          objects,
+          cfg.strict,
+          cfg.fsck_objects,
+          cfg.ignore_missing_email,
+        )
         let pack_dir = git_dir + "/objects/pack"
         ensure_dir(pack_dir)
         let pack_path = pack_dir + "/pack-" + hash_hex + ".pack"
@@ -416,18 +700,13 @@ async fn handle_index_pack(args : Array[String]) -> Unit {
           None => pack_dir + "/pack-" + hash_hex + ".idx"
         }
         fs.write_file(pack_path, pack)
-        @git.write_pack_index(fs, idx_path, pack)
+        @git.write_pack_index_from_objects(fs, idx_path, pack, objects)
         let keep_path = pack_dir + "/pack-" + hash_hex + ".keep"
         write_keep_file(fs, keep_path, cfg.keep_msg)
         @stdio.stdout.write(hash_hex + "\n")
         return ()
       }
       // For file mode, check if current repo is SHA256
-      let git_dir = git_dir_from_env()
-      if fs.is_dir(git_dir) && is_sha256_repo(git_dir) {
-        @stdio.stderr.write("bit: SHA256 repositories are not supported\n")
-        @sys.exit(1)
-      }
       let pack_path = match cfg.pack_path {
         Some(path) => path
         None => {
@@ -455,7 +734,21 @@ async fn handle_index_pack(args : Array[String]) -> Unit {
             pack_path + ".idx"
           }
       }
-      @git.write_pack_index(fs, idx_path, pack)
+      let objects = @git.parse_packfile(pack)
+      let git_dir_opt = if fs.is_dir(git_dir) { Some(git_dir) } else { None }
+      match git_dir_opt {
+        Some(dir) => check_sha1_collisions_with_repo(fs, dir, objects)
+        None => ()
+      }
+      check_pack_strict_and_fsck(
+        fs,
+        git_dir_opt,
+        objects,
+        cfg.strict,
+        cfg.fsck_objects,
+        cfg.ignore_missing_email,
+      )
+      @git.write_pack_index_from_objects(fs, idx_path, pack, objects)
       if cfg.keep_msg is Some(_) {
         let keep_path = if pack_path.has_suffix(".pack") {
           let base = (try! pack_path[:pack_path.length() - 5]).to_string()

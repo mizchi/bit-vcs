@@ -501,6 +501,8 @@ async fn handle_upload_pack(args : Array[String]) -> Unit {
       @sys.exit(129)
     }
   }
+  // Parse config overrides from environment variable
+  let cmdline_config = parse_config_overrides()
   guard parse_pack_args(args) is Some((advertise, repo_path)) else {
     raise @git.GitError::ProtocolError("missing repository path")
   }
@@ -511,14 +513,228 @@ async fn handle_upload_pack(args : Array[String]) -> Unit {
     normalize_repo_root(repo_path)
   }
   let fs = OsFs::new()
+  let git_dir = if root.has_suffix(".git") && !root.has_suffix("/.git") {
+    root
+  } else {
+    root + "/.git"
+  }
+  if is_sha256_repo(git_dir) {
+    match real_git_path() {
+      Some(real_git) => {
+        let real_args = real_git_args_from_cli()
+        let code = @process.run(real_git, real_args)
+        @sys.exit(code)
+      }
+      None => {
+        @stdio.stderr.write("bit: SHA256 repositories are not supported\n")
+        @sys.exit(1)
+      }
+    }
+  }
   if advertise {
     let out = @gitlib.build_upload_pack_advertisement(fs, root)
     @stdio.stdout.write(out)
   } else {
     let input = read_all_stdin()
-    let req = @gitlib.parse_upload_pack_request(input)
-    let out = @gitlib.upload_pack(fs, root, req)
-    @stdio.stdout.write(out)
+    // Check protocol version from GIT_PROTOCOL environment variable
+    let protocol_version = get_protocol_version()
+    if protocol_version == 2 {
+      // Protocol v2: parse and handle v2 request
+      let req = @gitlib.parse_upload_pack_request_v2(input)
+      let config = build_upload_pack_config_with_overrides(
+        fs, root, cmdline_config,
+      )
+      let out = @gitlib.upload_pack_v2(fs, root, req, config)
+      @stdio.stdout.write(out)
+    } else {
+      // Protocol v1: use existing handler
+      let req = @gitlib.parse_upload_pack_request(input)
+      let out = @gitlib.upload_pack(fs, root, req)
+      @stdio.stdout.write(out)
+    }
+  }
+}
+
+///|
+/// Parse config overrides from GIT_CONFIG_OVERRIDES environment variable
+fn parse_config_overrides() -> Map[String, String] {
+  let config : Map[String, String] = {}
+  let overrides = @sys.get_env_var("GIT_CONFIG_OVERRIDES")
+  guard overrides is Some(env_value) else { return config }
+  // Parse key=value pairs separated by newlines
+  for line in split_by_newline(env_value) {
+    if line.length() == 0 {
+      continue
+    }
+    match line.find("=") {
+      Some(idx) => {
+        let key = String::unsafe_substring(line, start=0, end=idx).to_lower()
+        let value = String::unsafe_substring(
+          line,
+          start=idx + 1,
+          end=line.length(),
+        )
+        config[key] = value
+      }
+      None =>
+        // Key without = means the key is present but with no value
+        config[line.to_lower()] = ""
+    }
+  }
+  config
+}
+
+///|
+fn get_protocol_version() -> Int {
+  // Check GIT_PROTOCOL environment variable for version=2
+  let git_protocol = @sys.get_env_var("GIT_PROTOCOL")
+  match git_protocol {
+    Some(val) => if val.contains("version=2") { 2 } else { 1 }
+    None => 1
+  }
+}
+
+///|
+fn build_upload_pack_config_with_overrides(
+  fs : &@git.RepoFileSystem,
+  root : String,
+  overrides : Map[String, String],
+) -> @gitlib.UploadPackConfig {
+  let git_dir = if root.has_suffix(".git") { root } else { root + "/.git" }
+  let config_path = git_dir + "/config"
+
+  // Read allow_filter from file, then check cmdline override
+  let allow_filter = match overrides.get("uploadpack.allowfilter") {
+    Some(v) => {
+      let lower = v.to_lower()
+      lower == "true" || lower == "1" || lower == "yes"
+    }
+    None =>
+      read_config_bool(fs, config_path, "uploadpack", "allowfilter").unwrap_or(
+        true,
+      )
+  }
+
+  // Read blobpackfileuri from cmdline first, then file
+  // Note: -c uploadpack.blobpackfileuri (without =) means key is present but empty
+  // -c uploadpack.blobpackfileuri=anything means key has value
+  let blob_packfile_uri = match overrides.get("uploadpack.blobpackfileuri") {
+    Some(v) =>
+      if v.length() > 0 {
+        Some(v)
+      } else {
+        // Empty value means key was present but no value - still enable the feature
+        // Actually git requires a non-empty value, so empty means disabled
+        None
+      }
+    None => read_config_value(fs, config_path, "uploadpack", "blobpackfileuri")
+  }
+  @gitlib.UploadPackConfig::new(allow_filter, blob_packfile_uri)
+}
+
+///|
+fn read_config_value(
+  fs : &@git.RepoFileSystem,
+  config_path : String,
+  section : String,
+  name : String,
+) -> String? {
+  guard fs.is_file(config_path) else { return None }
+  let content = try? fs.read_file(config_path)
+  guard content is Ok(content) else { return None }
+  let content_str = @utf8.decode_lossy(content[:])
+  // Simple config parsing - look for key = value in section
+  let section_lower = section.to_lower()
+  let name_lower = name.to_lower()
+  let mut in_section = false
+  let lines = split_by_newline(content_str)
+  for line in lines {
+    let trimmed = trim_whitespace(line)
+    if trimmed.has_prefix("[") && trimmed.has_suffix("]") {
+      let sec = String::unsafe_substring(
+        trimmed,
+        start=1,
+        end=trimmed.length() - 1,
+      )
+      in_section = sec.to_lower() == section_lower
+    } else if in_section {
+      match trimmed.find("=") {
+        Some(idx) => {
+          let k = trim_whitespace(
+            String::unsafe_substring(trimmed, start=0, end=idx),
+          )
+          let v = trim_whitespace(
+            String::unsafe_substring(
+              trimmed,
+              start=idx + 1,
+              end=trimmed.length(),
+            ),
+          )
+          if k.to_lower() == name_lower {
+            return Some(v)
+          }
+        }
+        None => ()
+      }
+    }
+  }
+  None
+}
+
+///|
+fn split_by_newline(s : String) -> Array[String] {
+  let result : Array[String] = []
+  let mut start = 0
+  let len = s.length()
+  for i in 0..<len {
+    if s[i] == '\n' {
+      result.push(String::unsafe_substring(s, start~, end=i))
+      start = i + 1
+    }
+  }
+  if start < len {
+    result.push(String::unsafe_substring(s, start~, end=len))
+  }
+  result
+}
+
+///|
+fn trim_whitespace(s : String) -> String {
+  let mut start = 0
+  let mut end = s.length()
+  while start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\r') {
+    start += 1
+  }
+  while end > start &&
+        (s[end - 1] == ' ' || s[end - 1] == '\t' || s[end - 1] == '\r') {
+    end -= 1
+  }
+  if start == 0 && end == s.length() {
+    s
+  } else {
+    String::unsafe_substring(s, start~, end~)
+  }
+}
+
+///|
+fn read_config_bool(
+  fs : &@git.RepoFileSystem,
+  config_path : String,
+  section : String,
+  name : String,
+) -> Bool? {
+  match read_config_value(fs, config_path, section, name) {
+    Some(v) => {
+      let lower = v.to_lower()
+      if lower == "true" || lower == "1" || lower == "yes" {
+        Some(true)
+      } else if lower == "false" || lower == "0" || lower == "no" {
+        Some(false)
+      } else {
+        None
+      }
+    }
+    None => None
   }
 }
 
@@ -541,6 +757,24 @@ async fn handle_receive_pack(args : Array[String]) -> Unit {
     normalize_repo_root(repo_path)
   }
   let fs = OsFs::new()
+  let git_dir = if root.has_suffix(".git") && !root.has_suffix("/.git") {
+    root
+  } else {
+    root + "/.git"
+  }
+  if is_sha256_repo(git_dir) {
+    match real_git_path() {
+      Some(real_git) => {
+        let real_args = real_git_args_from_cli()
+        let code = @process.run(real_git, real_args)
+        @sys.exit(code)
+      }
+      None => {
+        @stdio.stderr.write("bit: SHA256 repositories are not supported\n")
+        @sys.exit(1)
+      }
+    }
+  }
   if advertise {
     let out = @gitlib.build_receive_pack_advertisement(fs, root)
     @stdio.stdout.write(out)

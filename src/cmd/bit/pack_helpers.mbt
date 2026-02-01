@@ -1,30 +1,16 @@
 ///|
-fn git_dir_from_env() -> String {
-  let base = match @sys.get_env_var("GIT_SHIM_CWD") {
-    Some(cwd) => Some(cwd)
-    None => @sys.get_env_var("GIT_SHIM_PWD")
-  }
-  match @sys.get_env_var("GIT_DIR") {
-    Some(path) =>
-      if path.has_prefix("/") {
-        path
-      } else {
-        match base {
-          None => path
-          Some(cwd) => cwd + "/" + path
-        }
-      }
-    None =>
-      match base {
-        None => ".git"
-        Some(cwd) => cwd + "/.git"
-      }
-  }
+fn shim_cwd_from_env() -> String? {
+  @sys.get_env_var("GIT_SHIM_CWD")
 }
 
 ///|
-fn shim_cwd_from_env() -> String? {
-  @sys.get_env_var("GIT_SHIM_CWD")
+fn real_git_args_from_cli() -> Array[String] {
+  let cli = @sys.get_cli_args()
+  let out : Array[String] = []
+  for i in 1..<cli.length() {
+    out.push(cli[i])
+  }
+  out
 }
 
 ///|
@@ -163,4 +149,47 @@ fn is_sha256_repo(git_dir : String) -> Bool {
     Some(format) => format.to_lower() == "sha256"
     None => false
   }
+}
+
+///|
+fn is_sha256_repo_from_env() -> Bool {
+  let fs = OsFs::new()
+  let git_dir = find_git_dir(fs)
+  if is_sha256_repo(git_dir) {
+    return true
+  }
+  match @sys.get_env_var("GIT_SHIM_CWD") {
+    Some(cwd) => {
+      let alt_git_dir = cwd + "/.git"
+      if alt_git_dir != git_dir && is_sha256_repo(alt_git_dir) {
+        return true
+      }
+    }
+    None => ()
+  }
+  match @sys.get_env_var("GIT_WORK_TREE") {
+    Some(dir) => {
+      let alt_git_dir = dir + "/.git"
+      if alt_git_dir != git_dir && is_sha256_repo(alt_git_dir) {
+        return true
+      }
+    }
+    None => ()
+  }
+  let args = @sys.get_cli_args()
+  let mut i = 1
+  while i + 1 < args.length() {
+    if args[i] == "-C" {
+      let raw = args[i + 1]
+      let base = @sys.get_env_var("GIT_SHIM_PWD").unwrap_or(".")
+      let cwd = if raw.has_prefix("/") { raw } else { base + "/" + raw }
+      if is_sha256_repo(cwd + "/.git") {
+        return true
+      }
+      i += 2
+      continue
+    }
+    i += 1
+  }
+  false
 }

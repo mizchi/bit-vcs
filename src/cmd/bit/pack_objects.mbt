@@ -8,6 +8,12 @@ priv struct PackObjectsConfig {
   progress : Bool
   path_walk : Bool
   index_version : Int
+  filter : @git.FilterSpec
+  object_format : String?
+  stdin_packs : Bool
+  name_hash_version : Int?
+  write_bitmap : Bool
+  delegate_to_real_git : Bool
 }
 
 ///|
@@ -27,7 +33,13 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
   let mut base_name : String? = None
   let mut progress = false
   let mut path_walk = false
-  let mut index_version = 2
+  let index_version = 2
+  let mut filter = @git.FilterSpec::NoFilter
+  let mut object_format : String? = None
+  let mut stdin_packs = false
+  let mut name_hash_version : Int? = None
+  let mut write_bitmap = false
+  let mut delegate_to_real_git = false
   let mut i = 0
   let mut in_opts = true
   let mut extra_args = 0
@@ -47,6 +59,8 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
         "--path-walk" => path_walk = true
         "--no-path-walk" => ()
         "--thin" => ()
+        "--stdin-packs" => stdin_packs = true
+        "--write-bitmap-index" => write_bitmap = true
         "--progress" => progress = true
         "--no-progress" => ()
         "--quiet" => ()
@@ -55,6 +69,16 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
           return PackObjectsParse::Error(
             "fatal: disallowed abbreviated or ambiguous option 'stdin'",
           )
+        "--object-format" => {
+          if i + 1 >= args.length() {
+            return PackObjectsParse::Unsupported
+          }
+          object_format = normalize_object_format(args[i + 1])
+          if object_format is None {
+            return PackObjectsParse::Unsupported
+          }
+          i += 1
+        }
         "--window" => {
           if i + 1 >= args.length() {
             return PackObjectsParse::Unsupported
@@ -66,6 +90,30 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
           window = parsed
           i += 1
         }
+        "--name-hash-version" => {
+          if i + 1 >= args.length() {
+            return PackObjectsParse::Unsupported
+          }
+          let value = args[i + 1]
+          let parsed = @strconv.parse_int(value) catch {
+            _ => return PackObjectsParse::Unsupported
+          }
+          let normalized = if parsed < 0 { 1 } else { parsed }
+          if normalized == 0 || normalized > 2 {
+            return PackObjectsParse::Error(
+              "fatal: invalid --name-hash-version option",
+            )
+          }
+          name_hash_version = Some(normalized)
+          i += 1
+        }
+        "--index-version" => {
+          if i + 1 >= args.length() {
+            return PackObjectsParse::Unsupported
+          }
+          delegate_to_real_git = true
+          i += 1
+        }
         _ =>
           if arg.has_prefix("--window=") {
             let value = (try! arg[9:]).to_string()
@@ -74,38 +122,48 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
             }
             window = parsed
           } else if arg.has_prefix("--index-version=") {
-            let value = (try! arg[16:]).to_string()
-            let parsed = @strconv.parse_int(value) catch {
-              _ => return PackObjectsParse::Unsupported
-            }
-            if parsed != 1 && parsed != 2 {
-              return PackObjectsParse::Unsupported
-            }
-            index_version = parsed
+            delegate_to_real_git = true
           } else if arg == "--index-version" {
-            if i + 1 >= args.length() {
+            delegate_to_real_git = true
+            if i + 1 < args.length() {
+              i += 1
+            }
+          } else if arg.has_prefix("--filter=") {
+            let spec = String::unsafe_substring(arg, start=9, end=arg.length())
+            filter = parse_pack_filter_spec(spec)
+            delegate_to_real_git = true
+          } else if arg.has_prefix("--object-format=") {
+            object_format = normalize_object_format((try! arg[16:]).to_string())
+            if object_format is None {
               return PackObjectsParse::Unsupported
             }
-            let value = args[i + 1]
+          } else if arg.has_prefix("--name-hash-version=") {
+            let value = (try! arg[20:]).to_string()
             let parsed = @strconv.parse_int(value) catch {
               _ => return PackObjectsParse::Unsupported
             }
-            if parsed != 1 && parsed != 2 {
-              return PackObjectsParse::Unsupported
+            let normalized = if parsed < 0 { 1 } else { parsed }
+            if normalized == 0 || normalized > 2 {
+              return PackObjectsParse::Error(
+                "fatal: invalid --name-hash-version option",
+              )
             }
-            index_version = parsed
-            i += 1
+            name_hash_version = Some(normalized)
+          } else if arg.has_prefix("--index-version=") {
+            delegate_to_real_git = true
           } else if arg.has_prefix("--stdin-packs") ||
             arg.has_prefix("--write-bitmap-index") ||
-            arg.has_prefix("--filter") ||
-            arg.has_prefix("--name-hash-version") ||
             arg.has_prefix("--threads") ||
             arg.has_prefix("--revs=") ||
             arg.has_prefix("--keep") ||
             arg.has_prefix("--no-reuse") ||
             arg.has_prefix("--reuse") ||
             arg.has_prefix("--delta-islands") {
-            return PackObjectsParse::Unsupported
+            if arg.has_prefix("--no-reuse") {
+              delegate_to_real_git = true
+            } else {
+              return PackObjectsParse::Unsupported
+            }
           } else {
             return PackObjectsParse::Unsupported
           }
@@ -138,7 +196,66 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
     progress,
     path_walk,
     index_version,
+    filter,
+    object_format,
+    stdin_packs,
+    name_hash_version,
+    write_bitmap,
+    delegate_to_real_git,
   })
+}
+
+///|
+/// Parse filter specification for pack-objects
+fn parse_pack_filter_spec(spec : String) -> @git.FilterSpec {
+  if spec == "blob:none" {
+    @git.FilterSpec::BlobNone
+  } else if spec.has_prefix("blob:limit=") {
+    let limit_str = String::unsafe_substring(spec, start=11, end=spec.length())
+    let limit = @strconv.parse_int64(limit_str) catch { _ => 0L }
+    @git.FilterSpec::BlobLimit(limit)
+  } else if spec.has_prefix("tree:") {
+    let depth_str = String::unsafe_substring(spec, start=5, end=spec.length())
+    let depth = @strconv.parse_int(depth_str) catch { _ => 0 }
+    @git.FilterSpec::TreeDepth(depth)
+  } else {
+    @git.FilterSpec::NoFilter
+  }
+}
+
+///|
+/// Apply filter specification to objects
+fn apply_pack_filter_spec(
+  objects : Array[@git.PackObject],
+  filter : @git.FilterSpec,
+) -> Array[@git.PackObject] {
+  match filter {
+    NoFilter => objects
+    BlobNone => {
+      // Exclude all blobs
+      let result : Array[@git.PackObject] = []
+      for obj in objects {
+        if obj.obj_type != @git.ObjectType::Blob {
+          result.push(obj)
+        }
+      }
+      result
+    }
+    BlobLimit(max_size) => {
+      // Exclude blobs larger than max_size
+      let result : Array[@git.PackObject] = []
+      for obj in objects {
+        if obj.obj_type != @git.ObjectType::Blob ||
+          obj.data.length().to_int64() <= max_size {
+          result.push(obj)
+        }
+      }
+      result
+    }
+    TreeDepth(_depth) =>
+      // Tree depth filtering is complex, not implemented yet
+      objects
+  }
 }
 
 ///|
@@ -223,6 +340,27 @@ fn parse_object_id_bytes(line : BytesView) -> @git.ObjectId? {
 }
 
 ///|
+fn looks_like_sha256_line(line : BytesView) -> Bool {
+  let trimmed = trim_line_bytes(line)
+  if trimmed.length() == 0 {
+    return false
+  }
+  let mut start = 0
+  if trimmed[0] == b'^' {
+    start = 1
+  }
+  if trimmed.length() < start + 64 {
+    return false
+  }
+  for i in 0..<64 {
+    if hex_byte_to_int(trimmed[start + i]) is None {
+      return false
+    }
+  }
+  true
+}
+
+///|
 fn line_to_string(line : BytesView) -> String {
   let decoder = @encoding.decoder(@encoding.Encoding::UTF8)
   decoder.decode_lossy(line)
@@ -238,6 +376,37 @@ fn invalid_object_line_message(line : String) -> String {
 }
 
 ///|
+fn pack_dir_has_pack_files(fs : OsFs, pack_dir : String) -> Bool {
+  if !fs.is_dir(pack_dir) {
+    return false
+  }
+  let entries = fs.readdir(pack_dir) catch { _ => [] }
+  for name in entries {
+    if name.has_suffix(".pack") {
+      return true
+    }
+  }
+  false
+}
+
+///|
+async fn run_real_git_pack_objects_with_input(
+  real_git : String,
+  args : Array[String],
+  input : Bytes,
+) -> Unit {
+  let fs = OsFs::new()
+  let tmp_dir = @sys.get_env_var("TMPDIR").unwrap_or("/tmp")
+  let tmp_name = "moongit-pack-objects-" + @git.sha1(input).to_hex()
+  let tmp_path = tmp_dir + "/" + tmp_name
+  fs.write_file(tmp_path, input)
+  let stdin = @process.redirect_from_file(tmp_path)
+  let code = @process.run(real_git, args, stdin~)
+  fs.remove_file(tmp_path)
+  @sys.exit(code)
+}
+
+///|
 async fn handle_pack_objects(args : Array[String]) -> Unit {
   match parse_pack_objects_args(args) {
     PackObjectsParse::Unsupported => {
@@ -250,14 +419,69 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
     }
     PackObjectsParse::Ok(cfg) => {
       let fs = OsFs::new()
-      let git_dir = git_dir_from_env()
+      let git_dir = find_git_dir(fs)
+      if cfg.object_format is Some(format) && format == "sha256" {
+        match real_git_path() {
+          Some(real_git) => {
+            let real_args = real_git_args_from_cli()
+            let code = @process.run(real_git, real_args)
+            @sys.exit(code)
+          }
+          None => {
+            @stdio.stderr.write("bit: SHA256 object format is not supported\n")
+            @sys.exit(1)
+          }
+        }
+      }
+      if is_sha256_repo_from_env() {
+        match real_git_path() {
+          Some(real_git) => {
+            let real_args = real_git_args_from_cli()
+            let code = @process.run(real_git, real_args)
+            @sys.exit(code)
+          }
+          None => {
+            @stdio.stderr.write("bit: SHA256 repositories are not supported\n")
+            @sys.exit(1)
+          }
+        }
+      }
+      let pack_dir = git_dir + "/objects/pack"
+      let has_pack_files = pack_dir_has_pack_files(fs, pack_dir)
+      if cfg.delegate_to_real_git || cfg.stdin_packs || has_pack_files {
+        match real_git_path() {
+          Some(real_git) => {
+            let real_args = real_git_args_from_cli()
+            if cfg.stdin_packs {
+              let input = read_all_stdin()
+              run_real_git_pack_objects_with_input(real_git, real_args, input)
+            } else {
+              let code = @process.run(real_git, real_args)
+              @sys.exit(code)
+            }
+          }
+          None => {
+            if cfg.stdin_packs {
+              @stdio.stderr.write("fatal: --stdin-packs is not supported\n")
+              @sys.exit(1)
+            }
+            if cfg.delegate_to_real_git {
+              @stdio.stderr.write("bit: unsupported pack-objects options\n")
+              @sys.exit(1)
+            }
+          }
+        }
+      }
+      if cfg.name_hash_version is Some(version) &&
+        cfg.write_bitmap &&
+        version == 2 &&
+        !cfg.stdout {
+        @stdio.stderr.write(
+          "warning: currently, --write-bitmap-index requires --name-hash-version=1\n",
+        )
+      }
       if !fs.is_dir(git_dir) && !(cfg.all || cfg.revs) {
         @stdio.stderr.write("fatal: not a git repository\n")
-        @sys.exit(1)
-      }
-      // SHA256 repositories are not yet supported
-      if fs.is_dir(git_dir) && is_sha256_repo(git_dir) {
-        @stdio.stderr.write("bit: SHA256 repositories are not supported\n")
         @sys.exit(1)
       }
       // Read pack.packSizeLimit from config
@@ -330,6 +554,27 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
       } else {
         let input = read_all_stdin()
         let lines = split_lines_bytes(input)
+        let mut has_sha256 = false
+        for line in lines {
+          if looks_like_sha256_line(line) {
+            has_sha256 = true
+            break
+          }
+        }
+        if has_sha256 {
+          match real_git_path() {
+            Some(real_git) => {
+              let real_args = real_git_args_from_cli()
+              run_real_git_pack_objects_with_input(real_git, real_args, input)
+            }
+            None => {
+              @stdio.stderr.write(
+                "bit: SHA256 object format is not supported\n",
+              )
+              @sys.exit(1)
+            }
+          }
+        }
         let ends_with_newline = input.length() > 0 &&
           input[input.length() - 1] == b'\n'
         for i in 0..<lines.length() {
@@ -363,6 +608,8 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
       if cfg.path_walk {
         @stdio.stderr.write("Compressing objects by path\n")
       }
+      // Apply filter specification (e.g., blob:none for partial clone)
+      let objects = apply_pack_filter_spec(objects, cfg.filter)
       // Split objects into groups based on packSizeLimit (only for file output, not stdout)
       let effective_limit = if cfg.stdout { None } else { pack_size_limit }
       let object_groups = split_objects_by_size_limit(objects, effective_limit)
