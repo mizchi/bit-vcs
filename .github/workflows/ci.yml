@@ -51,10 +51,10 @@ jobs:
       - name: Moon update
         run: moon update
 
-      - name: Build moongit
+      - name: Build bit
         run: |
           moon build --target native
-          cp _build/native/release/build/cmd/moongit/moongit.exe tools/git-shim/moon
+          cp _build/native/release/build/cmd/bit/bit.exe tools/git-shim/moon
           chmod +x tools/git-shim/moon
 
       - name: Run git compatibility tests

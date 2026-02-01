@@ -186,14 +186,29 @@ just git-t-allowlist  # Git compatibility tests
 
 ## Quick Start
 
+### Install binary
+
+```bash
+# One-line install (Linux, macOS)
+curl -fsSL https://raw.githubusercontent.com/mizchi/bit/main/install.sh | bash
+
+# Or download from GitHub Releases
+# https://github.com/mizchi/bit/releases
+```
+
+### Build from source
+
 ```bash
 # Build native binary
 moon build --target native
 
 # Install CLI (installs to ~/.local/bin/bit)
 just install
+```
 
-# Use as library
+### Use as library
+
+```bash
 moon add mizchi/bit
 ```
 
