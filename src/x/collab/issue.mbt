@@ -32,7 +32,7 @@ pub fn Collab::create_issue(
   let issue_data = issue.serialize()
   let (issue_blob_id, issue_compressed) = @git.create_blob_string(issue_data)
   write_object_bytes(fs, self.git_dir, issue_blob_id, issue_compressed)
-  // Update _den tree structure with new issue
+  // Update _collab tree structure with new issue
   update_issues_tree(
     fs,
     backing_fs,
@@ -52,10 +52,10 @@ pub fn Collab::get_issue(
   issue_id : String,
 ) -> Issue? raise @git.GitError {
   let db = @lib.ObjectDb::load_lazy(backing_fs, self.git_dir)
-  let den_commit = get_den_commit(backing_fs, self.git_dir)
-  guard den_commit is Some(commit_id) else { return None }
-  let den_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard den_tree is Some(tree_id) else { return None }
+  let collab_commit = get_collab_commit(backing_fs, self.git_dir)
+  guard collab_commit is Some(commit_id) else { return None }
+  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
+  guard collab_tree is Some(tree_id) else { return None }
   // Navigate to issues/<id>/issue.data
   let issues_tree_id = find_tree_entry(db, backing_fs, tree_id, "issues")
   guard issues_tree_id is Some(issues_dir_id) else { return None }
@@ -79,10 +79,10 @@ pub fn Collab::list_issues(
 ) -> Array[Issue] raise @git.GitError {
   let result : Array[Issue] = []
   let db = @lib.ObjectDb::load_lazy(backing_fs, self.git_dir)
-  let den_commit = get_den_commit(backing_fs, self.git_dir)
-  guard den_commit is Some(commit_id) else { return result }
-  let den_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard den_tree is Some(tree_id) else { return result }
+  let collab_commit = get_collab_commit(backing_fs, self.git_dir)
+  guard collab_commit is Some(commit_id) else { return result }
+  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
+  guard collab_tree is Some(tree_id) else { return result }
   let issues_tree_id = find_tree_entry(db, backing_fs, tree_id, "issues")
   guard issues_tree_id is Some(issues_dir_id) else { return result }
   // List all issue directories
@@ -235,7 +235,7 @@ pub fn Collab::add_issue_comment(
   let final_data = final_comment.serialize()
   let (final_blob_id, final_compressed) = @git.create_blob_string(final_data)
   write_object_bytes(fs, self.git_dir, final_blob_id, final_compressed)
-  // Update _den tree with new comment
+  // Update _collab tree with new comment
   add_issue_comment_to_tree(
     fs,
     backing_fs,
@@ -257,10 +257,10 @@ pub fn Collab::list_issue_comments(
 ) -> Array[IssueComment] raise @git.GitError {
   let result : Array[IssueComment] = []
   let db = @lib.ObjectDb::load_lazy(backing_fs, self.git_dir)
-  let den_commit = get_den_commit(backing_fs, self.git_dir)
-  guard den_commit is Some(commit_id) else { return result }
-  let den_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard den_tree is Some(tree_id) else { return result }
+  let collab_commit = get_collab_commit(backing_fs, self.git_dir)
+  guard collab_commit is Some(commit_id) else { return result }
+  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
+  guard collab_tree is Some(tree_id) else { return result }
   // Navigate to issues/<id>/comments
   let issues_dir_id = find_tree_entry(db, backing_fs, tree_id, "issues")
   guard issues_dir_id is Some(iid) else { return result }
@@ -336,10 +336,10 @@ fn load_issue_counter(
   git_dir : String,
 ) -> Int raise @git.GitError {
   let db = @lib.ObjectDb::load_lazy(backing_fs, git_dir)
-  let den_commit = get_den_commit(backing_fs, git_dir)
-  guard den_commit is Some(commit_id) else { return 1 }
-  let den_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard den_tree is Some(tree_id) else { return 1 }
+  let collab_commit = get_collab_commit(backing_fs, git_dir)
+  guard collab_commit is Some(commit_id) else { return 1 }
+  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
+  guard collab_tree is Some(tree_id) else { return 1 }
   let meta_id = find_tree_entry(db, backing_fs, tree_id, "meta")
   guard meta_id is Some(mid) else { return 1 }
   let counter_id = find_tree_entry(db, backing_fs, mid, "issue_counter")
@@ -360,13 +360,13 @@ fn update_issues_tree(
   next_issue_id : Int,
 ) -> Unit raise @git.GitError {
   let db = @lib.ObjectDb::load_lazy(backing_fs, git_dir)
-  let den_commit = get_den_commit(backing_fs, git_dir)
-  guard den_commit is Some(commit_id) else {
-    raise @git.GitError::InvalidObject("_den branch not found")
+  let collab_commit = get_collab_commit(backing_fs, git_dir)
+  guard collab_commit is Some(commit_id) else {
+    raise @git.GitError::InvalidObject("_collab branch not found")
   }
-  let den_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard den_tree is Some(root_tree_id) else {
-    raise @git.GitError::InvalidObject("_den tree not found")
+  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
+  guard collab_tree is Some(root_tree_id) else {
+    raise @git.GitError::InvalidObject("_collab tree not found")
   }
   let root_obj = db.get(backing_fs, root_tree_id)
   guard root_obj is Some(root_tree_obj) else {
@@ -374,13 +374,13 @@ fn update_issues_tree(
   }
   let root_entries = @git.parse_tree(root_tree_obj.data)
   // Find existing tree IDs
-  let mut den_tree_id = @git.ObjectId::zero()
+  let mut collab_tree_id = @git.ObjectId::zero()
   let mut meta_tree_id = @git.ObjectId::zero()
   let mut index_tree_id = @git.ObjectId::zero()
   let mut issues_tree_id = @git.ObjectId::zero()
   for entry in root_entries {
     match entry.name {
-      "prs" => den_tree_id = entry.id
+      "prs" => collab_tree_id = entry.id
       "meta" => meta_tree_id = entry.id
       "index" => index_tree_id = entry.id
       "issues" => issues_tree_id = entry.id
@@ -456,7 +456,7 @@ fn update_issues_tree(
     @git.TreeEntry::new("040000", "index", index_tree_id),
     @git.TreeEntry::new("040000", "issues", new_issues_tree_id),
     @git.TreeEntry::new("040000", "meta", new_meta_tree_id),
-    @git.TreeEntry::new("040000", "prs", den_tree_id),
+    @git.TreeEntry::new("040000", "prs", collab_tree_id),
   ]
   let (new_root_tree_id, new_root_compressed) = @git.create_tree(
     new_root_entries,
@@ -466,10 +466,10 @@ fn update_issues_tree(
   let commit = @git.Commit::new(
     new_root_tree_id,
     [commit_id],
-    "Collab <den@local>",
+    "Collab <collab@local>",
     0L,
     "+0000",
-    "Collab <den@local>",
+    "Collab <collab@local>",
     0L,
     "+0000",
     "Create Issue #\{issue_id}\n",
@@ -477,8 +477,7 @@ fn update_issues_tree(
   let (new_commit_id, commit_compressed) = @git.create_commit(commit)
   write_object_bytes(fs, git_dir, new_commit_id, commit_compressed)
   // Update ref
-  let ref_path = join_path(git_dir, den_ref)
-  fs.write_string(ref_path, new_commit_id.to_hex() + "\n")
+  write_collab_ref(fs, backing_fs, git_dir, new_commit_id)
 }
 
 ///|
@@ -490,26 +489,26 @@ fn update_issue_data(
   issue_blob_id : @git.ObjectId,
 ) -> Unit raise @git.GitError {
   let db = @lib.ObjectDb::load_lazy(backing_fs, git_dir)
-  let den_commit = get_den_commit(backing_fs, git_dir)
-  guard den_commit is Some(commit_id) else {
-    raise @git.GitError::InvalidObject("_den branch not found")
+  let collab_commit = get_collab_commit(backing_fs, git_dir)
+  guard collab_commit is Some(commit_id) else {
+    raise @git.GitError::InvalidObject("_collab branch not found")
   }
-  let den_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard den_tree is Some(root_tree_id) else {
-    raise @git.GitError::InvalidObject("_den tree not found")
+  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
+  guard collab_tree is Some(root_tree_id) else {
+    raise @git.GitError::InvalidObject("_collab tree not found")
   }
   let root_obj = db.get(backing_fs, root_tree_id)
   guard root_obj is Some(root_tree_obj) else {
     raise @git.GitError::InvalidObject("Cannot read root tree")
   }
   let root_entries = @git.parse_tree(root_tree_obj.data)
-  let mut den_tree_id = @git.ObjectId::zero()
+  let mut collab_tree_id = @git.ObjectId::zero()
   let mut meta_tree_id = @git.ObjectId::zero()
   let mut index_tree_id = @git.ObjectId::zero()
   let mut issues_tree_id = @git.ObjectId::zero()
   for entry in root_entries {
     match entry.name {
-      "prs" => den_tree_id = entry.id
+      "prs" => collab_tree_id = entry.id
       "meta" => meta_tree_id = entry.id
       "index" => index_tree_id = entry.id
       "issues" => issues_tree_id = entry.id
@@ -559,7 +558,7 @@ fn update_issue_data(
     @git.TreeEntry::new("040000", "index", index_tree_id),
     @git.TreeEntry::new("040000", "issues", new_issues_tree_id),
     @git.TreeEntry::new("040000", "meta", meta_tree_id),
-    @git.TreeEntry::new("040000", "prs", den_tree_id),
+    @git.TreeEntry::new("040000", "prs", collab_tree_id),
   ]
   let (new_root_tree_id, new_root_compressed) = @git.create_tree(
     new_root_entries,
@@ -569,10 +568,10 @@ fn update_issue_data(
   let commit = @git.Commit::new(
     new_root_tree_id,
     [commit_id],
-    "Collab <den@local>",
+    "Collab <collab@local>",
     0L,
     "+0000",
-    "Collab <den@local>",
+    "Collab <collab@local>",
     0L,
     "+0000",
     "Update Issue #\{issue_id}\n",
@@ -580,8 +579,7 @@ fn update_issue_data(
   let (new_commit_id, commit_compressed) = @git.create_commit(commit)
   write_object_bytes(fs, git_dir, new_commit_id, commit_compressed)
   // Update ref
-  let ref_path = join_path(git_dir, den_ref)
-  fs.write_string(ref_path, new_commit_id.to_hex() + "\n")
+  write_collab_ref(fs, backing_fs, git_dir, new_commit_id)
 }
 
 ///|
@@ -594,26 +592,26 @@ fn add_issue_comment_to_tree(
   blob_id : @git.ObjectId,
 ) -> Unit raise @git.GitError {
   let db = @lib.ObjectDb::load_lazy(backing_fs, git_dir)
-  let den_commit = get_den_commit(backing_fs, git_dir)
-  guard den_commit is Some(commit_id_val) else {
-    raise @git.GitError::InvalidObject("_den branch not found")
+  let collab_commit = get_collab_commit(backing_fs, git_dir)
+  guard collab_commit is Some(commit_id_val) else {
+    raise @git.GitError::InvalidObject("_collab branch not found")
   }
-  let den_tree = get_commit_tree(db, backing_fs, commit_id_val)
-  guard den_tree is Some(root_tree_id) else {
-    raise @git.GitError::InvalidObject("_den tree not found")
+  let collab_tree = get_commit_tree(db, backing_fs, commit_id_val)
+  guard collab_tree is Some(root_tree_id) else {
+    raise @git.GitError::InvalidObject("_collab tree not found")
   }
   let root_obj = db.get(backing_fs, root_tree_id)
   guard root_obj is Some(root_tree_obj) else {
     raise @git.GitError::InvalidObject("Cannot read root tree")
   }
   let root_entries = @git.parse_tree(root_tree_obj.data)
-  let mut den_tree_id = @git.ObjectId::zero()
+  let mut collab_tree_id = @git.ObjectId::zero()
   let mut meta_tree_id = @git.ObjectId::zero()
   let mut index_tree_id = @git.ObjectId::zero()
   let mut issues_tree_id = @git.ObjectId::zero()
   for entry in root_entries {
     match entry.name {
-      "prs" => den_tree_id = entry.id
+      "prs" => collab_tree_id = entry.id
       "meta" => meta_tree_id = entry.id
       "index" => index_tree_id = entry.id
       "issues" => issues_tree_id = entry.id
@@ -679,7 +677,7 @@ fn add_issue_comment_to_tree(
     @git.TreeEntry::new("040000", "index", index_tree_id),
     @git.TreeEntry::new("040000", "issues", new_issues_tree_id),
     @git.TreeEntry::new("040000", "meta", meta_tree_id),
-    @git.TreeEntry::new("040000", "prs", den_tree_id),
+    @git.TreeEntry::new("040000", "prs", collab_tree_id),
   ]
   let (new_root_tree_id, new_root_compressed) = @git.create_tree(
     new_root_entries,
@@ -689,10 +687,10 @@ fn add_issue_comment_to_tree(
   let commit = @git.Commit::new(
     new_root_tree_id,
     [commit_id_val],
-    "Collab <den@local>",
+    "Collab <collab@local>",
     0L,
     "+0000",
-    "Collab <den@local>",
+    "Collab <collab@local>",
     0L,
     "+0000",
     "Add comment to Issue #\{issue_id}\n",
@@ -700,6 +698,5 @@ fn add_issue_comment_to_tree(
   let (new_commit_id, commit_compressed) = @git.create_commit(commit)
   write_object_bytes(fs, git_dir, new_commit_id, commit_compressed)
   // Update ref
-  let ref_path = join_path(git_dir, den_ref)
-  fs.write_string(ref_path, new_commit_id.to_hex() + "\n")
+  write_collab_ref(fs, backing_fs, git_dir, new_commit_id)
 }

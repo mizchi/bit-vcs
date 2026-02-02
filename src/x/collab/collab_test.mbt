@@ -87,10 +87,10 @@ fn short_hex_test(hex : String, start : Int, end : Int) -> String {
 }
 
 ///|
-test "pr: init creates _den branch" {
+test "pr: init creates _collab branch" {
   let fs = setup_repo_with_branch()
   let prs = Collab::init(fs, fs, "/repo/.git")
-  assert_true(fs.is_file("/repo/.git/refs/heads/_den"))
+  assert_true(fs.is_file("/repo/.git/refs/heads/_collab"))
   assert_eq(prs.next_id, 1)
 }
 
@@ -128,8 +128,8 @@ test "pr: list PRs" {
   )
   let all = prs.list_prs(fs)
   assert_eq(all.length(), 2)
-  let open_den = prs.list_prs(fs, state=Some(PrState::Open))
-  assert_eq(open_den.length(), 2)
+  let open_collab = prs.list_prs(fs, state=Some(PrState::Open))
+  assert_eq(open_collab.length(), 2)
 }
 
 ///|
@@ -149,13 +149,13 @@ test "pr: close PR" {
 ///|
 test "pr: update PR" {
   let fs = setup_repo_with_branch()
-  let den = Collab::init(fs, fs, "/repo/.git")
-  let _ = den.create_pr(
+  let collab = Collab::init(fs, fs, "/repo/.git")
+  let _ = collab.create_pr(
     fs, fs, "Original Title", "Original body", "refs/heads/feature", "refs/heads/main",
     "alice@example.com", 1706745600L,
   )
   // Update title and body
-  let updated = den.update_pr(
+  let updated = collab.update_pr(
     fs,
     fs,
     "1",
@@ -166,7 +166,7 @@ test "pr: update PR" {
   assert_eq(updated.title(), "Updated Title")
   assert_eq(updated.body(), "Updated body with more details")
   // Verify persisted
-  let retrieved = den.get_pr(fs, "1")
+  let retrieved = collab.get_pr(fs, "1")
   guard retrieved is Some(pr) else { panic() }
   assert_eq(pr.title(), "Updated Title")
 }
@@ -174,13 +174,13 @@ test "pr: update PR" {
 ///|
 test "pr: update PR labels" {
   let fs = setup_repo_with_branch()
-  let den = Collab::init(fs, fs, "/repo/.git")
-  let _ = den.create_pr(
+  let collab = Collab::init(fs, fs, "/repo/.git")
+  let _ = collab.create_pr(
     fs, fs, "Test PR", "Body", "refs/heads/feature", "refs/heads/main", "alice@example.com",
     1706745600L,
   )
   // Add labels
-  let updated = den.update_pr(
+  let updated = collab.update_pr(
     fs,
     fs,
     "1",
@@ -308,12 +308,12 @@ test "pr: merge fast-forward" {
 ///|
 test "pr: merge squash" {
   let fs = setup_repo_with_branch()
-  let den = Collab::init(fs, fs, "/repo/.git")
-  let _ = den.create_pr(
+  let collab = Collab::init(fs, fs, "/repo/.git")
+  let _ = collab.create_pr(
     fs, fs, "Test PR", "Body", "refs/heads/feature", "refs/heads/main", "alice@example.com",
     1706745600L,
   )
-  let result = den.merge_pr(
+  let result = collab.merge_pr(
     fs,
     fs,
     "1",
@@ -324,7 +324,7 @@ test "pr: merge squash" {
   assert_true(result.success())
   assert_eq(result.message(), "Squash merge completed")
   // Verify PR is marked as merged
-  let merged = den.get_pr(fs, "1")
+  let merged = collab.get_pr(fs, "1")
   guard merged is Some(pr) else { panic() }
   assert_eq(pr.state(), PrState::Merged)
 }
@@ -332,12 +332,12 @@ test "pr: merge squash" {
 ///|
 test "pr: merge commit" {
   let fs = setup_repo_with_branch()
-  let den = Collab::init(fs, fs, "/repo/.git")
-  let _ = den.create_pr(
+  let collab = Collab::init(fs, fs, "/repo/.git")
+  let _ = collab.create_pr(
     fs, fs, "Test PR", "Body", "refs/heads/feature", "refs/heads/main", "alice@example.com",
     1706745600L,
   )
-  let result = den.merge_pr(
+  let result = collab.merge_pr(
     fs,
     fs,
     "1",
@@ -348,7 +348,7 @@ test "pr: merge commit" {
   assert_true(result.success())
   assert_eq(result.message(), "Merge commit created")
   // Verify PR is marked as merged
-  let merged = den.get_pr(fs, "1")
+  let merged = collab.get_pr(fs, "1")
   guard merged is Some(pr) else { panic() }
   assert_eq(pr.state(), PrState::Merged)
 }
@@ -507,12 +507,12 @@ test "issue: link PR to issue" {
 ///|
 test "issue: update issue" {
   let fs = setup_repo_with_branch()
-  let den = Collab::init(fs, fs, "/repo/.git")
-  let _ = den.create_issue(
+  let collab = Collab::init(fs, fs, "/repo/.git")
+  let _ = collab.create_issue(
     fs, fs, "Original Title", "Original body", "alice@example.com", 1706745600L,
   )
   // Update title and body
-  let updated = den.update_issue(
+  let updated = collab.update_issue(
     fs,
     fs,
     "1",
@@ -523,7 +523,7 @@ test "issue: update issue" {
   assert_eq(updated.title(), "Updated Title")
   assert_eq(updated.body(), "Updated body")
   // Verify persisted
-  let retrieved = den.get_issue(fs, "1")
+  let retrieved = collab.get_issue(fs, "1")
   guard retrieved is Some(issue) else { panic() }
   assert_eq(issue.title(), "Updated Title")
 }
@@ -531,12 +531,12 @@ test "issue: update issue" {
 ///|
 test "issue: update issue labels and assignees" {
   let fs = setup_repo_with_branch()
-  let den = Collab::init(fs, fs, "/repo/.git")
-  let _ = den.create_issue(
+  let collab = Collab::init(fs, fs, "/repo/.git")
+  let _ = collab.create_issue(
     fs, fs, "Bug", "Details", "alice@example.com", 1706745600L,
   )
   // Update labels and assignees
-  let updated = den.update_issue(
+  let updated = collab.update_issue(
     fs,
     fs,
     "1",
@@ -584,19 +584,19 @@ test "format: serialize and parse IssueComment" {
 ///|
 test "notes: add and get note" {
   let fs = setup_repo_with_branch()
-  let den = Collab::init(fs, fs, "/repo/.git")
+  let collab = Collab::init(fs, fs, "/repo/.git")
   // Get a commit to attach note to
   let commit_id = @lib.resolve_ref(fs, "/repo/.git", "refs/heads/main")
   guard commit_id is Some(cid) else { panic() }
   // Add note
-  let note = den.add_note(
+  let note = collab.add_note(
     fs, fs, cid, "This commit introduces the initial README.", "alice@example.com",
     1706745600L,
   )
   assert_eq(note.body(), "This commit introduces the initial README.")
   assert_eq(note.author(), "alice@example.com")
   // Get note
-  let retrieved = den.get_note(fs, cid)
+  let retrieved = collab.get_note(fs, cid)
   assert_true(retrieved is Some(_))
   guard retrieved is Some(n) else { panic() }
   assert_eq(n.body(), "This commit introduces the initial README.")
@@ -605,49 +605,49 @@ test "notes: add and get note" {
 ///|
 test "notes: list notes" {
   let fs = setup_repo_with_branch()
-  let den = Collab::init(fs, fs, "/repo/.git")
+  let collab = Collab::init(fs, fs, "/repo/.git")
   let main_commit = @lib.resolve_ref(fs, "/repo/.git", "refs/heads/main")
   guard main_commit is Some(main_id) else { panic() }
   let feature_commit = @lib.resolve_ref(fs, "/repo/.git", "refs/heads/feature")
   guard feature_commit is Some(feature_id) else { panic() }
   // Add notes to both commits
-  let _ = den.add_note(
+  let _ = collab.add_note(
     fs, fs, main_id, "Note on main", "alice@example.com", 1706745600L,
   )
-  let _ = den.add_note(
+  let _ = collab.add_note(
     fs, fs, feature_id, "Note on feature", "bob@example.com", 1706832000L,
   )
-  let notes = den.list_notes(fs)
+  let notes = collab.list_notes(fs)
   assert_eq(notes.length(), 2)
 }
 
 ///|
 test "notes: remove note" {
   let fs = setup_repo_with_branch()
-  let den = Collab::init(fs, fs, "/repo/.git")
+  let collab = Collab::init(fs, fs, "/repo/.git")
   let commit_id = @lib.resolve_ref(fs, "/repo/.git", "refs/heads/main")
   guard commit_id is Some(cid) else { panic() }
-  let _ = den.add_note(
+  let _ = collab.add_note(
     fs, fs, cid, "Temporary note", "alice@example.com", 1706745600L,
   )
   // Verify note exists
-  let before = den.get_note(fs, cid)
+  let before = collab.get_note(fs, cid)
   assert_true(before is Some(_))
   // Remove note
-  den.remove_note(fs, fs, cid)
+  collab.remove_note(fs, fs, cid)
   // Verify note is gone
-  let after = den.get_note(fs, cid)
+  let after = collab.get_note(fs, cid)
   assert_true(after is None)
 }
 
 ///|
 test "notes: custom ns" {
   let fs = setup_repo_with_branch()
-  let den = Collab::init(fs, fs, "/repo/.git")
+  let collab = Collab::init(fs, fs, "/repo/.git")
   let commit_id = @lib.resolve_ref(fs, "/repo/.git", "refs/heads/main")
   guard commit_id is Some(cid) else { panic() }
   // Add note to custom ns "tips"
-  let _ = den.add_note(
+  let _ = collab.add_note(
     fs,
     fs,
     cid,
@@ -657,10 +657,10 @@ test "notes: custom ns" {
     ns="tips",
   )
   // Should not find in default ns
-  let default_note = den.get_note(fs, cid)
+  let default_note = collab.get_note(fs, cid)
   assert_true(default_note is None)
   // Should find in tips ns
-  let tips_note = den.get_note(fs, cid, ns="tips")
+  let tips_note = collab.get_note(fs, cid, ns="tips")
   assert_true(tips_note is Some(_))
 }
 

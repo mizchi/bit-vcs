@@ -53,7 +53,8 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
       _ if arg.has_prefix("^") =>
         excludes.push(String::unsafe_substring(arg, start=1, end=arg.length()))
       _ if not(arg.has_prefix("-")) => refs.push(arg)
-      _ => () // Ignore unknown options
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("rev-list", arg)
+      _ => ()
     }
     i += 1
   }
@@ -266,6 +267,7 @@ async fn handle_verify_pack(args : Array[String]) -> Unit raise Error {
       "-v" | "--verbose" => verbose = true
       "-s" | "--stat-only" => stat_only = true
       _ if not(arg.has_prefix("-")) => pack_files.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("verify-pack", arg)
       _ => ()
     }
   }
@@ -363,6 +365,7 @@ async fn handle_unpack_objects(args : Array[String]) -> Unit raise Error {
       "-n" => dry_run = true
       "-r" => () // Recover - ignored for now
       "--strict" => () // Strict - ignored for now
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("unpack-objects", arg)
       _ => ()
     }
   }
@@ -435,6 +438,7 @@ async fn handle_bundle_create(args : Array[String]) -> Unit raise Error {
         } else {
           refs.push(arg)
         }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("bundle", arg)
       _ => ()
     }
     i += 1
@@ -595,6 +599,7 @@ async fn handle_bundle_verify(args : Array[String]) -> Unit raise Error {
     match arg {
       "-q" | "--quiet" => quiet = true
       _ if not(arg.has_prefix("-")) => bundle_file = Some(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("bundle", arg)
       _ => ()
     }
   }
@@ -637,6 +642,8 @@ async fn handle_bundle_list_heads(args : Array[String]) -> Unit raise Error {
   for arg in args {
     if not(arg.has_prefix("-")) {
       bundle_file = Some(arg)
+    } else {
+      warn_unimplemented_arg("bundle", arg)
     }
   }
   guard bundle_file is Some(path) else {
@@ -658,6 +665,8 @@ async fn handle_bundle_unbundle(args : Array[String]) -> Unit raise Error {
   for arg in args {
     if not(arg.has_prefix("-")) {
       bundle_file = Some(arg)
+    } else {
+      warn_unimplemented_arg("bundle", arg)
     }
   }
   guard bundle_file is Some(path) else {

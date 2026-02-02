@@ -20,6 +20,15 @@ fn str_to_bytes(s : String) -> Bytes {
 }
 
 ///|
+async fn warn_unimplemented_arg(cmd : String, arg : String) -> Unit {
+  if arg == "--" {
+    return
+  }
+  let msg = "warning: " + cmd + ": unsupported option '" + arg + "'\n"
+  @stdio.stderr.write(str_to_bytes(msg))
+}
+
+///|
 async fn print_line(s : String) -> Unit {
   @stdio.stdout.write(str_to_bytes(s + "\n"))
 }

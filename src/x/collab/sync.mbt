@@ -29,31 +29,31 @@ pub fn PrSyncResult::remote_commit(self : PrSyncResult) -> @git.ObjectId? {
 }
 
 ///|
-/// Push _den branch to remote
+/// Push _collab branch to remote
 pub async fn Collab::push(
   self : Collab,
   rfs : &@git.RepoFileSystem,
   remote_url : String,
 ) -> PrSyncResult raise @git.GitError {
-  let local_commit = get_den_commit(rfs, self.git_dir)
+  let local_commit = get_collab_commit(rfs, self.git_dir)
   guard local_commit is Some(local_id) else {
     return {
       success: false,
-      message: "No local _den branch found",
+      message: "No local _collab branch found",
       local_commit: None,
       remote_commit: None,
     }
   }
-  // Collect all objects reachable from _den
+  // Collect all objects reachable from _collab
   let db = @lib.ObjectDb::load(rfs, self.git_dir)
   let objects = @lib.collect_reachable_objects(db, rfs, local_id)
   let pack = @git.create_packfile(objects)
   // Discover remote refs
   let remote = @git.Remote::new(remote_url)
   let refs = @git.discover_receive_refs_http(remote)
-  let old_id = find_remote_den_ref(refs)
+  let (old_id, ref_name) = find_remote_collab_ref(refs)
   // Push
-  let req = @git.PushRequest::new(old_id, local_id, den_ref, pack)
+  let req = @git.PushRequest::new(old_id, local_id, ref_name, pack)
   let result = @git.push(remote, req)
   if result.has_prefix("unpack ok") || result.has_prefix("ok ") {
     {
@@ -73,7 +73,7 @@ pub async fn Collab::push(
 }
 
 ///|
-/// Fetch _den branch from remote and merge
+/// Fetch _collab branch from remote and merge
 pub async fn Collab::fetch(
   self : Collab,
   fs : &@git.FileSystem,
@@ -82,12 +82,12 @@ pub async fn Collab::fetch(
 ) -> PrSyncResult raise @git.GitError {
   // Discover remote refs
   let (refs, _, _, _) = @git.discover_upload_refs_http(remote_url, true)
-  let remote_id = find_upload_den_ref(refs)
-  guard remote_id is Some(rid) else {
+  let remote_id = find_upload_collab_ref(refs)
+  guard remote_id is Some((rid, ref_name)) else {
     return {
       success: false,
-      message: "No remote _den branch found",
-      local_commit: get_den_commit(rfs, self.git_dir),
+      message: "No remote _collab branch found",
+      local_commit: get_collab_commit(rfs, self.git_dir),
       remote_commit: None,
     }
   }
@@ -96,24 +96,25 @@ pub async fn Collab::fetch(
   let objects = @git.parse_packfile(pack)
   @git.write_packfile_with_index(fs, self.git_dir, pack, objects)
   // Update remote tracking ref
-  let remote_ref_path = join_path(self.git_dir, "refs/remotes/origin/_den")
+  let remote_short = short_ref_name(ref_name)
+  let remote_ref_path = join_path(
+    self.git_dir,
+    "refs/remotes/origin/" + remote_short,
+  )
   let dir = parent_path(remote_ref_path)
   fs.mkdir_p(dir)
   fs.write_string(remote_ref_path, rid.to_hex() + "\n")
   // Get local commit
-  let local_commit = get_den_commit(rfs, self.git_dir)
+  let local_commit = get_collab_commit(rfs, self.git_dir)
   match local_commit {
     None => {
-      // No local _den, just set to remote
-      let ref_path = join_path(self.git_dir, den_ref)
-      let ref_dir = parent_path(ref_path)
-      fs.mkdir_p(ref_dir)
-      fs.write_string(ref_path, rid.to_hex() + "\n")
+      // No local _collab, just set to remote
+      write_collab_ref(fs, rfs, self.git_dir, rid)
       // Reload counter
       self.next_id = load_counter(rfs, self.git_dir)
       {
         success: true,
-        message: "Fetched remote _den branch",
+        message: "Fetched remote _collab branch",
         local_commit: Some(rid),
         remote_commit: Some(rid),
       }
@@ -128,14 +129,14 @@ pub async fn Collab::fetch(
         }
       } else {
         // Need to merge
-        merge_den_branches(self, fs, rfs, lid, rid)
+        merge_collab_branches(self, fs, rfs, lid, rid)
       }
   }
 }
 
 ///|
-/// Merge remote _den into local _den
-fn merge_den_branches(
+/// Merge remote _collab into local _collab
+fn merge_collab_branches(
   prs : Collab,
   fs : &@git.FileSystem,
   rfs : &@git.RepoFileSystem,
@@ -144,10 +145,9 @@ fn merge_den_branches(
 ) -> PrSyncResult raise @git.GitError {
   let db = @lib.ObjectDb::load(rfs, prs.git_dir)
   // Check if fast-forward possible (local is ancestor of remote)
-  if is_den_ancestor(db, rfs, local_id, remote_id) {
+  if is_collab_ancestor(db, rfs, local_id, remote_id) {
     // Fast-forward to remote
-    let ref_path = join_path(prs.git_dir, den_ref)
-    fs.write_string(ref_path, remote_id.to_hex() + "\n")
+    write_collab_ref(fs, rfs, prs.git_dir, remote_id)
     prs.next_id = load_counter(rfs, prs.git_dir)
     return {
       success: true,
@@ -157,7 +157,7 @@ fn merge_den_branches(
     }
   }
   // Check if remote is ancestor of local (nothing to do, just push later)
-  if is_den_ancestor(db, rfs, remote_id, local_id) {
+  if is_collab_ancestor(db, rfs, remote_id, local_id) {
     return {
       success: true,
       message: "Local is ahead of remote",
@@ -168,43 +168,49 @@ fn merge_den_branches(
   // Need real merge - collect PR data from both
   let local_tree = get_commit_tree(db, rfs, local_id)
   guard local_tree is Some(ltree) else {
-    raise @git.GitError::InvalidObject("Cannot read local _den tree")
+    raise @git.GitError::InvalidObject("Cannot read local _collab tree")
   }
   let remote_tree = get_commit_tree(db, rfs, remote_id)
   guard remote_tree is Some(rtree) else {
-    raise @git.GitError::InvalidObject("Cannot read remote _den tree")
+    raise @git.GitError::InvalidObject("Cannot read remote _collab tree")
   }
   // Merge the trees
-  let merged_tree_id = merge_den_trees(fs, rfs, prs.git_dir, db, ltree, rtree)
+  let merged_tree_id = merge_collab_trees(
+    fs,
+    rfs,
+    prs.git_dir,
+    db,
+    ltree,
+    rtree,
+  )
   // Create merge commit
   let commit = @git.Commit::new(
     merged_tree_id,
     [local_id, remote_id],
-    "Collab <den@local>",
+    "Collab <collab@local>",
     0L,
     "+0000",
-    "Collab <den@local>",
+    "Collab <collab@local>",
     0L,
     "+0000",
-    "Merge remote _den branch\n",
+    "Merge remote _collab branch\n",
   )
   let (commit_id, commit_compressed) = @git.create_commit(commit)
   write_object_bytes(fs, prs.git_dir, commit_id, commit_compressed)
   // Update ref
-  let ref_path = join_path(prs.git_dir, den_ref)
-  fs.write_string(ref_path, commit_id.to_hex() + "\n")
+  write_collab_ref(fs, rfs, prs.git_dir, commit_id)
   // Reload counter
   prs.next_id = load_counter(rfs, prs.git_dir)
   {
     success: true,
-    message: "Merged remote _den branch",
+    message: "Merged remote _collab branch",
     local_commit: Some(commit_id),
     remote_commit: Some(remote_id),
   }
 }
 
 ///|
-fn merge_den_trees(
+fn merge_collab_trees(
   fs : &@git.FileSystem,
   rfs : &@git.RepoFileSystem,
   git_dir : String,
@@ -234,10 +240,12 @@ fn merge_den_trees(
   )
   merged.push(@git.TreeEntry::new("040000", "meta", merged_meta))
   // Process 'prs' - union of all PRs
-  let local_den = local_map.get("prs")
-  let remote_den = remote_map.get("prs")
-  let merged_den = merge_den_dir(fs, rfs, git_dir, db, local_den, remote_den)
-  merged.push(@git.TreeEntry::new("040000", "prs", merged_den))
+  let local_collab = local_map.get("prs")
+  let remote_collab = remote_map.get("prs")
+  let merged_collab = merge_collab_dir(
+    fs, rfs, git_dir, db, local_collab, remote_collab,
+  )
+  merged.push(@git.TreeEntry::new("040000", "prs", merged_collab))
   // Process 'index' - take local for now
   let local_index = local_map.get("index")
   match local_index {
@@ -305,19 +313,19 @@ fn read_counter_from_meta(
 }
 
 ///|
-fn merge_den_dir(
+fn merge_collab_dir(
   fs : &@git.FileSystem,
   rfs : &@git.RepoFileSystem,
   git_dir : String,
   db : @lib.ObjectDb,
-  local_den : @git.TreeEntry?,
-  remote_den : @git.TreeEntry?,
+  local_collab : @git.TreeEntry?,
+  remote_collab : @git.TreeEntry?,
 ) -> @git.ObjectId raise @git.GitError {
-  let local_entries = match local_den {
+  let local_entries = match local_collab {
     Some(p) => read_tree_entries(db, rfs, p.id)
     None => []
   }
-  let remote_entries = match remote_den {
+  let remote_entries = match remote_collab {
     Some(p) => read_tree_entries(db, rfs, p.id)
     None => []
   }
@@ -506,7 +514,7 @@ fn read_tree_entries(
 }
 
 ///|
-fn is_den_ancestor(
+fn is_collab_ancestor(
   db : @lib.ObjectDb,
   rfs : &@git.RepoFileSystem,
   ancestor : @git.ObjectId,
@@ -542,25 +550,50 @@ fn is_den_ancestor(
 }
 
 ///|
-fn find_remote_den_ref(refs : Array[(@git.ObjectId, String)]) -> @git.ObjectId {
+fn find_remote_collab_ref(
+  refs : Array[(@git.ObjectId, String)],
+) -> (@git.ObjectId, String) {
   for item in refs {
     let (id, name) = item
-    if name == den_ref || name == "refs/heads/_den" {
-      return id
+    if name == collab_ref {
+      return (id, collab_ref)
     }
   }
-  @git.ObjectId::zero()
+  for item in refs {
+    let (id, name) = item
+    if name == legacy_den_ref {
+      return (id, legacy_den_ref)
+    }
+  }
+  (@git.ObjectId::zero(), collab_ref)
 }
 
 ///|
-fn find_upload_den_ref(refs : Array[(@git.ObjectId, String)]) -> @git.ObjectId? {
+fn find_upload_collab_ref(
+  refs : Array[(@git.ObjectId, String)],
+) -> (@git.ObjectId, String)? {
   for item in refs {
     let (id, name) = item
-    if name == den_ref || name == "refs/heads/_den" {
-      return Some(id)
+    if name == collab_ref {
+      return Some((id, collab_ref))
+    }
+  }
+  for item in refs {
+    let (id, name) = item
+    if name == legacy_den_ref {
+      return Some((id, legacy_den_ref))
     }
   }
   None
+}
+
+///|
+fn short_ref_name(refname : String) -> String {
+  if refname.has_prefix("refs/heads/") {
+    String::unsafe_substring(refname, start=11, end=refname.length())
+  } else {
+    refname
+  }
 }
 
 ///|

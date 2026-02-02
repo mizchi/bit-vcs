@@ -1,6 +1,7 @@
 import {
   "mizchi/bit" as @git,
   "mizchi/bit/lib" as @gitlib,
+  "mizchi/bit/x/collab" as @collab,
   "mizchi/bit/x/fs" as @bitfs,
   "mizchi/bit/x/hq" as @hq,
   "mizchi/bit/x/subdir" as @subdir,
@@ -20,6 +21,7 @@ options(
   is_main: true,
   targets: {
     "handlers_branch.mbt": [ "native" ],
+    "handlers_collab.mbt": [ "native" ],
     "handlers_core.mbt": [ "native" ],
     "handlers_hq.mbt": [ "native" ],
     "handlers_maintenance.mbt": [ "native" ],

@@ -238,7 +238,7 @@ async fn handle_worktree_add(args : Array[String]) -> Unit raise Error {
         continue
       }
       _ if arg.has_prefix("-b") => new_branch = Some((try! arg[2:]).to_string())
-      _ if arg.has_prefix("-") => () // Ignore unknown flags
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("worktree", arg)
       _ =>
         if path is None {
           path = Some(arg)
@@ -282,6 +282,7 @@ async fn handle_worktree_remove(args : Array[String]) -> Unit raise Error {
     match arg {
       "--force" | "-f" => force = true
       _ if not(arg.has_prefix("-")) => path = Some(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("worktree", arg)
       _ => ()
     }
   }
@@ -303,6 +304,7 @@ async fn handle_worktree_prune(args : Array[String]) -> Unit raise Error {
     match arg {
       "--dry-run" | "-n" => dry_run = true
       "--verbose" | "-v" => verbose = true
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("worktree", arg)
       _ => ()
     }
   }
@@ -340,6 +342,7 @@ async fn handle_worktree_lock(args : Array[String]) -> Unit raise Error {
       _ if arg.has_prefix("--reason=") =>
         reason = Some((try! arg[9:]).to_string())
       _ if not(arg.has_prefix("-")) => path = Some(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("worktree", arg)
       _ => ()
     }
     i += 1
@@ -359,6 +362,8 @@ async fn handle_worktree_unlock(args : Array[String]) -> Unit raise Error {
   for arg in args {
     if not(arg.has_prefix("-")) {
       path = Some(arg)
+    } else {
+      warn_unimplemented_arg("worktree", arg)
     }
   }
   guard path is Some(wt_path) else {
@@ -378,6 +383,7 @@ async fn handle_worktree_move(args : Array[String]) -> Unit raise Error {
     match arg {
       "--force" | "-f" => force = true
       _ if not(arg.has_prefix("-")) => positional.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("worktree", arg)
       _ => ()
     }
   }
@@ -399,6 +405,8 @@ async fn handle_worktree_repair(args : Array[String]) -> Unit raise Error {
   for arg in args {
     if not(arg.has_prefix("-")) {
       paths.push(arg)
+    } else {
+      warn_unimplemented_arg("worktree", arg)
     }
   }
   let repaired = @gitlib.repair_worktree(fs, fs, root, worktree_paths=paths)

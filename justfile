@@ -14,12 +14,12 @@ check:
 
 # Run tests (js target: main packages only, native: all)
 test:
-    moon test --target js -p mizchi/git -p mizchi/git/lib
+    moon test --target js -p mizchi/bit -p mizchi/bit/lib
     moon test --target native
 
 # Update snapshot tests (both js and native)
 test-update:
-    moon test --update --target js -p mizchi/git -p mizchi/git/lib
+    moon test --update --target js -p mizchi/bit -p mizchi/bit/lib
     moon test --update --target native
 
 # Run main (native)

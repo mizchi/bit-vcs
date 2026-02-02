@@ -72,6 +72,7 @@ async fn handle_diff(args : Array[String]) -> Unit raise Error {
         } else {
           paths.push(arg)
         }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("diff", arg)
       _ => ()
     }
   }
@@ -184,6 +185,7 @@ async fn handle_merge(args : Array[String]) -> Unit raise Error {
         continue
       }
       _ if not(arg.has_prefix("-")) => target_ref = Some(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("merge", arg)
       _ => ()
     }
     i += 1
@@ -481,6 +483,7 @@ async fn handle_tag(args : Array[String]) -> Unit raise Error {
         } else if target is None {
           target = Some(arg)
         }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("tag", arg)
       _ => ()
     }
     i += 1
@@ -522,7 +525,7 @@ async fn handle_tag(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
-fn handle_rm(args : Array[String]) -> Unit raise Error {
+async fn handle_rm(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
   let mut cached = false
@@ -535,6 +538,7 @@ fn handle_rm(args : Array[String]) -> Unit raise Error {
       "-f" | "--force" => force = true
       "-r" => recursive = true
       _ if not(arg.has_prefix("-")) => paths.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("rm", arg)
       _ => ()
     }
   }
@@ -545,7 +549,7 @@ fn handle_rm(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
-fn handle_mv(args : Array[String]) -> Unit raise Error {
+async fn handle_mv(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
   let mut force = false
@@ -554,6 +558,7 @@ fn handle_mv(args : Array[String]) -> Unit raise Error {
     match arg {
       "-f" | "--force" => force = true
       _ if not(arg.has_prefix("-")) => paths.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("mv", arg)
       _ => ()
     }
   }
@@ -585,7 +590,7 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
       "--list" | "-l" => list_mode = true
       "--unset" => unset_mode = true
       "--add" => add_mode = true
-      _ if arg.has_prefix("-") => ()
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("config", arg)
       _ =>
         if key is None {
           key = Some(arg)
@@ -1077,7 +1082,7 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
         }
         print_line(abs)
       }
-      _ if arg.has_prefix("-") => ()
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("rev-parse", arg)
       _ => {
         let id = @gitlib.rev_parse(fs, git_dir, arg)
         match id {
@@ -1103,7 +1108,7 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
       "-t" => show_type = true
       "-s" => show_size = true
       "-p" => pretty_print = true
-      _ if arg.has_prefix("-") => ()
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("cat-file", arg)
       _ => obj_spec = Some(arg)
     }
   }
@@ -1179,6 +1184,7 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
       "--directory" => show_directory = true
       "--recurse-submodules" => recurse_submodules = true
       "-z" => use_nul = true
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("ls-files", arg)
       _ => ()
     }
   }
@@ -1458,6 +1464,7 @@ async fn handle_hash_object(args : Array[String]) -> Unit raise Error {
       _ if arg.has_prefix("-t") =>
         obj_type = String::unsafe_substring(arg, start=2, end=arg.length())
       _ if not(arg.has_prefix("-")) => paths.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("hash-object", arg)
       _ => ()
     }
   }
@@ -1531,6 +1538,7 @@ async fn handle_ls_tree(args : Array[String]) -> Unit raise Error {
       "--name-only" | "--name-status" => name_only = true
       "--recurse-submodules" => recurse_submodules = true
       _ if not(arg.has_prefix("-")) => positional.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("ls-tree", arg)
       _ => ()
     }
   }
@@ -1768,6 +1776,8 @@ async fn handle_write_tree(args : Array[String]) -> Unit raise Error {
   for arg in args {
     if arg.has_prefix("--prefix=") {
       prefix = Some((try! arg[9:]).to_string())
+    } else if arg.has_prefix("-") {
+      warn_unimplemented_arg("write-tree", arg)
     }
   }
   let entries = @gitlib.read_index_entries(fs, git_dir)
@@ -1786,6 +1796,7 @@ async fn handle_show_ref(args : Array[String]) -> Unit raise Error {
     match arg {
       "--heads" => heads_only = true
       "--tags" => tags_only = true
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("show-ref", arg)
       _ => ()
     }
   }
@@ -1824,6 +1835,7 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
         i += 1
       }
       _ if not(arg.has_prefix("-")) => positional.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("update-ref", arg)
       _ => ()
     }
     i += 1
@@ -2077,6 +2089,7 @@ async fn handle_symbolic_ref(args : Array[String]) -> Unit raise Error {
       "-d" | "--delete" => delete_mode = true
       "--short" => short_mode = true
       _ if not(arg.has_prefix("-")) => positional.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("symbolic-ref", arg)
       _ => ()
     }
   }
@@ -2209,6 +2222,7 @@ async fn handle_gc(args : Array[String]) -> Unit raise Error {
       "--prune" => prune_only = true
       "--aggressive" => aggressive = true
       "-q" | "--quiet" => quiet = true
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("gc", arg)
       _ => ()
     }
   }
@@ -2259,6 +2273,7 @@ async fn handle_clean(args : Array[String]) -> Unit raise Error {
         remove_dirs = true
       }
       _ if not(arg.has_prefix("-")) => paths.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("clean", arg)
       _ => ()
     }
   }
@@ -2400,6 +2415,7 @@ async fn handle_grep(args : Array[String]) -> Unit raise Error {
         } else {
           paths.push(arg)
         }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("grep", arg)
       _ => ()
     }
   }

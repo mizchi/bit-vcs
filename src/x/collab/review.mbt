@@ -36,7 +36,7 @@ pub fn Collab::submit_review(
   let final_data = final_review.serialize()
   let (final_blob_id, final_compressed) = @git.create_blob_string(final_data)
   write_object_bytes(fs, self.git_dir, final_blob_id, final_compressed)
-  // Update _den tree with new review
+  // Update _collab tree with new review
   add_review_to_tree(
     fs,
     backing_fs,
@@ -58,10 +58,10 @@ pub fn Collab::list_reviews(
 ) -> Array[PrReview] raise @git.GitError {
   let result : Array[PrReview] = []
   let db = @lib.ObjectDb::load_lazy(backing_fs, self.git_dir)
-  let den_commit = get_den_commit(backing_fs, self.git_dir)
-  guard den_commit is Some(commit_id) else { return result }
-  let den_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard den_tree is Some(tree_id) else { return result }
+  let collab_commit = get_collab_commit(backing_fs, self.git_dir)
+  guard collab_commit is Some(commit_id) else { return result }
+  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
+  guard collab_tree is Some(tree_id) else { return result }
   // Navigate to prs/<id>/reviews
   let prs_dir_id = find_tree_entry(db, backing_fs, tree_id, "prs")
   guard prs_dir_id is Some(pid) else { return result }
@@ -131,26 +131,26 @@ fn add_review_to_tree(
   blob_id : @git.ObjectId,
 ) -> Unit raise @git.GitError {
   let db = @lib.ObjectDb::load_lazy(backing_fs, git_dir)
-  let den_commit = get_den_commit(backing_fs, git_dir)
-  guard den_commit is Some(commit_id_val) else {
-    raise @git.GitError::InvalidObject("_den branch not found")
+  let collab_commit = get_collab_commit(backing_fs, git_dir)
+  guard collab_commit is Some(commit_id_val) else {
+    raise @git.GitError::InvalidObject("_collab branch not found")
   }
-  let den_tree = get_commit_tree(db, backing_fs, commit_id_val)
-  guard den_tree is Some(root_tree_id) else {
-    raise @git.GitError::InvalidObject("_den tree not found")
+  let collab_tree = get_commit_tree(db, backing_fs, commit_id_val)
+  guard collab_tree is Some(root_tree_id) else {
+    raise @git.GitError::InvalidObject("_collab tree not found")
   }
   let root_obj = db.get(backing_fs, root_tree_id)
   guard root_obj is Some(root_tree_obj) else {
     raise @git.GitError::InvalidObject("Cannot read root tree")
   }
   let root_entries = @git.parse_tree(root_tree_obj.data)
-  let mut den_tree_id = @git.ObjectId::zero()
+  let mut collab_tree_id = @git.ObjectId::zero()
   let mut meta_tree_id = @git.ObjectId::zero()
   let mut index_tree_id = @git.ObjectId::zero()
   let mut issues_tree_id = @git.ObjectId::zero()
   for entry in root_entries {
     match entry.name {
-      "prs" => den_tree_id = entry.id
+      "prs" => collab_tree_id = entry.id
       "meta" => meta_tree_id = entry.id
       "index" => index_tree_id = entry.id
       "issues" => issues_tree_id = entry.id
@@ -158,13 +158,13 @@ fn add_review_to_tree(
     }
   }
   // Get prs tree
-  let prs_obj = db.get(backing_fs, den_tree_id)
-  guard prs_obj is Some(den_tree_obj) else {
+  let prs_obj = db.get(backing_fs, collab_tree_id)
+  guard prs_obj is Some(collab_tree_obj) else {
     raise @git.GitError::InvalidObject("Cannot read prs tree")
   }
-  let prs_entries = @git.parse_tree(den_tree_obj.data)
+  let prs_entries = @git.parse_tree(collab_tree_obj.data)
   // Find and update the PR directory
-  let new_den_entries : Array[@git.TreeEntry] = []
+  let new_collab_entries : Array[@git.TreeEntry] = []
   for entry in prs_entries {
     if entry.name == pr_id {
       // Update reviews in this PR's directory
@@ -200,20 +200,22 @@ fn add_review_to_tree(
       new_dir_entries.sort_by(fn(a, b) { String::compare(a.name, b.name) })
       let (new_dir_id, dir_compressed) = @git.create_tree(new_dir_entries)
       write_object_bytes(fs, git_dir, new_dir_id, dir_compressed)
-      new_den_entries.push(@git.TreeEntry::new("040000", pr_id, new_dir_id))
+      new_collab_entries.push(@git.TreeEntry::new("040000", pr_id, new_dir_id))
     } else {
-      new_den_entries.push(entry)
+      new_collab_entries.push(entry)
     }
   }
-  new_den_entries.sort_by(fn(a, b) { String::compare(a.name, b.name) })
-  let (new_den_tree_id, new_den_compressed) = @git.create_tree(new_den_entries)
-  write_object_bytes(fs, git_dir, new_den_tree_id, new_den_compressed)
+  new_collab_entries.sort_by(fn(a, b) { String::compare(a.name, b.name) })
+  let (new_collab_tree_id, new_collab_compressed) = @git.create_tree(
+    new_collab_entries,
+  )
+  write_object_bytes(fs, git_dir, new_collab_tree_id, new_collab_compressed)
   // Create new root tree (include issues tree)
   let new_root_entries = [
     @git.TreeEntry::new("040000", "index", index_tree_id),
     @git.TreeEntry::new("040000", "issues", issues_tree_id),
     @git.TreeEntry::new("040000", "meta", meta_tree_id),
-    @git.TreeEntry::new("040000", "prs", new_den_tree_id),
+    @git.TreeEntry::new("040000", "prs", new_collab_tree_id),
   ]
   let (new_root_tree_id, new_root_compressed) = @git.create_tree(
     new_root_entries,
@@ -223,10 +225,10 @@ fn add_review_to_tree(
   let commit = @git.Commit::new(
     new_root_tree_id,
     [commit_id_val],
-    "Collab <den@local>",
+    "Collab <collab@local>",
     0L,
     "+0000",
-    "Collab <den@local>",
+    "Collab <collab@local>",
     0L,
     "+0000",
     "Add review to PR #\{pr_id}\n",
@@ -234,6 +236,5 @@ fn add_review_to_tree(
   let (new_commit_id, commit_compressed) = @git.create_commit(commit)
   write_object_bytes(fs, git_dir, new_commit_id, commit_compressed)
   // Update ref
-  let ref_path = join_path(git_dir, den_ref)
-  fs.write_string(ref_path, new_commit_id.to_hex() + "\n")
+  write_collab_ref(fs, backing_fs, git_dir, new_commit_id)
 }

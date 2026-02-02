@@ -151,4 +151,6 @@ t2400-worktree-add.sh
 t2401-worktree-prune.sh
 t2402-worktree-list.sh
 t2403-worktree-move.sh
+t2404-worktree-config.sh
 t2406-worktree-repair.sh
+t2407-worktree-heads.sh

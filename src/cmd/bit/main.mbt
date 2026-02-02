@@ -47,6 +47,7 @@ async fn show_help() -> Unit {
     #|   worktree    Manage multiple working trees
     #|
     #|experimental
+    #|   collab       Manage pull requests and issues
     #|   subdir-clone  Clone subdirectory as independent repository
     #|   hq            ghq-compatible repository management (~/bhq)
     #|
@@ -75,6 +76,540 @@ async fn show_help() -> Unit {
 }
 
 ///|
+async fn show_simple_command_help(usage : String, summary? : String) -> Unit {
+  let mut help = "usage: " + usage
+  if summary is Some(text) {
+    help = help + "\n\n" + text
+  }
+  print_line(help)
+}
+
+///|
+async fn show_command_help(cmd : String) -> Bool {
+  match cmd {
+    "hq" => {
+      print_hq_usage()
+      true
+    }
+    "subdir-clone" => {
+      print_subdir_clone_usage()
+      true
+    }
+    "worktree" => {
+      show_worktree_help()
+      true
+    }
+    "collab" => {
+      print_collab_usage()
+      true
+    }
+    "clone" => {
+      show_simple_command_help(
+        "git clone [<options>] [--] <repo> [<dir>]",
+        summary="Clone a repository into a new directory.",
+      )
+      true
+    }
+    "init" => {
+      show_simple_command_help(
+        "git init [<options>] [<directory>]",
+        summary="Create an empty Git repository or reinitialize an existing one.",
+      )
+      true
+    }
+    "status" => {
+      show_simple_command_help(
+        "git status [<options>] [--] [<pathspec>...]",
+        summary="Show the working tree status.",
+      )
+      true
+    }
+    "add" => {
+      show_simple_command_help(
+        "git add [<options>] [--] <pathspec>...",
+        summary="Add file contents to the index.",
+      )
+      true
+    }
+    "commit" => {
+      show_simple_command_help(
+        "git commit [<options>]",
+        summary="Record changes to the repository.",
+      )
+      true
+    }
+    "log" => {
+      show_simple_command_help(
+        "git log [<options>] [<revision-range>] [--] [<pathspec>...]",
+        summary="Show commit logs.",
+      )
+      true
+    }
+    "show" => {
+      show_simple_command_help(
+        "git show [<options>] [<object>...]",
+        summary="Show various types of objects.",
+      )
+      true
+    }
+    "diff" => {
+      show_simple_command_help(
+        "git diff [<options>] [--] [<pathspec>...]",
+        summary="Show changes between commits, commit and working tree, etc.",
+      )
+      true
+    }
+    "branch" => {
+      show_simple_command_help(
+        "git branch [<options>] [<branchname>]",
+        summary="List, create, or delete branches.",
+      )
+      true
+    }
+    "show-branches" | "show-branch" => {
+      show_simple_command_help(
+        "git show-branch [<options>] [<branch>...]",
+        summary="Show branches and their commits.",
+      )
+      true
+    }
+    "checkout" => {
+      show_simple_command_help(
+        "git checkout [<options>] <branch>",
+        summary="Switch branches or restore working tree files.",
+      )
+      true
+    }
+    "switch" => {
+      show_simple_command_help(
+        "git switch [<options>] <branch>",
+        summary="Switch branches.",
+      )
+      true
+    }
+    "reset" => {
+      show_simple_command_help(
+        "git reset [<options>] [<commit>]",
+        summary="Reset current HEAD to the specified state.",
+      )
+      true
+    }
+    "rebase" => {
+      show_simple_command_help(
+        "git rebase [<options>] <upstream> [<branch>]",
+        summary="Reapply commits on top of another base tip.",
+      )
+      true
+    }
+    "merge" => {
+      show_simple_command_help(
+        "git merge [<options>] <commit>...",
+        summary="Join two or more development histories together.",
+      )
+      true
+    }
+    "stash" => {
+      show_simple_command_help(
+        "git stash [<options>] [<message>]",
+        summary="Stash the changes in a dirty working directory.",
+      )
+      true
+    }
+    "cherry-pick" => {
+      show_simple_command_help(
+        "git cherry-pick [<options>] <commit>...",
+        summary="Apply the changes from existing commits.",
+      )
+      true
+    }
+    "tag" => {
+      show_simple_command_help(
+        "git tag [<options>] [<name> [<commit>]]",
+        summary="Create, list, delete tag objects.",
+      )
+      true
+    }
+    "fetch" => {
+      show_simple_command_help(
+        "git fetch [<options>] [<repository> [<refspec>...]]",
+        summary="Download objects and refs from another repository.",
+      )
+      true
+    }
+    "pull" => {
+      show_simple_command_help(
+        "git pull [<options>] [<repository> [<refspec>...]]",
+        summary="Fetch from and integrate with another repository.",
+      )
+      true
+    }
+    "push" => {
+      show_simple_command_help(
+        "git push [<options>] [<repository> [<refspec>...]]",
+        summary="Update remote refs along with associated objects.",
+      )
+      true
+    }
+    "remote" => {
+      show_simple_command_help(
+        "git remote [<command>] [<args>]",
+        summary="Manage set of tracked repositories.",
+      )
+      true
+    }
+    "mv" => {
+      show_simple_command_help(
+        "git mv <source> <destination>",
+        summary="Move or rename a file, a directory, or a symlink.",
+      )
+      true
+    }
+    "rm" => {
+      show_simple_command_help(
+        "git rm [<options>] <file>...",
+        summary="Remove files from the working tree and from the index.",
+      )
+      true
+    }
+    "bundle" => {
+      show_simple_command_help(
+        "git bundle <command> [<args>]",
+        summary="Create, verify, list-heads, and unbundle Git bundles.",
+      )
+      true
+    }
+    "clean" => {
+      show_simple_command_help(
+        "git clean [<options>] [--] <pathspec>...",
+        summary="Remove untracked files from the working tree.",
+      )
+      true
+    }
+    "cat-file" => {
+      show_simple_command_help(
+        "git cat-file <type> <object>",
+        summary="Provide content or type info for repository objects.",
+      )
+      true
+    }
+    "config" => {
+      show_simple_command_help(
+        "git config [<options>] <name> [<value>]",
+        summary="Get and set repository options.",
+      )
+      true
+    }
+    "describe" => {
+      show_simple_command_help(
+        "git describe [<options>] <commit-ish>",
+        summary="Give an object a human readable name based on a ref.",
+      )
+      true
+    }
+    "format-patch" => {
+      show_simple_command_help(
+        "git format-patch [<options>] <since>..<until>",
+        summary="Prepare patches for e-mail submission.",
+      )
+      true
+    }
+    "fsck" => {
+      show_simple_command_help(
+        "git fsck [<options>]",
+        summary="Verify the connectivity and validity of objects.",
+      )
+      true
+    }
+    "gc" => {
+      show_simple_command_help(
+        "git gc [<options>]",
+        summary="Cleanup unnecessary files and optimize the local repository.",
+      )
+      true
+    }
+    "grep" => {
+      show_simple_command_help(
+        "git grep [<options>] <pattern> [--] <pathspec>...",
+        summary="Print lines matching a pattern.",
+      )
+      true
+    }
+    "hash-object" => {
+      show_simple_command_help(
+        "git hash-object [<options>] <file>...",
+        summary="Compute object ID and optionally creates a blob.",
+      )
+      true
+    }
+    "index-pack" => {
+      show_simple_command_help(
+        "git index-pack [<options>] <pack> [<idx>]",
+        summary="Build pack index file for an existing packed archive.",
+      )
+      true
+    }
+    "ls-files" => {
+      show_simple_command_help(
+        "git ls-files [<options>] [<file>...]",
+        summary="Show information about files in the index.",
+      )
+      true
+    }
+    "ls-tree" => {
+      show_simple_command_help(
+        "git ls-tree [<options>] <tree-ish> [<path>...]",
+        summary="List the contents of a tree object.",
+      )
+      true
+    }
+    "pack-objects" => {
+      show_simple_command_help(
+        "git pack-objects [<options>] <base-name>",
+        summary="Create a packed archive of objects.",
+      )
+      true
+    }
+    "pack-refs" => {
+      show_simple_command_help(
+        "git pack-refs [<options>]",
+        summary="Pack heads and tags for efficient repository access.",
+      )
+      true
+    }
+    "prune" => {
+      show_simple_command_help(
+        "git prune [<options>]",
+        summary="Prune all unreachable objects from the object database.",
+      )
+      true
+    }
+    "reflog" => {
+      show_simple_command_help(
+        "git reflog [<options>] [<ref>]",
+        summary="Manage reflog information.",
+      )
+      true
+    }
+    "repack" => {
+      show_simple_command_help(
+        "git repack [<options>]",
+        summary="Pack unpacked objects in a repository.",
+      )
+      true
+    }
+    "revert" => {
+      show_simple_command_help(
+        "git revert [<options>] <commit>...",
+        summary="Revert some existing commits.",
+      )
+      true
+    }
+    "notes" => {
+      show_simple_command_help(
+        "git notes [<command>] [<args>]",
+        summary="Add or inspect object notes.",
+      )
+      true
+    }
+    "bisect" => {
+      show_simple_command_help(
+        "git bisect [<options>] <subcommand> [<args>]",
+        summary="Find by binary search the change that introduced a bug.",
+      )
+      true
+    }
+    "blame" => {
+      show_simple_command_help(
+        "git blame [<options>] <file>",
+        summary="Show what revision and author last modified each line.",
+      )
+      true
+    }
+    "receive-pack" | "git-receive-pack" => {
+      show_simple_command_help(
+        "git receive-pack <git-dir>",
+        summary="Receive what is pushed into the repository.",
+      )
+      true
+    }
+    "rev-list" => {
+      show_simple_command_help(
+        "git rev-list [<options>] <commit>...",
+        summary="List commit objects in reverse chronological order.",
+      )
+      true
+    }
+    "rev-parse" => {
+      show_simple_command_help(
+        "git rev-parse [<options>] <arg>...",
+        summary="Parse revision specifications.",
+      )
+      true
+    }
+    "request-pull" => {
+      show_simple_command_help(
+        "git request-pull <start> <url> [<end>]",
+        summary="Generate a summary of pending changes.",
+      )
+      true
+    }
+    "send-pack" => {
+      show_simple_command_help(
+        "git send-pack [<options>] <repository> [<refspec>...]",
+        summary="Push objects over git protocol to another repository.",
+      )
+      true
+    }
+    "show-ref" => {
+      show_simple_command_help(
+        "git show-ref [<options>] [<pattern>...]",
+        summary="List references in a local repository.",
+      )
+      true
+    }
+    "shortlog" => {
+      show_simple_command_help(
+        "git shortlog [<options>] [<revision-range>]",
+        summary="Summarize git log output.",
+      )
+      true
+    }
+    "symbolic-ref" => {
+      show_simple_command_help(
+        "git symbolic-ref [<options>] <name> [<ref>]",
+        summary="Read, modify and delete symbolic refs.",
+      )
+      true
+    }
+    "submodule" => {
+      show_simple_command_help(
+        "git submodule [<command>] [<args>]",
+        summary="Initialize, update or inspect submodules.",
+      )
+      true
+    }
+    "sparse-checkout" => {
+      show_simple_command_help(
+        "git sparse-checkout [<command>] [<args>]",
+        summary="Initialize and modify the sparse-checkout config.",
+      )
+      true
+    }
+    "read-tree" => {
+      show_simple_command_help(
+        "git read-tree [<options>] <tree-ish>",
+        summary="Read tree information into the index.",
+      )
+      true
+    }
+    "update-index" => {
+      show_simple_command_help(
+        "git update-index [<options>] [--] <file>...",
+        summary="Register file contents in the index.",
+      )
+      true
+    }
+    "mktree" => {
+      show_simple_command_help(
+        "git mktree [<options>]",
+        summary="Build a tree-object from ls-tree formatted text.",
+      )
+      true
+    }
+    "maintenance" => {
+      show_simple_command_help(
+        "git maintenance [<command>] [<options>]",
+        summary="Run tasks to optimize Git repository data.",
+      )
+      true
+    }
+    "unpack-objects" => {
+      show_simple_command_help(
+        "git unpack-objects [<options>]",
+        summary="Unpack objects from a packed archive.",
+      )
+      true
+    }
+    "update-ref" => {
+      show_simple_command_help(
+        "git update-ref [<options>] <refname> <newvalue> [<oldvalue>]",
+        summary="Update the object name stored in a ref safely.",
+      )
+      true
+    }
+    "upload-pack" | "git-upload-pack" => {
+      show_simple_command_help(
+        "git upload-pack [<options>] <git-dir>",
+        summary="Send objects packed back to git-fetch-pack.",
+      )
+      true
+    }
+    "verify-pack" => {
+      show_simple_command_help(
+        "git verify-pack [<options>] <pack>...",
+        summary="Validate packed Git archive files.",
+      )
+      true
+    }
+    "write-tree" => {
+      show_simple_command_help(
+        "git write-tree",
+        summary="Create a tree object from the current index.",
+      )
+      true
+    }
+    "range-diff" => {
+      show_simple_command_help(
+        "git range-diff [<options>] <range1> <range2>",
+        summary="Compare two commit ranges.",
+      )
+      true
+    }
+    "multi-pack-index" => {
+      show_simple_command_help(
+        "git multi-pack-index [<options>] <subcommand>",
+        summary="Write and verify multi-pack-indexes.",
+      )
+      true
+    }
+    "cherry" => {
+      show_simple_command_help(
+        "git cherry [<options>] <upstream> [<head>]",
+        summary="Find commits yet to be applied to upstream.",
+      )
+      true
+    }
+    "am" => {
+      show_simple_command_help(
+        "git am [<options>] <mbox>",
+        summary="Apply a series of patches from a mailbox.",
+      )
+      true
+    }
+    "apply" => {
+      show_simple_command_help(
+        "git apply [<options>] <patch>...",
+        summary="Apply a patch to files and/or to the index.",
+      )
+      true
+    }
+    _ => false
+  }
+}
+
+///|
+async fn handle_help(args : Array[String]) -> Unit {
+  if args.length() == 0 {
+    show_help()
+    return
+  }
+  let cmd = args[0]
+  if not(show_command_help(cmd)) {
+    eprint_line("warning: help for '\{cmd}' is not implemented")
+  }
+}
+
+///|
 async fn main_async() -> Unit {
   let args = @sys.get_cli_args()
   if args.length() < 2 {
@@ -88,7 +623,7 @@ async fn main_async() -> Unit {
         print_line("git version 2.47.0 (bit)")
         return ()
       }
-      "-h" | "--help" | "help" => {
+      "-h" | "--help" => {
         show_help()
         return ()
       }
@@ -238,7 +773,16 @@ fn is_unsupported_global_flag(arg : String) -> Bool {
 
 ///|
 async fn dispatch_command(cmd : String, rest : Array[String]) -> Unit {
+  for arg in rest {
+    if arg == "-h" || arg == "--help" {
+      if not(show_command_help(cmd)) {
+        eprint_line("warning: help for '\{cmd}' is not implemented")
+      }
+      return ()
+    }
+  }
   match cmd {
+    "help" => handle_help(rest)
     // Pack operations
     "receive-pack" | "git-receive-pack" =>
       handle_receive_pack(rest) catch {
@@ -318,6 +862,10 @@ async fn dispatch_command(cmd : String, rest : Array[String]) -> Unit {
     "subdir-clone" =>
       handle_subdir_clone(rest) catch {
         err => exit_with_error("subdir", err)
+      }
+    "collab" =>
+      handle_collab(rest) catch {
+        err => exit_with_error("collab", err)
       }
     "hq" => handle_hq(rest) catch { err => exit_with_error("hq", err) }
     "sparse-checkout" =>

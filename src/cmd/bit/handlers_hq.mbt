@@ -104,7 +104,7 @@ async fn handle_hq_get(args : Array[String]) -> Unit {
           i += 1
           branch = Some(args[i])
         }
-      _ if arg.has_prefix("-") => ()
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("hq get", arg)
       _ => if url is None { url = Some(arg) }
     }
     i += 1

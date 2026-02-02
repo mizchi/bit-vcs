@@ -29,6 +29,7 @@ async fn handle_read_tree(args : Array[String]) -> Unit raise Error {
       _ if arg.has_prefix("--prefix=") => ()
       _ if arg.has_prefix("--index-output=") => ()
       _ if not(arg.has_prefix("-")) => tree_refs.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("read-tree", arg)
       _ => ()
     }
     i += 1
@@ -173,6 +174,7 @@ async fn handle_update_index(args : Array[String]) -> Unit raise Error {
         break
       }
       _ if not(arg.has_prefix("-")) => paths.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("update-index", arg)
       _ => ()
     }
     i += 1
@@ -263,6 +265,7 @@ async fn handle_mktree(args : Array[String]) -> Unit raise Error {
       "--batch" => batch = true
       "-z" => nul_term = true
       "--missing" => ()
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("mktree", arg)
       _ => ()
     }
   }
@@ -369,6 +372,7 @@ async fn handle_request_pull(args : Array[String]) -> Unit raise Error {
       "-p" => ()
       _ if arg.has_prefix("--signoff=") => ()
       _ if not(arg.has_prefix("-")) => positional.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("request-pull", arg)
       _ => ()
     }
     i += 1
@@ -533,6 +537,7 @@ async fn handle_send_pack(args : Array[String]) -> Unit raise Error {
         } else {
           refspecs.push(arg)
         }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("send-pack", arg)
       _ => ()
     }
     i += 1
@@ -630,6 +635,7 @@ async fn handle_range_diff(args : Array[String]) -> Unit raise Error {
       "--no-dual-color" | "--dual-color" | "--no-color" => ()
       _ if arg.has_prefix("--creation-factor=") => ()
       _ if not(arg.has_prefix("-")) => ranges.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("range-diff", arg)
       _ => ()
     }
     i += 1
@@ -835,6 +841,8 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
       _ if arg.has_prefix("--batch-size=") =>
         batch_size = @strconv.parse_int(arg[13:].to_string()) catch { _ => 0 }
       "write" | "verify" | "expire" | "repack" => subcommand = Some(arg)
+      _ if arg.has_prefix("-") =>
+        warn_unimplemented_arg("multi-pack-index", arg)
       _ => ()
     }
     i += 1
@@ -1397,6 +1405,7 @@ async fn handle_cherry(args : Array[String]) -> Unit raise Error {
         } else if limit is None {
           limit = Some(arg)
         }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("cherry", arg)
       _ => ()
     }
     i += 1

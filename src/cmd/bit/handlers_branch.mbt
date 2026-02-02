@@ -36,6 +36,7 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
         new_branch = Some(arg)
         list_mode = false
       }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("branch", arg)
       _ => ()
     }
     i += 1
@@ -74,7 +75,7 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
-fn handle_checkout(args : Array[String]) -> Unit raise Error {
+async fn handle_checkout(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let fs = OsFs::new()
@@ -93,7 +94,7 @@ fn handle_checkout(args : Array[String]) -> Unit raise Error {
         create_branch = true
         force_create = true
       }
-      _ if arg.has_prefix("-") => ()
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("checkout", arg)
       _ => targets.push(arg)
     }
     i += 1
@@ -165,7 +166,7 @@ fn handle_checkout(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
-fn handle_switch(args : Array[String]) -> Unit raise Error {
+async fn handle_switch(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
   let mut branch : String? = None
@@ -183,6 +184,7 @@ fn handle_switch(args : Array[String]) -> Unit raise Error {
         }
       }
       _ if not(arg.has_prefix("-")) => branch = Some(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("switch", arg)
       _ => ()
     }
     i += 1
@@ -199,7 +201,7 @@ fn handle_switch(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
-fn handle_reset(args : Array[String]) -> Unit raise Error {
+async fn handle_reset(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
   let mut mode : @gitlib.ResetMode = @gitlib.ResetMode::Mixed
@@ -210,6 +212,7 @@ fn handle_reset(args : Array[String]) -> Unit raise Error {
       "--mixed" => mode = @gitlib.ResetMode::Mixed
       "--hard" => mode = @gitlib.ResetMode::Hard
       _ if not(arg.has_prefix("-")) => rev = arg
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("reset", arg)
       _ => ()
     }
   }
@@ -258,6 +261,10 @@ async fn handle_rebase(args : Array[String]) -> Unit raise Error {
       }
       _ if not(arg.has_prefix("-")) => {
         upstream = Some(arg)
+        i += 1
+      }
+      _ if arg.has_prefix("-") => {
+        warn_unimplemented_arg("rebase", arg)
         i += 1
       }
       _ => i += 1
@@ -1113,6 +1120,7 @@ async fn handle_show_branches(args : Array[String]) -> Unit raise Error {
         max_count = @strconv.parse_int(val) catch { _ => 10 }
       }
       _ if not(arg.has_prefix("-")) => specific_branches.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("show-branch", arg)
       _ => ()
     }
     i += 1
@@ -1656,6 +1664,7 @@ async fn handle_cherry_pick(args : Array[String]) -> Unit raise Error {
       commit_spec = Some(arg)
       break
     }
+    warn_unimplemented_arg("cherry-pick", arg)
   }
   guard commit_spec is Some(spec) else {
     raise @git.GitError::InvalidObject("commit required")

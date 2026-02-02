@@ -36,7 +36,8 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
       _ if arg.has_prefix("--template=") =>
         template_dir = Some((try! arg[11:]).to_string())
       _ if not(arg.has_prefix("-")) => target_dir = Some(arg)
-      _ => () // Ignore other options
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("init", arg)
+      _ => ()
     }
     i += 1
   }
@@ -142,6 +143,7 @@ async fn handle_status(args : Array[String]) -> Unit raise Error {
         short = true
         show_branch = true
       }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("status", arg)
       _ => ()
     }
   }
@@ -176,7 +178,7 @@ async fn handle_status(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
-fn handle_add(args : Array[String]) -> Unit raise Error {
+async fn handle_add(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
   let mut add_all = false
@@ -186,6 +188,7 @@ fn handle_add(args : Array[String]) -> Unit raise Error {
       "-A" | "--all" => add_all = true
       "-f" | "--force" => () // TODO: skip gitignore check
       _ if not(arg.has_prefix("-")) => paths.push(arg)
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("add", arg)
       _ => ()
     }
   }
@@ -263,6 +266,7 @@ async fn handle_commit(args : Array[String]) -> Unit raise Error {
       }
       "-a" | "--all" => all_modified = true
       "--amend" => amend = true
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("commit", arg)
       _ => ()
     }
     i += 1
@@ -425,6 +429,7 @@ async fn handle_log(args : Array[String]) -> Unit raise Error {
         let num_str = (try! arg[12:]).to_string()
         max_count = @strconv.parse_int(num_str)
       }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("log", arg)
       _ => ()
     }
   }
@@ -751,6 +756,8 @@ async fn handle_show(args : Array[String]) -> Unit raise Error {
       pretty_raw = true
     } else if not(arg.has_prefix("-")) {
       rev = arg
+    } else {
+      warn_unimplemented_arg("show", arg)
     }
   }
   // Resolve revision

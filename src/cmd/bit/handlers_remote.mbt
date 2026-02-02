@@ -839,6 +839,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
       continue
     }
     if arg.has_prefix("-") {
+      warn_unimplemented_arg("clone", arg)
       i += 1
       continue
     }
@@ -956,6 +957,7 @@ async fn handle_fetch(args : Array[String]) -> Unit raise Error {
       remote_url = Some(arg)
       break
     }
+    warn_unimplemented_arg("fetch", arg)
   }
   guard remote_url is Some(url) else {
     raise @git.GitError::InvalidObject("No remote configured")
@@ -1011,7 +1013,10 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
   for arg in args {
     match arg {
       "--rebase" | "-r" => rebase = true
-      _ if arg.has_prefix("-") => continue
+      _ if arg.has_prefix("-") => {
+        warn_unimplemented_arg("pull", arg)
+        continue
+      }
       _ => {
         remote_url = Some(arg)
         break
@@ -1048,7 +1053,7 @@ async fn handle_push(args : Array[String]) -> Unit raise Error {
     match arg {
       "-f" | "--force" => force = true
       "-u" | "--set-upstream" => set_upstream = true
-      _ if arg.has_prefix("-") => ()
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("push", arg)
       _ =>
         if refspec is None {
           // First non-option is either remote or refspec

@@ -39,6 +39,7 @@ async fn handle_subdir_clone(args : Array[String]) -> Unit raise Error {
   while i < args.length() {
     let arg = args[i]
     if arg.has_prefix("-") {
+      warn_unimplemented_arg("subdir-clone", arg)
       i += 1
       continue
     }

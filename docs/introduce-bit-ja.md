@@ -37,8 +37,8 @@ git だとこの `foo` だけをルートディレクトリとして取り出す
 
 ```bash
 # mizchi/bit の src/x/fs だけを取り出す
-$ bit clone @mizchi/bit/src/x/fs ./myfs
-$ cd myfs
+$ bit clone mizchi/bit:src/x/fs
+$ cd fs
 $ ls
 fs.mbt  types.mbt  ...
 ```
@@ -46,14 +46,19 @@ fs.mbt  types.mbt  ...
 GitHub の URL をそのまま貼り付けることもできます。
 
 ```bash
-# ブラウザで開いてる URL をそのままコピペ
+# ブラウザで開いてる URL をそのままコピペ (tree はサブディレクトリ)
 $ bit clone https://github.com/user/repo/tree/main/packages/core
+
+# blob は単一ファイル取得
+$ bit clone https://github.com/user/repo/blob/main/README.md
 ```
 
-これは双方向に動作します。つまり、`myfs` で編集して `bit push` すると、元のリポジトリに変更が反映されます。
+クローン先はパス末尾の名前になります。必要なら `bit clone <src> <dest>` で明示的に指定できます。
+
+これは双方向に動作します。つまり、`fs` で編集して `bit push` すると、元のリポジトリに変更が反映されます。
 
 ```bash
-cd myfs
+cd fs
 echo "// new code" >> fs.mbt
 bit add .
 bit commit -m "update"
@@ -65,9 +70,9 @@ bit push origin main  # 元の mizchi/bit に push される
 git から見たときは submodule と同じく embedded repository として認識されるので、親リポジトリから操作して不整合を起こすことはありません。
 
 ```bash
-# 親リポジトリで git status すると
-$ git status
-warning: adding embedded git repository: myfs
+# 親リポジトリで git add すると
+$ git add fs
+warning: adding embedded git repository: fs
 ```
 
 ただし、bit で checkout したディレクトリの内部で git コマンドを使って操作した場合の挙動は十分に検証できていません。初期化時に pre-commit hook を注入して操作を止めるようにしていますが、完全に不整合を排除できるかは未検証です。不整合を避けたいなら、AI に渡す環境では `git` を `bit` にエイリアスするのが安全でしょう。
