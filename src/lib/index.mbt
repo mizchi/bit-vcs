@@ -6,6 +6,8 @@ pub struct IndexEntry {
   id : @git.ObjectId
   mode : Int
   size : Int
+  mtime_sec : Int
+  mtime_nsec : Int
 }
 
 ///|
@@ -14,8 +16,10 @@ pub fn IndexEntry::new(
   id : @git.ObjectId,
   mode : Int,
   size : Int,
+  mtime_sec? : Int = 0,
+  mtime_nsec? : Int = 0,
 ) -> IndexEntry {
-  { path, id, mode, size }
+  { path, id, mode, size, mtime_sec, mtime_nsec }
 }
 
 ///|
@@ -51,7 +55,15 @@ pub fn read_index_entries(
     // Index entry format (40 bytes stat data):
     // ctime_seconds, ctime_nanoseconds, mtime_seconds, mtime_nanoseconds,
     // dev, ino, mode, uid, gid, file_size
-    offset += 24 // skip ctime, mtime, dev, ino (6 u32)
+    let _ctime_sec = index_read_u32_be(data, offset)
+    offset += 4
+    let _ctime_nsec = index_read_u32_be(data, offset)
+    offset += 4
+    let mtime_sec = index_read_u32_be(data, offset)
+    offset += 4
+    let mtime_nsec = index_read_u32_be(data, offset)
+    offset += 4
+    offset += 8 // skip dev, ino (2 u32)
     let mode = index_read_u32_be(data, offset)
     offset += 4
     offset += 8 // skip uid, gid (2 u32)
@@ -77,7 +89,7 @@ pub fn read_index_entries(
     let entry_size = (entry_size_without_padding + 7) / 8 * 8
     offset = entry_start + entry_size
     ignore(next)
-    entries.push({ path: path_str, id, mode, size })
+    entries.push({ path: path_str, id, mode, size, mtime_sec, mtime_nsec })
   }
   entries
 }
@@ -105,8 +117,8 @@ pub fn write_index_entries(
     // dev, ino, mode, uid, gid, file_size
     index_push_u32_be(out, 0) // ctime_seconds
     index_push_u32_be(out, 0) // ctime_nanoseconds
-    index_push_u32_be(out, 0) // mtime_seconds
-    index_push_u32_be(out, 0) // mtime_nanoseconds
+    index_push_u32_be(out, e.mtime_sec) // mtime_seconds
+    index_push_u32_be(out, e.mtime_nsec) // mtime_nanoseconds
     index_push_u32_be(out, 0) // dev
     index_push_u32_be(out, 0) // ino
     index_push_u32_be(out, e.mode) // mode

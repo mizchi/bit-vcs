@@ -168,7 +168,14 @@ fn build_worktree_index(
       let content = rfs.read_file(abs)
       // Write blob to object store
       let id = write_loose_object(fs, git_dir, @git.ObjectType::Blob, content)
-      result.push({ path: e.path, id, mode: e.mode, size: content.length() })
+      result.push({
+        path: e.path,
+        id,
+        mode: e.mode,
+        size: content.length(),
+        mtime_sec: 0,
+        mtime_nsec: 0,
+      })
     }
     // Skip deleted files
   }

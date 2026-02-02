@@ -16,9 +16,12 @@ pub async fn status(
   fs : &@git.RepoFileSystem,
   root : String,
 ) -> Status raise @git.GitError {
+  let profile = profile_enabled()
+  let mut t0 = profile_start(profile)
   let git_dir = join_path(root, ".git")
   let autocrlf = read_autocrlf_setting(fs, git_dir)
   let index_entries = read_index_entries(fs, git_dir)
+  t0 = profile_lap(profile, "status read_index_entries", t0)
   let index_map : Map[String, IndexEntry] = {}
   for e in index_entries {
     index_map[e.path] = e
@@ -26,7 +29,8 @@ pub async fn status(
   let untracked : Array[String] = []
   let unstaged_modified : Array[String] = []
   let unstaged_deleted : Array[String] = []
-  let files = list_working_files(fs, root)
+  let files = list_working_files_async(fs, root)
+  t0 = profile_lap(profile, "status list_working_files", t0)
   let visited : Map[String, Bool] = {}
   for path in files {
     visited[path] = true
@@ -37,22 +41,68 @@ pub async fn status(
           continue
         }
         let abs = join_path(root, path)
-        match worktree_entry(fs, abs) {
+        match worktree_entry_meta(fs, abs) {
           None => ()
           Some(info) =>
             match info.kind {
-              WorktreeKind::Regular => {
-                let content = fs.read_file(abs)
-                let normalized = normalize_worktree_content(content, autocrlf)
-                let id = @git.hash_blob(normalized)
-                if id != entry.id || info.mode != entry.mode {
-                  unstaged_modified.push(path)
+              WorktreeKindMeta::Regular => {
+                let mut stat_matches = false
+                match info.size {
+                  Some(sz) =>
+                    match info.mtime_sec {
+                      Some(ms) =>
+                        match info.mtime_nsec {
+                          Some(mn) => {
+                            if entry.mtime_sec != 0 || entry.mtime_nsec != 0 {
+                              stat_matches = (
+                                sz == entry.size &&
+                                ms == entry.mtime_sec &&
+                                mn == entry.mtime_nsec
+                              )
+                            }
+                          }
+                          None => ()
+                        }
+                      None => ()
+                    }
+                  None => ()
+                }
+                if not(stat_matches) || info.mode != entry.mode {
+                  let content = fs.read_file(abs)
+                  let normalized = normalize_worktree_content(content, autocrlf)
+                  let id = @git.hash_blob(normalized)
+                  if id != entry.id || info.mode != entry.mode {
+                    unstaged_modified.push(path)
+                  }
                 }
               }
-              WorktreeKind::Symlink(target=target) => {
-                let id = @git.hash_blob(@utf8.encode(target))
-                if id != entry.id || info.mode != entry.mode {
-                  unstaged_modified.push(path)
+              WorktreeKindMeta::Symlink => {
+                let mode_changed = info.mode != entry.mode
+                let mut stat_matches = false
+                match info.mtime_sec {
+                  Some(ms) =>
+                    match info.mtime_nsec {
+                      Some(mn) => {
+                        if entry.mtime_sec != 0 || entry.mtime_nsec != 0 {
+                          stat_matches = (
+                            ms == entry.mtime_sec && mn == entry.mtime_nsec
+                          )
+                        }
+                      }
+                      None => ()
+                    }
+                  None => ()
+                }
+                if mode_changed || not(stat_matches) {
+                  match read_symlink_target_path(abs) {
+                    Some(target) => {
+                      let id = @git.hash_blob(@utf8.encode(target))
+                      if id != entry.id || mode_changed {
+                        unstaged_modified.push(path)
+                      }
+                    }
+                    None => ()
+                  }
                 }
               }
             }
@@ -60,6 +110,7 @@ pub async fn status(
       }
     }
   }
+  t0 = profile_lap(profile, "status scan_worktree", t0)
   for item in index_map.to_array() {
     let (path, _) = item
     if not(visited.contains(path)) {
@@ -71,12 +122,14 @@ pub async fn status(
           }
         None => ()
       }
-      if worktree_entry(fs, abs) is None {
+      if worktree_entry_meta(fs, abs) is None {
         unstaged_deleted.push(path)
       }
     }
   }
+  t0 = profile_lap(profile, "status scan_deleted", t0)
   let head_entries = read_head_tree_entries(fs, git_dir)
+  t0 = profile_lap(profile, "status read_head_entries", t0)
   let staged_added : Array[String] = []
   let staged_modified : Array[String] = []
   let staged_deleted : Array[String] = []
@@ -102,6 +155,7 @@ pub async fn status(
   unstaged_modified.sort()
   unstaged_deleted.sort()
   untracked.sort()
+  ignore(profile_lap(profile, "status sort", t0))
   {
     staged_added,
     staged_modified,
@@ -209,7 +263,14 @@ pub fn add_paths(
         normalized,
       )
       let size = content.length()
-      map[path] = { path, id, mode: default_file_mode(), size }
+      map[path] = {
+        path,
+        id,
+        mode: default_file_mode(),
+        size,
+        mtime_sec: 0,
+        mtime_nsec: 0,
+      }
     } else {
       map.remove(path)
     }
@@ -237,7 +298,7 @@ pub async fn add_paths_async(
   for e in entries {
     map[e.path] = e
   }
-  let all_paths = expand_paths(rfs, root, paths)
+  let all_paths = expand_paths_async(rfs, root, paths)
   for path in all_paths {
     let abs = join_path(root, path)
     match worktree_entry(rfs, abs) {
@@ -254,7 +315,15 @@ pub async fn add_paths_async(
               normalized,
             )
             let size = content.length()
-            map[path] = { path, id, mode: info.mode, size }
+            let mtime_sec = match info.mtime_sec {
+              Some(v) => v
+              None => 0
+            }
+            let mtime_nsec = match info.mtime_nsec {
+              Some(v) => v
+              None => 0
+            }
+            map[path] = { path, id, mode: info.mode, size, mtime_sec, mtime_nsec }
           }
           WorktreeKind::Symlink(target=target) => {
             let bytes = @utf8.encode(target)
@@ -265,7 +334,15 @@ pub async fn add_paths_async(
               bytes,
             )
             let size = bytes.length()
-            map[path] = { path, id, mode: info.mode, size }
+            let mtime_sec = match info.mtime_sec {
+              Some(v) => v
+              None => 0
+            }
+            let mtime_nsec = match info.mtime_nsec {
+              Some(v) => v
+              None => 0
+            }
+            map[path] = { path, id, mode: info.mode, size, mtime_sec, mtime_nsec }
           }
         }
     }
@@ -319,6 +396,38 @@ fn expand_paths(
 ) -> Array[String] raise @git.GitError {
   let result : Array[String] = []
   let all = list_working_files(fs, root)
+  for p in paths {
+    let path = normalize_rel_path(p)
+    // Handle "." specially - add all files
+    if path == "." {
+      for f in all {
+        result.push(f)
+      }
+      continue
+    }
+    let abs = join_path(root, path)
+    if fs.is_dir(abs) {
+      let prefix = if path.has_suffix("/") { path } else { path + "/" }
+      for f in all {
+        if f.has_prefix(prefix) {
+          result.push(f)
+        }
+      }
+    } else {
+      result.push(path)
+    }
+  }
+  result
+}
+
+///|
+async fn expand_paths_async(
+  fs : &@git.RepoFileSystem,
+  root : String,
+  paths : Array[String],
+) -> Array[String] raise @git.GitError {
+  let result : Array[String] = []
+  let all = list_working_files_async(fs, root)
   for p in paths {
     let path = normalize_rel_path(p)
     // Handle "." specially - add all files
@@ -615,7 +724,14 @@ pub fn write_tree_from_index(
           let new_path = e.path[prefix_with_slash.length():].to_string() catch {
             _ => continue
           }
-          result.push({ path: new_path, id: e.id, mode: e.mode, size: e.size })
+          result.push({
+            path: new_path,
+            id: e.id,
+            mode: e.mode,
+            size: e.size,
+            mtime_sec: e.mtime_sec,
+            mtime_nsec: e.mtime_nsec,
+          })
         }
       }
       result
@@ -642,10 +758,24 @@ fn write_tree_from_entries(
       (name, Some(rest)) =>
         match dir_map.get(name) {
           Some(list) =>
-            list.push({ path: rest, id: e.id, mode: e.mode, size: e.size })
+            list.push({
+              path: rest,
+              id: e.id,
+              mode: e.mode,
+              size: e.size,
+              mtime_sec: e.mtime_sec,
+              mtime_nsec: e.mtime_nsec,
+            })
           None =>
             dir_map[name] = [
-              { path: rest, id: e.id, mode: e.mode, size: e.size },
+              {
+                path: rest,
+                id: e.id,
+                mode: e.mode,
+                size: e.size,
+                mtime_sec: e.mtime_sec,
+                mtime_nsec: e.mtime_nsec,
+              },
             ]
         }
     }
@@ -974,6 +1104,8 @@ pub fn mv_path(
     id: src_entry.id,
     mode: src_entry.mode,
     size: src_entry.size,
+    mtime_sec: src_entry.mtime_sec,
+    mtime_nsec: src_entry.mtime_nsec,
   }
   // Move file on disk
   let content = rfs.read_file(src_abs)

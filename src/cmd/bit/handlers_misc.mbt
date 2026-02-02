@@ -1320,7 +1320,7 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
       }
     } else {
       // Show untracked files
-      let all_files = @gitlib.list_working_files(fs, root)
+      let all_files = @gitlib.list_working_files_async(fs, root)
       for path in all_files {
         if not(tracked.contains(path)) {
           print_str(path + terminator)

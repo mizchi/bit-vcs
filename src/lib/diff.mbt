@@ -23,87 +23,53 @@ pub async fn diff_worktree(
   fs : &@git.RepoFileSystem,
   root : String,
 ) -> Array[DiffFile] raise @git.GitError {
+  let profile = profile_enabled()
+  let mut t0 = profile_start(profile)
   let git_dir = join_path(root, ".git")
   let autocrlf = read_autocrlf_setting(fs, git_dir)
   let index_entries = read_index_entries(fs, git_dir)
-  let index_map : Map[String, IndexEntry] = {}
-  for e in index_entries {
-    index_map[e.path] = e
-  }
-  let db = ObjectDb::load(fs, git_dir)
-  let files = list_working_files(fs, root)
-  let out : Array[DiffFile] = []
-  let seen : Map[String, Bool] = {}
-  for path in files {
-    seen[path] = true
-    // Only diff files that are in the index (skip untracked files)
-    match index_map.get(path) {
-      None => () // untracked files are not shown in `git diff`
-      Some(entry) => {
-        if is_gitlink_mode_int(entry.mode) {
-          continue
-        }
-        let abs = join_path(root, path)
-        match worktree_entry(fs, abs) {
-          None => ()
-          Some(info) => {
-            let mut content_changed = false
-            let mode_changed = info.mode != entry.mode
-            let mut old_content : Bytes? = None
-            let mut new_content : Bytes? = None
-            match info.kind {
-              WorktreeKind::Regular => {
-                let content = fs.read_file(abs)
-                let normalized = normalize_worktree_content(content, autocrlf)
-                let id = @git.hash_blob(normalized)
-                content_changed = id != entry.id
-                if content_changed {
-                  let old = diff_read_blob(db, fs, entry.id)
-                  if old is Some(_) {
-                    old_content = old
-                    new_content = Some(normalized)
-                  }
-                }
-              }
-              WorktreeKind::Symlink(target=target) => {
-                let bytes = @utf8.encode(target)
-                let id = @git.hash_blob(bytes)
-                content_changed = id != entry.id
-                if content_changed {
-                  let old = diff_read_blob(db, fs, entry.id)
-                  if old is Some(_) {
-                    old_content = old
-                    new_content = Some(bytes)
-                  }
-                }
-              }
-            }
-            if (content_changed && old_content is None) {
-              continue
-            }
-            if content_changed || mode_changed {
-              out.push({
-                path,
-                kind: DiffKind::Modified,
-                old_content,
-                new_content,
-                old_mode: Some(entry.mode),
-                new_mode: Some(info.mode),
-              })
-            }
-          }
-        }
+  t0 = profile_lap(profile, "diff_worktree read_index_entries", t0)
+  let db = ObjectDb::load_lazy(fs, git_dir)
+  t0 = profile_lap(profile, "diff_worktree load_db", t0)
+  let cached_files = working_files_cache(root)
+  let cache_map : Map[String, Bool] = {}
+  let mut cache_ready = false
+  match cached_files {
+    Some(files) => {
+      cache_ready = true
+      for p in files {
+        cache_map[p] = true
       }
     }
+    None => ()
   }
-  for item in index_map.to_array() {
-    let (path, entry) = item
-    if not(seen.contains(path)) {
-      if is_gitlink_mode_int(entry.mode) {
+  let out : Array[DiffFile] = []
+  for entry in index_entries {
+    let path = entry.path
+    if is_gitlink_mode_int(entry.mode) {
+      continue
+    }
+    if cache_ready && not(cache_map.contains(path)) {
+      let ignored = is_ignored_path(fs, root, path, false)
+      if not(ignored) {
+        let old = diff_read_blob(db, fs, entry.id)
+        // Skip if blob not found (e.g., submodule)
+        if old is Some(_) {
+          out.push({
+            path,
+            kind: DiffKind::Deleted,
+            old_content: old,
+            new_content: None,
+            old_mode: Some(entry.mode),
+            new_mode: None,
+          })
+        }
         continue
       }
-      let abs = join_path(root, path)
-      if worktree_entry(fs, abs) is None {
+    }
+    let abs = join_path(root, path)
+    match worktree_entry_meta(fs, abs) {
+      None => {
         let old = diff_read_blob(db, fs, entry.id)
         // Skip if blob not found (e.g., submodule)
         if old is Some(_) {
@@ -117,9 +83,106 @@ pub async fn diff_worktree(
           })
         }
       }
+      Some(info) => {
+        let mut content_changed = false
+        let mode_changed = info.mode != entry.mode
+        let mut old_content : Bytes? = None
+        let mut new_content : Bytes? = None
+        match info.kind {
+          WorktreeKindMeta::Regular => {
+            let mut stat_matches = false
+            match info.size {
+              Some(sz) =>
+                match info.mtime_sec {
+                  Some(ms) =>
+                    match info.mtime_nsec {
+                      Some(mn) => {
+                        if entry.mtime_sec != 0 || entry.mtime_nsec != 0 {
+                          stat_matches = (
+                            sz == entry.size &&
+                            ms == entry.mtime_sec &&
+                            mn == entry.mtime_nsec
+                          )
+                        }
+                      }
+                      None => ()
+                    }
+                  None => ()
+                }
+              None => ()
+            }
+            if not(mode_changed) && stat_matches {
+              content_changed = false
+            } else {
+              let content = fs.read_file(abs)
+              let normalized = normalize_worktree_content(content, autocrlf)
+              let id = @git.hash_blob(normalized)
+              content_changed = id != entry.id
+              if content_changed {
+                let old = diff_read_blob(db, fs, entry.id)
+                if old is Some(_) {
+                  old_content = old
+                  new_content = Some(normalized)
+                }
+              }
+            }
+          }
+          WorktreeKindMeta::Symlink => {
+            let mut stat_matches = false
+            match info.mtime_sec {
+              Some(ms) =>
+                match info.mtime_nsec {
+                  Some(mn) => {
+                    if entry.mtime_sec != 0 || entry.mtime_nsec != 0 {
+                      stat_matches = (
+                        ms == entry.mtime_sec && mn == entry.mtime_nsec
+                      )
+                    }
+                  }
+                  None => ()
+                }
+              None => ()
+            }
+            if not(mode_changed) && stat_matches {
+              content_changed = false
+            } else {
+              match read_symlink_target_path(abs) {
+                Some(target) => {
+                  let bytes = @utf8.encode(target)
+                  let id = @git.hash_blob(bytes)
+                  content_changed = id != entry.id
+                  if content_changed {
+                    let old = diff_read_blob(db, fs, entry.id)
+                    if old is Some(_) {
+                      old_content = old
+                      new_content = Some(bytes)
+                    }
+                  }
+                }
+                None => ()
+              }
+            }
+          }
+        }
+        if (content_changed && old_content is None) {
+          continue
+        }
+        if content_changed || mode_changed {
+          out.push({
+            path,
+            kind: DiffKind::Modified,
+            old_content,
+            new_content,
+            old_mode: Some(entry.mode),
+            new_mode: Some(info.mode),
+          })
+        }
+      }
     }
   }
+  t0 = profile_lap(profile, "diff_worktree scan_entries", t0)
   out.sort_by(fn(a, b) { String::compare(a.path, b.path) })
+  ignore(profile_lap(profile, "diff_worktree sort", t0))
   out
 }
 
@@ -136,7 +199,7 @@ pub fn diff_index(
     index_map[e.path] = e
   }
   let head_entries = diff_read_head_entries(fs, git_dir)
-  let db = ObjectDb::load(fs, git_dir)
+  let db = ObjectDb::load_lazy(fs, git_dir)
   let out : Array[DiffFile] = []
   for item in index_map.to_array() {
     let (path, entry) = item

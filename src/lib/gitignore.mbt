@@ -60,17 +60,20 @@ fn walk_dir(
   // Skip submodules (directories containing .git file or directory)
   if rel != "" {
     let git_marker = join_path(dir, ".git")
-    if fs.is_file(git_marker) || fs.is_dir(git_marker) {
+    if fs.is_file(git_marker) {
       return ()
     }
   }
+  let entries = fs.readdir(dir)
+  if rel != "" && entries_contains(entries, ".git") {
+    return ()
+  }
   let prev_len = matcher.len()
-  let ignore_path = join_path(dir, ".gitignore")
-  if fs.is_file(ignore_path) {
+  if entries_contains(entries, ".gitignore") {
+    let ignore_path = join_path(dir, ".gitignore")
     let content = @utf8.decode_lossy(fs.read_file(ignore_path)[:])
     matcher.add_rules(rel, content)
   }
-  let entries = fs.readdir(dir)
   for name in entries {
     if name == "." || name == ".." || name == ".git" || name == ".jj" {
       continue
@@ -78,7 +81,6 @@ fn walk_dir(
     let child_rel = if rel == "" { name } else { rel + "/" + name }
     let child_path = join_path(root, child_rel)
     let is_dir = fs.is_dir(child_path)
-    let is_file = fs.is_file(child_path)
     if matcher.is_ignored(child_rel, is_dir) {
       // Still traverse to allow negations in nested .gitignore
       if is_dir {
@@ -88,11 +90,21 @@ fn walk_dir(
     }
     if is_dir {
       walk_dir(fs, root, child_rel, matcher, out)
-    } else if is_file {
+    } else {
       out.push(child_rel)
     }
   }
   matcher.truncate(prev_len)
+}
+
+///|
+fn entries_contains(entries : Array[String], name : String) -> Bool {
+  for item in entries {
+    if item == name {
+      return true
+    }
+  }
+  false
 }
 
 ///|

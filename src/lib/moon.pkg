@@ -5,15 +5,33 @@ import {
   "moonbitlang/async/fs" as @afs,
   "mizchi/zlib",
   "moonbitlang/async/process" as @process,
+  "moonbitlang/core/bench" as @bench,
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/strconv",
+  "moonbitlang/core/env" as @env,
   "moonbitlang/x/fs",
   "moonbitlang/x/sys" as @sys,
   "moonbitlang/async/http" as @http,
 }
 
+import "test" {
+  "moonbitlang/core/bench" as @bench,
+  "mizchi/bit/osfs" as @osfs,
+}
+
+import "wbtest" {
+  "moonbitlang/core/bench" as @bench,
+  "mizchi/bit/osfs" as @osfs,
+}
+
 options(
   targets: {
+    "gitignore_async_native.mbt": [ "native" ],
+    "gitignore_async_js.mbt": [ "js", "wasm", "wasm-gc" ],
+    "gitignore_async_test.mbt": [ "native" ],
+    "bench_index_diff_test.mbt": [ "native" ],
+    "bench_list_working_files_test.mbt": [ "native" ],
+    "bench_worktree_entry_wbtest.mbt": [ "native" ],
     "promisor.mbt": [ "native" ],
     "sync_http.mbt": [ "native" ],
     "worktree_probe_native.mbt": [ "native" ],

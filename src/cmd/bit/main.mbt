@@ -662,13 +662,24 @@ async fn main_async() -> Unit {
     }
     None => ()
   }
-  // If --bare was passed globally, prepend it to rest for init command
-  let effective_rest = if opts.bare && cmd == "init" {
-    prepend_arg("--bare", opts.rest)
-  } else {
-    opts.rest
+  let fs = OsFs::new()
+  let aliases = load_global_aliases(fs)
+  apply_alias_overrides(aliases, opts.config_overrides)
+  let (alias_cmd, alias_rest) = match resolve_alias(aliases, cmd, opts.rest) {
+    Resolved(resolved_cmd, resolved_rest) => (resolved_cmd, resolved_rest)
+    Shell(cmdline) => {
+      eprint_line("warning: shell alias is not supported: \{cmdline}")
+      @sys.exit(1)
+      (cmd, opts.rest)
+    }
   }
-  dispatch_command(cmd, effective_rest)
+  // If --bare was passed globally, prepend it to rest for init command
+  let effective_rest = if opts.bare && alias_cmd == "init" {
+    prepend_arg("--bare", alias_rest)
+  } else {
+    alias_rest
+  }
+  dispatch_command(alias_cmd, effective_rest)
 }
 
 ///|

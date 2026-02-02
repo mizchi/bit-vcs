@@ -401,7 +401,14 @@ fn rebase_write_tree_from_map(
   let entries : Array[IndexEntry] = []
   for item in map.to_array() {
     let (path, e) = item
-    entries.push({ path, id: e.id, mode: e.mode, size: 0 })
+    entries.push({
+      path,
+      id: e.id,
+      mode: e.mode,
+      size: 0,
+      mtime_sec: 0,
+      mtime_nsec: 0,
+    })
   }
   let rel_entries = entries.map(fn(e) { e })
   rebase_write_tree_recursive(fs, git_dir, rel_entries)
@@ -424,10 +431,24 @@ fn rebase_write_tree_recursive(
       (name, Some(rest)) =>
         match dir_map.get(name) {
           Some(list) =>
-            list.push({ path: rest, id: e.id, mode: e.mode, size: e.size })
+            list.push({
+              path: rest,
+              id: e.id,
+              mode: e.mode,
+              size: e.size,
+              mtime_sec: e.mtime_sec,
+              mtime_nsec: e.mtime_nsec,
+            })
           None =>
             dir_map[name] = [
-              { path: rest, id: e.id, mode: e.mode, size: e.size },
+              {
+                path: rest,
+                id: e.id,
+                mode: e.mode,
+                size: e.size,
+                mtime_sec: e.mtime_sec,
+                mtime_nsec: e.mtime_nsec,
+              },
             ]
         }
     }
@@ -504,7 +525,14 @@ fn rebase_map_to_index(
         if o.obj_type != @git.ObjectType::Blob {
           raise @git.GitError::InvalidObject("Object is not a blob")
         }
-        entries.push({ path, id: e.id, mode: e.mode, size: o.data.length() })
+        entries.push({
+          path,
+          id: e.id,
+          mode: e.mode,
+          size: o.data.length(),
+          mtime_sec: 0,
+          mtime_nsec: 0,
+        })
       }
       None => raise @git.GitError::InvalidObject("Missing blob object")
     }

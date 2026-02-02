@@ -51,6 +51,8 @@ bit push origin feature
 
 - Hash algorithm: SHA-1 only.
 - SHA-256 repositories and `--object-format=sha256` are not supported.
+- Git config: reads global aliases from `~/.gitconfig` (or `GIT_CONFIG_GLOBAL`) only.
+- Shell aliases (prefixed with `!`) are not supported.
 
 ## Extensions
 

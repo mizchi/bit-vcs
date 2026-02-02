@@ -46,7 +46,14 @@ pub fn tree_files_to_index(
   for item in files.to_array() {
     let (path, info) = item
     if is_gitlink_mode_int(info.mode) {
-      entries.push({ path, id: info.id, mode: info.mode, size: 0 })
+      entries.push({
+        path,
+        id: info.id,
+        mode: info.mode,
+        size: 0,
+        mtime_sec: 0,
+        mtime_nsec: 0,
+      })
       continue
     }
     let obj = db.get(fs, info.id)
@@ -61,6 +68,8 @@ pub fn tree_files_to_index(
           id: info.id,
           mode: info.mode,
           size: o.data.length(),
+          mtime_sec: 0,
+          mtime_nsec: 0,
         })
       }
     }
