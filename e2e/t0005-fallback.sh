@@ -10,11 +10,11 @@ test_expect_failure 'unsupported command fails with --no-git-fallback' '
 '
 
 test_expect_success 'version command works with --no-git-fallback' '
-    git_cmd --version | grep -q "moongit"
+    git_cmd --version | grep -q "git version"
 '
 
 test_expect_success 'help command works with --no-git-fallback' '
-    git_cmd --help | grep -q "moongit"
+    git_cmd --help | grep -q "bit is a Git implementation"
 '
 
 test_done
