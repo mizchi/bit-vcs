@@ -40,7 +40,7 @@ async fn apply_auth_header(
 async fn resolve_auth_header(url : String) -> String? raise GitError {
   match parse_http_url(url) {
     None => None
-    Some((protocol, host, path, username, password)) => {
+    Some((protocol, host, path, username, password)) =>
       match password {
         Some(pass) => {
           let user = username.unwrap_or("")
@@ -54,7 +54,6 @@ async fn resolve_auth_header(url : String) -> String? raise GitError {
           }
         }
       }
-    }
   }
 }
 
@@ -66,9 +65,7 @@ fn build_basic_auth(username : String, password : String) -> String {
 }
 
 ///|
-fn parse_http_url(
-  url : String,
-) -> (String, String, String, String?, String?)? {
+fn parse_http_url(url : String) -> (String, String, String, String?, String?)? {
   let (protocol, rest) = if url.has_prefix("https://") {
     ("https", String::unsafe_substring(url, start=8, end=url.length()))
   } else if url.has_prefix("http://") {
@@ -82,7 +79,8 @@ fn parse_http_url(
     None => rest
   }
   let path = match slash {
-    Some(idx) => String::unsafe_substring(rest, start=idx + 1, end=rest.length())
+    Some(idx) =>
+      String::unsafe_substring(rest, start=idx + 1, end=rest.length())
     None => ""
   }
   let mut host = authority
@@ -91,14 +89,22 @@ fn parse_http_url(
   match authority.rev_find("@") {
     Some(at) => {
       let userinfo = String::unsafe_substring(authority, start=0, end=at)
-      host = String::unsafe_substring(authority, start=at + 1, end=authority.length())
+      host = String::unsafe_substring(
+        authority,
+        start=at + 1,
+        end=authority.length(),
+      )
       match userinfo.find(":") {
         Some(colon) => {
           username = Some(
             String::unsafe_substring(userinfo, start=0, end=colon),
           )
           password = Some(
-            String::unsafe_substring(userinfo, start=colon + 1, end=userinfo.length()),
+            String::unsafe_substring(
+              userinfo,
+              start=colon + 1,
+              end=userinfo.length(),
+            ),
           )
         }
         None => username = Some(userinfo)
@@ -154,7 +160,7 @@ async fn git_credential_fill(
     "git",
     ["credential", "fill"],
     inherit_env=true,
-    stdin=stdin,
+    stdin~,
     extra_env={ "GIT_TERMINAL_PROMPT": "0" },
   ) catch {
     err => raise GitError::IoError("git credential fill failed: \{err}")
@@ -171,7 +177,11 @@ async fn git_credential_fill(
     match line.find("=") {
       Some(eq) => {
         let key = String::unsafe_substring(line, start=0, end=eq)
-        let value = String::unsafe_substring(line, start=eq + 1, end=line.length())
+        let value = String::unsafe_substring(
+          line,
+          start=eq + 1,
+          end=line.length(),
+        )
         if key == "username" {
           user = Some(value)
         } else if key == "password" || key == "token" || key == "oauth_token" {

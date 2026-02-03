@@ -15,10 +15,7 @@ pub async fn list_working_files_async(
   if cache_enabled {
     if not(clear_cache) {
       match try_read_cache(root) {
-        Some(cache) =>
-          if validate_cache(root, cache) {
-            return cache.files
-          }
+        Some(cache) => if validate_cache(root, cache) { return cache.files }
         None => ()
       }
     }
@@ -132,12 +129,16 @@ async fn walk_dir_async(
     if matcher.is_ignored(child_rel, is_dir) {
       // Still traverse to allow negations in nested .gitignore
       if is_dir {
-        walk_dir_async(fs, root, child_rel, matcher, out, cache_enabled, dirs, ignores)
+        walk_dir_async(
+          fs, root, child_rel, matcher, out, cache_enabled, dirs, ignores,
+        )
       }
       continue
     }
     if is_dir {
-      walk_dir_async(fs, root, child_rel, matcher, out, cache_enabled, dirs, ignores)
+      walk_dir_async(
+        fs, root, child_rel, matcher, out, cache_enabled, dirs, ignores,
+      )
     } else {
       out.push(child_rel)
     }
@@ -310,13 +311,12 @@ fn parse_mtime_line(line : StringView) -> PathMtime? {
 }
 
 ///|
-async fn validate_cache(root : String, cache : WorkingFilesCache) -> Bool noraise {
+async fn validate_cache(
+  root : String,
+  cache : WorkingFilesCache,
+) -> Bool noraise {
   for entry in cache.dirs {
-    let abs = if entry.path == "." {
-      root
-    } else {
-      join_path(root, entry.path)
-    }
+    let abs = if entry.path == "." { root } else { join_path(root, entry.path) }
     let mtime_result : Result[(Int64, Int), Error] = try? @afs.mtime(
       abs,
       follow_symlink=false,

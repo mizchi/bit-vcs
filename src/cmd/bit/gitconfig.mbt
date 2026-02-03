@@ -15,9 +15,7 @@ pub fn load_global_aliases(fs : OsFs) -> Map[String, String] {
       if not(fs.is_file(p)) {
         return empty
       }
-      let bytes = fs.read_file(p) catch {
-        _ => return empty
-      }
+      let bytes = fs.read_file(p) catch { _ => return empty }
       return parse_gitconfig_aliases(decode_bytes(bytes))
     }
     None => ()
@@ -59,11 +57,7 @@ pub fn parse_gitconfig_aliases(content : String) -> Map[String, String] {
     }
     if in_alias_section {
       match parse_key_value_line(line) {
-        Some((key, value)) => {
-          if key.length() > 0 {
-            aliases.set(key, value)
-          }
-        }
+        Some((key, value)) => if key.length() > 0 { aliases.set(key, value) }
         None => ()
       }
     }
@@ -160,7 +154,7 @@ pub fn split_alias_command(value : String) -> Array[String] {
 fn find_global_gitconfig_path() -> String? {
   match @sys.get_env_var("GIT_CONFIG_GLOBAL") {
     Some(path) => Some(path)
-    None => {
+    None =>
       match @sys.get_env_var("HOME") {
         Some(home) => Some(home + "/.gitconfig")
         None =>
@@ -169,7 +163,6 @@ fn find_global_gitconfig_path() -> String? {
             None => None
           }
       }
-    }
   }
 }
 
@@ -194,7 +187,7 @@ fn parse_section_name(line : String) -> String? {
       break
     }
   }
-  Some(String::unsafe_substring(trimmed, start=0, end=end).to_lower())
+  Some(String::unsafe_substring(trimmed, start=0, end~).to_lower())
 }
 
 ///|
@@ -236,11 +229,7 @@ fn parse_key_value_line(line : String) -> (String, String)? {
           " \t",
         )
         let value = trim_chars(
-          String::unsafe_substring(
-            trimmed,
-            start=sep + 1,
-            end=trimmed.length(),
-          ),
+          String::unsafe_substring(trimmed, start=sep + 1, end=trimmed.length()),
           " \t",
         )
         Some((key, unquote_value(value)))

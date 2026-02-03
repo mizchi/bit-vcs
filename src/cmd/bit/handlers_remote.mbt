@@ -4,9 +4,9 @@
 /// Clone target result
 pub(all) enum GitHubShorthand {
   /// Full repo clone: user/repo → https://github.com/user/repo
-  Repo(String) // github_url
+  Repo(String, String?) // github_url, ref?
   /// Subdir clone: user/repo:path → https://github.com/user/repo, path
-  Subdir(String, String) // github_url, subdir_path
+  Subdir(String, String, String?) // github_url, subdir_path, ref?
   /// Single file fetch: raw URL, filename
   File(String, String) // raw_url, filename
 } derive(Eq, Show)
@@ -17,14 +17,18 @@ pub(all) enum GitHubShorthand {
 /// Supports:
 /// 1. user/repo → Repo clone (GitHub)
 /// 2. user/repo:path → Subdir clone with sparse checkout
-/// 3. gitlab.com/user/repo → Repo clone (other hosts)
-/// 4. gitlab.com/user/repo:path → Subdir clone (other hosts)
-/// 5. https://github.com/user/repo/tree/branch/path → Subdir clone
-/// 6. https://github.com/user/repo/blob/branch/path → Single file fetch
+/// 3. user/repo@ref → Repo clone at ref
+/// 4. user/repo@ref:path → Subdir clone at ref
+/// 5. gitlab.com/user/repo → Repo clone (other hosts)
+/// 6. gitlab.com/user/repo:path → Subdir clone (other hosts)
+/// 7. https://github.com/user/repo/tree/branch/path → Subdir clone
+/// 8. https://github.com/user/repo/blob/branch/path → Single file fetch
 ///
 /// Examples:
 /// - "user/repo" → Repo("https://github.com/user/repo")
 /// - "user/repo:src" → Subdir("https://github.com/user/repo", "src")
+/// - "user/repo@main" → Repo("https://github.com/user/repo", Some("main"))
+/// - "user/repo@main:src" → Subdir("https://github.com/user/repo", "src", Some("main"))
 /// - "gitlab.com/user/repo" → Repo("https://gitlab.com/user/repo")
 /// - "https://github.com/user/repo/tree/main/src" → Subdir(url, "src")
 pub fn parse_github_shorthand(url : String) -> GitHubShorthand? {
@@ -51,8 +55,21 @@ pub fn parse_github_shorthand(url : String) -> GitHubShorthand? {
     }
     None => (url, None)
   }
+  // Extract @ref from repo part
+  let (repo_base, ref_spec) = match repo_part.rev_find("@") {
+    Some(idx) => {
+      let base = String::unsafe_substring(repo_part, start=0, end=idx)
+      let rf = String::unsafe_substring(
+        repo_part,
+        start=idx + 1,
+        end=repo_part.length(),
+      )
+      (base, if rf.is_empty() { None } else { Some(rf) })
+    }
+    None => (repo_part, None)
+  }
   // Split repo part by /
-  let parts : Array[String] = repo_part
+  let parts : Array[String] = repo_base
     .split("/")
     .filter(fn(s) { s.length() > 0 })
     .map(fn(s) { s.to_string() })
@@ -69,8 +86,8 @@ pub fn parse_github_shorthand(url : String) -> GitHubShorthand? {
   }
   let clone_url = "https://\{host}/\{owner}/\{repo}"
   match subdir {
-    Some(sd) => Some(Subdir(clone_url, sd))
-    None => Some(Repo(clone_url))
+    Some(sd) => Some(Subdir(clone_url, sd, ref_spec))
+    None => Some(Repo(clone_url, ref_spec))
   }
 }
 
@@ -100,17 +117,22 @@ pub fn check_shorthand_ambiguity(
     Some(idx) => String::unsafe_substring(url, start=0, end=idx)
     None => url
   }
-  // Check first component
-  let first_slash = repo_part.find("/")
-  let first_part = match first_slash {
+  // Strip @ref if present
+  let repo_base = match repo_part.rev_find("@") {
     Some(idx) => String::unsafe_substring(repo_part, start=0, end=idx)
     None => repo_part
+  }
+  // Check first component
+  let first_slash = repo_base.find("/")
+  let first_part = match first_slash {
+    Some(idx) => String::unsafe_substring(repo_base, start=0, end=idx)
+    None => repo_base
   }
   if dir_exists(first_part) {
     return Some(first_part)
   }
   // Check full repo path (user/repo part)
-  let parts : Array[String] = repo_part
+  let parts : Array[String] = repo_base
     .split("/")
     .filter(fn(s) { s.length() > 0 })
     .map(fn(s) { s.to_string() })
@@ -154,7 +176,7 @@ fn parse_github_browser_url(url : String) -> GitHubShorthand? {
   let github_url = "https://github.com/\{owner}/\{repo}"
   if kind == "tree" {
     // Directory → subdir clone
-    Some(Subdir(github_url, subpath))
+    Some(Subdir(github_url, subpath, Some(branch)))
   } else if kind == "blob" {
     // File → raw fetch
     let raw_url = "https://raw.githubusercontent.com/\{owner}/\{repo}/\{branch}/\{subpath}"
@@ -163,6 +185,117 @@ fn parse_github_browser_url(url : String) -> GitHubShorthand? {
   } else {
     None
   }
+}
+
+///|
+fn parse_object_id_hex(text : String) -> @git.ObjectId? {
+  let parsed : Result[@git.ObjectId, Error] = try? @git.ObjectId::from_hex(text)
+  match parsed {
+    Ok(id) => Some(id)
+    Err(_) => None
+  }
+}
+
+///|
+fn is_hex_char(c : Char) -> Bool {
+  (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+///|
+fn is_hex_string(s : String) -> Bool {
+  if s.length() == 0 {
+    return false
+  }
+  for c in s {
+    if not(is_hex_char(c)) {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn lower_hex_string(s : String) -> String {
+  let out = StringBuilder::new()
+  for c in s {
+    if c >= 'A' && c <= 'F' {
+      out.write_char((c.to_int() + 32).unsafe_to_char())
+    } else {
+      out.write_char(c)
+    }
+  }
+  out.to_string()
+}
+
+///|
+async fn resolve_remote_ref_id(
+  remote_url : String,
+  ref_spec : String,
+) -> (@git.ObjectId, String?)? raise Error {
+  match parse_object_id_hex(ref_spec) {
+    Some(id) => return Some((id, None))
+    None => ()
+  }
+  let (refs, _caps, _version, symrefs) = @git.discover_upload_refs_http(
+    remote_url, true,
+  )
+  if is_hex_string(ref_spec) && ref_spec.length() >= 4 {
+    let needle = lower_hex_string(ref_spec)
+    let matches : Array[@git.ObjectId] = []
+    for item in refs {
+      let (id, _name) = item
+      if id.to_hex().has_prefix(needle) {
+        matches.push(id)
+      }
+    }
+    if matches.length() == 1 {
+      return Some((matches[0], None))
+    }
+    if matches.length() > 1 {
+      raise @git.GitError::InvalidObject("short hash is ambiguous: " + ref_spec)
+    }
+  }
+  if ref_spec == "HEAD" {
+    match @git.select_default_ref(refs, symrefs) {
+      Some((refname, id)) =>
+        if refname.has_prefix("refs/heads/") {
+          let branch = String::unsafe_substring(
+            refname,
+            start=11,
+            end=refname.length(),
+          )
+          return Some((id, Some(branch)))
+        } else {
+          return Some((id, None))
+        }
+      None => return None
+    }
+  }
+  let candidates : Array[String] = []
+  if ref_spec.has_prefix("refs/") {
+    candidates.push(ref_spec)
+  } else {
+    candidates.push("refs/heads/" + ref_spec)
+    candidates.push("refs/tags/" + ref_spec)
+    candidates.push(ref_spec)
+  }
+  for cand in candidates {
+    for item in refs {
+      let (id, name) = item
+      if name == cand {
+        if name.has_prefix("refs/heads/") {
+          let branch = String::unsafe_substring(
+            name,
+            start=11,
+            end=name.length(),
+          )
+          return Some((id, Some(branch)))
+        }
+        return Some((id, None))
+      }
+    }
+  }
+  None
 }
 
 ///|
@@ -2100,7 +2233,9 @@ async fn fetch_from_remote(
       let mut prev_id : @git.ObjectId? = None
       if fs.is_file(remote_path) {
         let content = decode_bytes(
-          fs.read_file(remote_path) catch { _ => Bytes::default() },
+          fs.read_file(remote_path) catch {
+            _ => Bytes::default()
+          },
         )
         let hex = trim_string(content)
         if hex.length() > 0 {
@@ -2124,8 +2259,7 @@ async fn fetch_from_remote(
       fs.write_string(remote_path, commit_id.to_hex() + "\n")
       print_line("From \{remote_url}")
       match prev_id {
-        None =>
-          print_line(" * [new branch] \{refname} -> \{remote_ref}")
+        None => print_line(" * [new branch] \{refname} -> \{remote_ref}")
         Some(pid) =>
           print_line(
             "   \{pid.to_hex()}..\{commit_id.to_hex()}  \{refname} -> \{remote_ref}",
@@ -2946,6 +3080,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
   let mut depth = 0
   let mut filter = @git.FilterSpec::NoFilter
   let mut bare = false
+  let mut ref_spec : String? = None
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -3005,20 +3140,16 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
   }
   // Check for shorthand (user/repo, user/repo:path, or browser URL)
   match parse_github_shorthand(remote_url) {
-    Some(Repo(github_url)) => {
+    Some(Repo(github_url, refname)) => {
       // user/repo → normal clone from GitHub
       print_line("Shorthand: \{github_url}")
       url = Some(github_url)
+      ref_spec = refname
     }
-    Some(Subdir(github_url, subdir)) => {
+    Some(Subdir(github_url, subdir, refname)) => {
       // user/repo:path or /tree/ URL → subdir clone
-      let subdir_args : Array[String] = [github_url, subdir]
-      match dest {
-        Some(d) => subdir_args.push(d)
-        None => ()
-      }
       print_line("Subdir clone: \{github_url} → \{subdir}")
-      return handle_subdir_clone(subdir_args)
+      return subdir_clone(github_url, subdir, dest, refname)
     }
     Some(File(raw_url, filename)) => {
       // /blob/ URL → single file fetch
@@ -3089,14 +3220,14 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
         match @gitlib.resolve_head_commit(fs, git_dir) {
           Some(commit_id) =>
             @gitlib.apply_worktree_modes_from_commit(
-              fs,
-              fs,
-              target,
-              git_dir,
-              commit_id,
+              fs, fs, target, git_dir, commit_id,
             )
           None => ()
         }
+      }
+      if ref_spec is Some(refname) && not(bare) && not(filter.is_partial()) {
+        let _ = @gitlib.checkout(fs, fs, target, refname)
+
       }
       print_line("done.")
     }
@@ -3114,16 +3245,47 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
         match @gitlib.resolve_head_commit(fs, git_dir) {
           Some(commit_id) =>
             @gitlib.apply_worktree_modes_from_commit(
-              fs,
-              fs,
-              target,
-              git_dir,
-              commit_id,
+              fs, fs, target, git_dir, commit_id,
             )
           None => ()
         }
       }
       if refs.length() > 0 {
+        if ref_spec is Some(refname) && not(bare) && not(filter.is_partial()) {
+          match resolve_remote_ref_id(remote_url, refname) {
+            Some((commit_id, branch)) => {
+              let git_dir = target + "/.git"
+              let mut db = @gitlib.ObjectDb::load_lazy(fs, git_dir)
+              if db.get(fs, commit_id) is None {
+                let pack = @git.fetch_pack_http(remote_url, [commit_id], true)
+                let objects = @git.parse_packfile(pack)
+                @git.write_packfile_with_index(fs, git_dir, pack, objects)
+                db = @gitlib.ObjectDb::load_lazy(fs, git_dir)
+              }
+              match branch {
+                Some(name) => {
+                  fs.mkdir_p(git_dir + "/refs/heads") catch {
+                    _ => ()
+                  }
+                  fs.write_string(
+                    git_dir + "/refs/heads/" + name,
+                    commit_id.to_hex() + "\n",
+                  ) catch {
+                    _ => ()
+                  }
+                  let _ = @gitlib.checkout(fs, fs, target, name)
+
+                }
+                None => {
+                  let _ = @gitlib.checkout(fs, fs, target, commit_id.to_hex())
+
+                }
+              }
+            }
+            None =>
+              raise @git.GitError::InvalidObject("Unknown ref: " + refname)
+          }
+        }
         print_line("done.")
       } else {
         raise @git.GitError::InvalidObject("Clone failed: no refs found")

@@ -25,7 +25,9 @@ fn bench_wt_join_path(root : String, path : String) -> String {
 ///|
 fn bench_wt_ensure_dir(path : String) -> Unit {
   if not(@fs.path_exists(path)) {
-    @fs.create_dir(path) catch { _ => () }
+    @fs.create_dir(path) catch {
+      _ => ()
+    }
   }
 }
 
@@ -38,15 +40,23 @@ fn bench_wt_setup(root : String) -> Unit {
   bench_wt_ensure_dir(bench_wt_root_base)
   bench_wt_ensure_dir(root)
   let file_path = bench_wt_join_path(root, "file.txt")
-  @fs.write_string_to_file(file_path, "content\n") catch { _ => () }
+  @fs.write_string_to_file(file_path, "content\n") catch {
+    _ => ()
+  }
   let link_path = bench_wt_join_path(root, "link.txt")
   if @fs.path_exists(link_path) {
-    @fs.remove_file(link_path) catch { _ => () }
+    @fs.remove_file(link_path) catch {
+      _ => ()
+    }
   }
   @async.run_async_main(async fn() {
-    @afs.symlink(target="file.txt", link_path) catch { _ => () }
+    @afs.symlink(target="file.txt", link_path) catch {
+      _ => ()
+    }
   })
-  @fs.write_string_to_file(marker, "ok\n") catch { _ => () }
+  @fs.write_string_to_file(marker, "ok\n") catch {
+    _ => ()
+  }
 }
 
 ///|

@@ -62,9 +62,12 @@ fn read_symlink_target(
 }
 
 ///|
-async fn apply_symlink(path : String, target : String) -> Unit raise @git.GitError {
+async fn apply_symlink(
+  path : String,
+  target : String,
+) -> Unit raise @git.GitError {
   remove_path_if_exists(path)
-  @afs.symlink(target=target, path) catch {
+  @afs.symlink(target~, path) catch {
     err => raise @git.GitError::IoError(err.to_string())
   }
 }
@@ -106,6 +109,7 @@ async fn remove_path_if_exists(path : String) -> Unit raise @git.GitError {
 }
 
 ///|
+
 ///|
 fn is_executable_mode_int(mode : Int) -> Bool {
   mode == 0o100755

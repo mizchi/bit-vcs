@@ -110,6 +110,8 @@ pub fn list_tags(&@bit.RepoFileSystem, String) -> Array[String]
 
 pub fn list_working_files(&@bit.RepoFileSystem, String) -> Array[String] raise @bit.GitError
 
+pub async fn list_working_files_async(&@bit.RepoFileSystem, String) -> Array[String] raise @bit.GitError
+
 pub fn list_worktrees(&@bit.RepoFileSystem, String) -> Array[WorktreeInfo] raise @bit.GitError
 
 pub fn load_object_store_from_fs(&@bit.RepoFileSystem, String) -> @bit.ObjectStore raise @bit.GitError
@@ -238,6 +240,8 @@ pub fn upload_pack(&@bit.RepoFileSystem, String, UploadPackRequest) -> Bytes rai
 
 pub fn upload_pack_v2(&@bit.RepoFileSystem, String, UploadPackRequestV2, UploadPackConfig) -> Bytes raise @bit.GitError
 
+pub async fn working_files_cache(String) -> Array[String]? noraise
+
 pub fn write_index_entries(&@bit.FileSystem, String, Array[IndexEntry]) -> Unit raise @bit.GitError
 
 pub fn write_loose_object(&@bit.FileSystem, String, @bit.ObjectType, Bytes) -> @bit.ObjectId raise @bit.GitError
@@ -306,8 +310,10 @@ pub struct IndexEntry {
   id : @bit.ObjectId
   mode : Int
   size : Int
+  mtime_sec : Int
+  mtime_nsec : Int
 }
-pub fn IndexEntry::new(String, @bit.ObjectId, Int, Int) -> Self
+pub fn IndexEntry::new(String, @bit.ObjectId, Int, Int, mtime_sec? : Int, mtime_nsec? : Int) -> Self
 
 pub(all) struct InitOptions {
   default_branch : String

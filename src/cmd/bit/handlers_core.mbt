@@ -143,22 +143,14 @@ async fn handle_status(args : Array[String]) -> Unit raise Error {
   let mut root = get_work_root()
   let mut git_dir = root + "/.git"
   let mut has_git_dir = fs.is_dir(git_dir)
-  let mut has_git_file = if has_git_dir {
-    false
-  } else {
-    fs.is_file(git_dir)
-  }
+  let mut has_git_file = if has_git_dir { false } else { fs.is_file(git_dir) }
   if not(has_git_dir) && not(has_git_file) {
     match find_repo_root(".") {
       Some(found) => {
         root = found
         git_dir = root + "/.git"
         has_git_dir = fs.is_dir(git_dir)
-        has_git_file = if has_git_dir {
-          false
-        } else {
-          fs.is_file(git_dir)
-        }
+        has_git_file = if has_git_dir { false } else { fs.is_file(git_dir) }
       }
       None =>
         raise @git.GitError::InvalidObject(

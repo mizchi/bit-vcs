@@ -51,7 +51,7 @@ async fn worktree_entry(
           match read_symlink_target_path(abs_path) {
             Some(target) =>
               Some({
-                kind: WorktreeKind::Symlink(target=target),
+                kind: WorktreeKind::Symlink(target~),
                 mode: info.mode,
                 mtime_sec: info.mtime_sec,
                 mtime_nsec: info.mtime_nsec,

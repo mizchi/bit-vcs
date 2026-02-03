@@ -52,15 +52,12 @@ pub async fn status(
                     match info.mtime_sec {
                       Some(ms) =>
                         match info.mtime_nsec {
-                          Some(mn) => {
+                          Some(mn) =>
                             if entry.mtime_sec != 0 || entry.mtime_nsec != 0 {
-                              stat_matches = (
-                                sz == entry.size &&
+                              stat_matches = sz == entry.size &&
                                 ms == entry.mtime_sec &&
                                 mn == entry.mtime_nsec
-                              )
                             }
-                          }
                           None => ()
                         }
                       None => ()
@@ -82,13 +79,11 @@ pub async fn status(
                 match info.mtime_sec {
                   Some(ms) =>
                     match info.mtime_nsec {
-                      Some(mn) => {
+                      Some(mn) =>
                         if entry.mtime_sec != 0 || entry.mtime_nsec != 0 {
-                          stat_matches = (
-                            ms == entry.mtime_sec && mn == entry.mtime_nsec
-                          )
+                          stat_matches = ms == entry.mtime_sec &&
+                            mn == entry.mtime_nsec
                         }
-                      }
                       None => ()
                     }
                   None => ()
@@ -116,10 +111,7 @@ pub async fn status(
     if not(visited.contains(path)) {
       let abs = join_path(root, path)
       match index_map.get(path) {
-        Some(entry) =>
-          if is_gitlink_mode_int(entry.mode) {
-            continue
-          }
+        Some(entry) => if is_gitlink_mode_int(entry.mode) { continue }
         None => ()
       }
       if worktree_entry_meta(fs, abs) is None {
@@ -323,9 +315,16 @@ pub async fn add_paths_async(
               Some(v) => v
               None => 0
             }
-            map[path] = { path, id, mode: info.mode, size, mtime_sec, mtime_nsec }
+            map[path] = {
+              path,
+              id,
+              mode: info.mode,
+              size,
+              mtime_sec,
+              mtime_nsec,
+            }
           }
-          WorktreeKind::Symlink(target=target) => {
+          WorktreeKind::Symlink(target~) => {
             let bytes = @utf8.encode(target)
             let id = write_loose_object(
               fs,
@@ -342,7 +341,14 @@ pub async fn add_paths_async(
               Some(v) => v
               None => 0
             }
-            map[path] = { path, id, mode: info.mode, size, mtime_sec, mtime_nsec }
+            map[path] = {
+              path,
+              id,
+              mode: info.mode,
+              size,
+              mtime_sec,
+              mtime_nsec,
+            }
           }
         }
     }
@@ -514,7 +520,7 @@ fn read_autocrlf_from_config(
   fs : &@git.RepoFileSystem,
   path : String,
 ) -> AutoCrlf? {
-  let bytes = try fs.read_file(path) catch { _ => return None }
+  let bytes = fs.read_file(path) catch { _ => return None }
   let content = @utf8.decode_lossy(bytes[:])
   parse_autocrlf_from_content(content)
 }
@@ -532,11 +538,7 @@ fn parse_autocrlf_from_content(content : String) -> AutoCrlf? {
       continue
     }
     if line.has_prefix("[") && line.has_suffix("]") {
-      let inner = String::unsafe_substring(
-        line,
-        start=1,
-        end=line.length() - 1,
-      )
+      let inner = String::unsafe_substring(line, start=1, end=line.length() - 1)
       let inner_trim = inner.trim().to_string()
       let section_name = match inner_trim.find(" ") {
         Some(i) => String::unsafe_substring(inner_trim, start=0, end=i)
@@ -559,10 +561,10 @@ fn parse_autocrlf_from_content(content : String) -> AutoCrlf? {
           continue
         }
         let raw_value = String::unsafe_substring(
-          line,
-          start=idx + 1,
-          end=line.length(),
-        )
+            line,
+            start=idx + 1,
+            end=line.length(),
+          )
           .trim()
           .to_string()
           .to_lower()
@@ -583,10 +585,7 @@ fn parse_autocrlf_value(value : String) -> AutoCrlf {
 }
 
 ///|
-fn normalize_worktree_content(
-  content : Bytes,
-  autocrlf : AutoCrlf,
-) -> Bytes {
+fn normalize_worktree_content(content : Bytes, autocrlf : AutoCrlf) -> Bytes {
   match autocrlf {
     Off => content
     Input | On =>
@@ -608,7 +607,6 @@ fn is_binary_bytes(content : Bytes) -> Bool {
   }
   false
 }
-
 
 ///|
 fn normalize_crlf_to_lf(content : Bytes) -> Bytes {

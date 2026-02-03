@@ -42,9 +42,7 @@ fn init_path_for_bench(args : Array[String]) -> (String, Array[String]) {
 ///|
 test "bench init parse_global_options (status)" (b : @bench.T) {
   let args = ["bit", "status"]
-  b.bench(fn() {
-    b.keep(parse_global_options(args))
-  })
+  b.bench(fn() { b.keep(parse_global_options(args)) })
 }
 
 ///|

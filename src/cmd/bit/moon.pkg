@@ -21,6 +21,9 @@ import {
 options(
   is_main: true,
   targets: {
+    "bench_init_wbtest.mbt": [ "native" ],
+    "gitconfig.mbt": [ "native" ],
+    "gitconfig_test.mbt": [ "native" ],
     "handlers_branch.mbt": [ "native" ],
     "handlers_collab.mbt": [ "native" ],
     "handlers_core.mbt": [ "native" ],
@@ -32,11 +35,9 @@ options(
     "handlers_remote.mbt": [ "native" ],
     "handlers_subdir.mbt": [ "native" ],
     "handlers_subdir_wbtest.mbt": [ "native" ],
+    "handlers_tree.mbt": [ "native" ],
     "handlers_worktree.mbt": [ "native" ],
-    "bench_init_wbtest.mbt": [ "native" ],
     "helpers.mbt": [ "native" ],
-    "gitconfig.mbt": [ "native" ],
-    "gitconfig_test.mbt": [ "native" ],
     "index_pack.mbt": [ "native" ],
     "main.mbt": [ "native" ],
     "main_js.mbt": [ "js" ],

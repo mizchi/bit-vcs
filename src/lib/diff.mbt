@@ -96,15 +96,12 @@ pub async fn diff_worktree(
                 match info.mtime_sec {
                   Some(ms) =>
                     match info.mtime_nsec {
-                      Some(mn) => {
+                      Some(mn) =>
                         if entry.mtime_sec != 0 || entry.mtime_nsec != 0 {
-                          stat_matches = (
-                            sz == entry.size &&
+                          stat_matches = sz == entry.size &&
                             ms == entry.mtime_sec &&
                             mn == entry.mtime_nsec
-                          )
                         }
-                      }
                       None => ()
                     }
                   None => ()
@@ -132,13 +129,11 @@ pub async fn diff_worktree(
             match info.mtime_sec {
               Some(ms) =>
                 match info.mtime_nsec {
-                  Some(mn) => {
+                  Some(mn) =>
                     if entry.mtime_sec != 0 || entry.mtime_nsec != 0 {
-                      stat_matches = (
-                        ms == entry.mtime_sec && mn == entry.mtime_nsec
-                      )
+                      stat_matches = ms == entry.mtime_sec &&
+                        mn == entry.mtime_nsec
                     }
-                  }
                   None => ()
                 }
               None => ()
@@ -164,7 +159,7 @@ pub async fn diff_worktree(
             }
           }
         }
-        if (content_changed && old_content is None) {
+        if content_changed && old_content is None {
           continue
         }
         if content_changed || mode_changed {
@@ -287,7 +282,7 @@ pub fn diff_text(files : Array[DiffFile]) -> Array[String] {
           None => ()
         }
       }
-      Modified => {
+      Modified =>
         match (f.old_content, f.new_content) {
           (Some(old), Some(new)) => {
             lines.push("--- a/\{f.path}")
@@ -297,7 +292,6 @@ pub fn diff_text(files : Array[DiffFile]) -> Array[String] {
           }
           _ => ()
         }
-      }
     }
   }
   lines

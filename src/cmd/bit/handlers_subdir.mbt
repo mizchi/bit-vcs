@@ -59,6 +59,16 @@ async fn handle_subdir_clone(args : Array[String]) -> Unit raise Error {
   guard subdir is Some(subdir_path) else {
     raise @git.GitError::InvalidObject("subdirectory path required")
   }
+  subdir_clone(remote_url, subdir_path, dest, None)
+}
+
+///|
+async fn subdir_clone(
+  remote_url : String,
+  subdir_path : String,
+  dest : String?,
+  ref_spec : String?,
+) -> Unit raise Error {
   // Derive destination from subdir or explicit dest
   let relative_target = match dest {
     Some(d) => d
@@ -103,35 +113,52 @@ async fn handle_subdir_clone(args : Array[String]) -> Unit raise Error {
   }
   // Step 3: Read HEAD commit from temp
   let temp_git_dir = temp_clone + "/.git"
-  let head_ref = fs.read_file(temp_git_dir + "/HEAD") catch {
-    _ => raise @git.GitError::IoError("Failed to read HEAD")
-  }
-  let head_text = @utf8.decode_lossy(head_ref[:])
-    .trim(chars=" \n\r\t")
-    .to_string()
-  let commit_id = if head_text.has_prefix("ref: ") {
-    let ref_name = String::unsafe_substring(
-      head_text,
-      start=5,
-      end=head_text.length(),
-    )
-    let ref_path = temp_git_dir + "/" + ref_name
-    let ref_content = fs.read_file(ref_path) catch {
-      _ => raise @git.GitError::IoError("Failed to read ref: " + ref_name)
+  let commit_id = match ref_spec {
+    Some(refname) => {
+      let resolved = resolve_remote_ref_id(remote_url, refname)
+      guard resolved is Some((id, _)) else {
+        raise @git.GitError::InvalidObject("Unknown ref: " + refname)
+      }
+      id
     }
-    let ref_text = @utf8.decode_lossy(ref_content[:])
-      .trim(chars=" \n\r\t")
-      .to_string()
-    @git.ObjectId::from_hex(ref_text) catch {
-      _ => raise @git.GitError::InvalidObject("Invalid commit ID in ref")
-    }
-  } else {
-    @git.ObjectId::from_hex(head_text) catch {
-      _ => raise @git.GitError::InvalidObject("Invalid HEAD")
+    None => {
+      let head_ref = fs.read_file(temp_git_dir + "/HEAD") catch {
+        _ => raise @git.GitError::IoError("Failed to read HEAD")
+      }
+      let head_text = @utf8.decode_lossy(head_ref[:])
+        .trim(chars=" \n\r\t")
+        .to_string()
+      if head_text.has_prefix("ref: ") {
+        let ref_name = String::unsafe_substring(
+          head_text,
+          start=5,
+          end=head_text.length(),
+        )
+        let ref_path = temp_git_dir + "/" + ref_name
+        let ref_content = fs.read_file(ref_path) catch {
+          _ => raise @git.GitError::IoError("Failed to read ref: " + ref_name)
+        }
+        let ref_text = @utf8.decode_lossy(ref_content[:])
+          .trim(chars=" \n\r\t")
+          .to_string()
+        @git.ObjectId::from_hex(ref_text) catch {
+          _ => raise @git.GitError::InvalidObject("Invalid commit ID in ref")
+        }
+      } else {
+        @git.ObjectId::from_hex(head_text) catch {
+          _ => raise @git.GitError::InvalidObject("Invalid HEAD")
+        }
+      }
     }
   }
   // Load object database and get tree
-  let db = @gitlib.ObjectDb::load_lazy(fs, temp_git_dir)
+  let mut db = @gitlib.ObjectDb::load_lazy(fs, temp_git_dir)
+  if db.get(fs, commit_id) is None {
+    let pack = @git.fetch_pack_http(remote_url, [commit_id], true)
+    let objects = @git.parse_packfile(pack)
+    @git.write_packfile_with_index(fs, temp_git_dir, pack, objects)
+    db = @gitlib.ObjectDb::load_lazy(fs, temp_git_dir)
+  }
   let commit_obj = db.get(fs, commit_id)
   guard commit_obj is Some(obj) else {
     raise @git.GitError::InvalidObject("Commit not found")

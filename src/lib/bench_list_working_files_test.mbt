@@ -31,7 +31,9 @@ let bench_large_root : String = join_path(bench_root_base, "large")
 ///|
 fn ensure_dir(path : String) -> Unit {
   if not(@fs.path_exists(path)) {
-    @fs.create_dir(path) catch { _ => () }
+    @fs.create_dir(path) catch {
+      _ => ()
+    }
   }
 }
 
@@ -46,16 +48,22 @@ fn ensure_bench_repo(root : String, file_count : Int, dir_count : Int) -> Unit {
   ensure_dir(join_path(root, ".git"))
   let ignore_path = join_path(root, ".gitignore")
   if not(@fs.path_exists(ignore_path)) {
-    @fs.write_string_to_file(ignore_path, "ignore*\n") catch { _ => () }
+    @fs.write_string_to_file(ignore_path, "ignore*\n") catch {
+      _ => ()
+    }
   }
   for i in 0..<file_count {
     let path = join_path(root, "file_\{i}.txt")
-    @fs.write_string_to_file(path, "content\n") catch { _ => () }
+    @fs.write_string_to_file(path, "content\n") catch {
+      _ => ()
+    }
   }
   let ignored = if file_count / 10 > 0 { file_count / 10 } else { 1 }
   for i in 0..<ignored {
     let path = join_path(root, "ignore_\{i}.txt")
-    @fs.write_string_to_file(path, "ignore\n") catch { _ => () }
+    @fs.write_string_to_file(path, "ignore\n") catch {
+      _ => ()
+    }
   }
   let per_dir = if dir_count > 0 { file_count / dir_count } else { 0 }
   for d in 0..<dir_count {
@@ -63,10 +71,14 @@ fn ensure_bench_repo(root : String, file_count : Int, dir_count : Int) -> Unit {
     ensure_dir(dir)
     for i in 0..<per_dir {
       let path = join_path(dir, "file_\{i}.txt")
-      @fs.write_string_to_file(path, "content\n") catch { _ => () }
+      @fs.write_string_to_file(path, "content\n") catch {
+        _ => ()
+      }
     }
   }
-  @fs.write_string_to_file(marker, "ok\n") catch { _ => () }
+  @fs.write_string_to_file(marker, "ok\n") catch {
+    _ => ()
+  }
 }
 
 ///|

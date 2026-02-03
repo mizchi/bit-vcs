@@ -6,6 +6,8 @@ import {
 }
 
 // Values
+pub fn apply_alias_overrides(Map[String, String], Array[(String, String)]) -> Unit
+
 pub fn check_shorthand_ambiguity(String, (String) -> Bool) -> String?
 
 pub fn get_current_timestamp() -> Int64
@@ -18,17 +20,30 @@ pub fn get_subdir_tree_from_commit(@lib.ObjectDb, OsFs, @mizchi/bit.ObjectId, St
 
 pub fn is_subdir_clone(OsFs, String) -> Bool
 
+pub fn load_global_aliases(OsFs) -> Map[String, String]
+
+pub fn parse_gitconfig_aliases(String) -> Map[String, String]
+
 pub fn parse_github_shorthand(String) -> GitHubShorthand?
 
 pub fn read_subdir_attributes(OsFs, String) -> (String, String, String)?
 
+pub fn resolve_alias(Map[String, String], String, Array[String]) -> AliasResolution
+
 pub fn resolve_ref_for_subdir(OsFs, String, String) -> @mizchi/bit.ObjectId? raise
+
+pub fn split_alias_command(String) -> Array[String]
 
 pub fn update_subdir_base(OsFs, String, String) -> Unit
 
 // Errors
 
 // Types and methods
+pub enum AliasResolution {
+  Resolved(String, Array[String])
+  Shell(String)
+}
+
 type BlameLine
 
 type BlameOptions
@@ -42,8 +57,8 @@ type ConfigBlock
 type FetchRefspec
 
 pub(all) enum GitHubShorthand {
-  Repo(String)
-  Subdir(String, String)
+  Repo(String, String?)
+  Subdir(String, String, String?)
   File(String, String)
 }
 pub impl Eq for GitHubShorthand

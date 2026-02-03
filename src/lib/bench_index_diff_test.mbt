@@ -25,7 +25,9 @@ fn bench_index_join_path(root : String, path : String) -> String {
 ///|
 fn bench_index_ensure_dir(path : String) -> Unit {
   if not(@fs.path_exists(path)) {
-    @fs.create_dir(path) catch { _ => () }
+    @fs.create_dir(path) catch {
+      _ => ()
+    }
   }
 }
 
@@ -38,28 +40,34 @@ fn bench_index_ensure_repo(root : String, file_count : Int) -> Unit {
   bench_index_ensure_dir(bench_index_root_base)
   bench_index_ensure_dir(root)
   let fs = @osfs.OsFs::new()
-  try init_repo(fs, root) catch { _ => () }
+  init_repo(fs, root) catch {
+    _ => ()
+  }
   let paths : Array[String] = []
   for i in 0..<file_count {
     let path = bench_index_join_path(root, "file_\{i}.txt")
-    @fs.write_string_to_file(path, "content\n") catch { _ => () }
+    @fs.write_string_to_file(path, "content\n") catch {
+      _ => ()
+    }
     paths.push("file_\{i}.txt")
   }
-  add_paths(fs, fs, root, paths) catch { _ => () }
+  add_paths(fs, fs, root, paths) catch {
+    _ => ()
+  }
   ignore(try? commit(fs, fs, root, "init", "Author <a@b.com>", 1700000000L))
-  @fs.write_string_to_file(marker, "ok\n") catch { _ => () }
+  @fs.write_string_to_file(marker, "ok\n") catch {
+    _ => ()
+  }
 }
 
 ///|
 let bench_index_small_root : String = bench_index_join_path(
-  bench_index_root_base,
-  "small",
+  bench_index_root_base, "small",
 )
 
 ///|
 let bench_index_large_root : String = bench_index_join_path(
-  bench_index_root_base,
-  "large",
+  bench_index_root_base, "large",
 )
 
 ///|

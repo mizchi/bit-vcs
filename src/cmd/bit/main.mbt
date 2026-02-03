@@ -23,6 +23,8 @@ async fn show_help() -> Unit {
     #|   log        Show commit logs
     #|   show       Show various types of objects
     #|   status     Show the working tree status
+    #|   tree       List tree entries from a remote repository (porcelain)
+    #|   cat        Show file contents from a remote repository
     #|
     #|grow, mark and tweak your common history
     #|   branch        List, create, or delete branches
@@ -149,6 +151,20 @@ async fn show_command_help(cmd : String) -> Bool {
       show_simple_command_help(
         "git show [<options>] [<object>...]",
         summary="Show various types of objects.",
+      )
+      true
+    }
+    "tree" => {
+      show_simple_command_help(
+        "bit tree [<options>] <repo>[:<path>] [<pathspec>...]",
+        summary="List tree entries from a remote repository (porcelain).",
+      )
+      true
+    }
+    "cat" => {
+      show_simple_command_help(
+        "bit cat <repo>:<path>",
+        summary="Show file contents from a remote repository.",
       )
       true
     }
@@ -833,6 +849,8 @@ async fn dispatch_command(cmd : String, rest : Array[String]) -> Unit {
       }
     "log" => handle_log(rest) catch { err => exit_with_error("log", err) }
     "show" => handle_show(rest) catch { err => exit_with_error("show", err) }
+    "tree" => handle_tree(rest) catch { err => exit_with_error("tree", err) }
+    "cat" => handle_cat(rest) catch { err => exit_with_error("cat", err) }
     // Branch operations
     "branch" =>
       handle_branch(rest) catch {

@@ -2885,11 +2885,7 @@ async fn handle_submodule_update(
     // Use checkout command
     run_checkout_in_submodule(wfs, rfs, sub_path, sub_git_dir, target_id)
     @gitlib.apply_worktree_modes_from_commit(
-      fs,
-      fs,
-      sub_path,
-      sub_git_dir,
-      target_id,
+      fs, fs, sub_path, sub_git_dir, target_id,
     ) catch {
       err =>
         eprint_line(

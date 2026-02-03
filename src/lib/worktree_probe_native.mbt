@@ -50,7 +50,7 @@ async fn worktree_entry(
           match read_symlink_target_path(abs_path) {
             Some(target) =>
               Some({
-                kind: WorktreeKind::Symlink(target=target),
+                kind: WorktreeKind::Symlink(target~),
                 mode: info.mode,
                 size: info.size,
                 mtime_sec: info.mtime_sec,
@@ -63,10 +63,7 @@ async fn worktree_entry(
 }
 
 ///|
-async fn build_regular_entry(
-  abs_path : String,
-  use_os : Bool,
-) -> WorktreeEntry {
+async fn build_regular_entry(abs_path : String, use_os : Bool) -> WorktreeEntry {
   if not(use_os) {
     return {
       kind: WorktreeKind::Regular,
@@ -140,7 +137,7 @@ async fn worktree_entry_meta(
       })
     }
     Ok(@afs.FileKind::Regular) => {
-      let entry = try build_regular_entry(abs_path, true) catch { _ => return None }
+      let entry = build_regular_entry(abs_path, true) catch { _ => return None }
       Some({
         kind: WorktreeKindMeta::Regular,
         mode: entry.mode,
@@ -152,7 +149,7 @@ async fn worktree_entry_meta(
     Ok(_) => None
     Err(_) =>
       if fs.is_file(abs_path) {
-        let entry = try build_regular_entry(abs_path, false) catch {
+        let entry = build_regular_entry(abs_path, false) catch {
           _ => return None
         }
         Some({
@@ -205,5 +202,4 @@ fn string_to_cstring(path : String) -> Bytes {
 
 ///|
 #borrow(path_buf, buf)
-extern "c" fn readlink(path_buf : Bytes, buf : Bytes, size : Int) -> Int =
-  "readlink"
+extern "c" fn readlink(path_buf : Bytes, buf : Bytes, size : Int) -> Int = "readlink"
