@@ -634,7 +634,7 @@ test "notes: remove note" {
   let before = collab.get_note(fs, cid)
   assert_true(before is Some(_))
   // Remove note
-  collab.remove_note(fs, fs, cid)
+  collab.remove_note(fs, fs, cid, 1707000000L)
   // Verify note is gone
   let after = collab.get_note(fs, cid)
   assert_true(after is None)

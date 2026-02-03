@@ -56,49 +56,29 @@ fn parse_int_simple(s : String) -> Int {
 }
 
 ///|
-test "sync: merge issue dir prefers newer issue.data" {
+test "sync: merge events unions content-addressed blobs" {
   let (fs, git_dir) = setup_sync_repo()
   let db = @lib.ObjectDb::load_lazy(fs, git_dir)
-  let old_issue = Issue::new(
-    "1",
-    "Old",
-    "Old body",
-    "alice",
-    10L,
-    10L,
-    IssueState::Open,
-  )
-  let new_issue = Issue::new(
-    "1",
-    "New",
-    "New body",
-    "alice",
-    10L,
-    20L,
-    IssueState::Closed,
-  )
-  let old_blob = write_blob(fs, git_dir, old_issue.serialize())
-  let new_blob = write_blob(fs, git_dir, new_issue.serialize())
-  let empty_tree = write_tree(fs, git_dir, [])
-  let local_issue_tree = write_tree(fs, git_dir, [
-    @git.TreeEntry::new("040000", "comments", empty_tree),
-    @git.TreeEntry::new("100644", "issue.data", old_blob),
+  let event1 = "kind pr\nentity pr/1\nts 1\n\npr 1\n"
+  let event2 = "kind pr\nentity pr/2\nts 2\n\npr 2\n"
+  let blob1 = write_blob(fs, git_dir, event1)
+  let blob2 = write_blob(fs, git_dir, event2)
+  let local_events = write_tree(fs, git_dir, [
+    @git.TreeEntry::new("100644", blob1.to_hex(), blob1),
   ])
-  let remote_issue_tree = write_tree(fs, git_dir, [
-    @git.TreeEntry::new("040000", "comments", empty_tree),
-    @git.TreeEntry::new("100644", "issue.data", new_blob),
+  let remote_events = write_tree(fs, git_dir, [
+    @git.TreeEntry::new("100644", blob2.to_hex(), blob2),
   ])
-  let merged = merge_issue_dir(
-    fs, fs, git_dir, db, local_issue_tree, remote_issue_tree,
+  let merged = merge_content_addressed_dir(
+    fs,
+    fs,
+    git_dir,
+    db,
+    Some(@git.TreeEntry::new("040000", "events", local_events)),
+    Some(@git.TreeEntry::new("040000", "events", remote_events)),
   )
   let merged_entries = read_tree_entries(db, fs, merged)
-  let mut merged_blob = @git.ObjectId::zero()
-  for entry in merged_entries {
-    if entry.name == "issue.data" {
-      merged_blob = entry.id
-    }
-  }
-  assert_eq(merged_blob, new_blob)
+  assert_eq(merged_entries.length(), 2)
 }
 
 ///|

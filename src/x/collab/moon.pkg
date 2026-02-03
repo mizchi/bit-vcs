@@ -13,6 +13,7 @@ options(
     "collab.mbt": [ "native" ],
     "collab_test.mbt": [ "native" ],
     "comment.mbt": [ "native" ],
+    "events.mbt": [ "native" ],
     "format.mbt": [ "native" ],
     "import.mbt": [ "native" ],
     "import_test.mbt": [ "native" ],

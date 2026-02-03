@@ -62,10 +62,22 @@ pub fn Collab::list_reviews(Self, &@bit.RepoFileSystem, String) -> Array[PrRevie
 pub fn Collab::load(&@bit.RepoFileSystem, String) -> Self raise @bit.GitError
 pub fn Collab::merge_pr(Self, &@bit.FileSystem, &@bit.RepoFileSystem, String, String, Int64, strategy? : PrMergeStrategy) -> PrMergeResult raise @bit.GitError
 pub async fn Collab::push(Self, &@bit.RepoFileSystem, String) -> PrSyncResult raise @bit.GitError
-pub fn Collab::remove_note(Self, &@bit.FileSystem, &@bit.RepoFileSystem, @bit.ObjectId, ns? : String) -> Unit raise @bit.GitError
+pub fn Collab::remove_note(Self, &@bit.FileSystem, &@bit.RepoFileSystem, @bit.ObjectId, Int64, ns? : String) -> Unit raise @bit.GitError
 pub fn Collab::submit_review(Self, &@bit.FileSystem, &@bit.RepoFileSystem, String, String, ReviewVerdict, String, @bit.ObjectId, Int64) -> PrReview raise @bit.GitError
 pub fn Collab::update_issue(Self, &@bit.FileSystem, &@bit.RepoFileSystem, String, Int64, title? : String?, body? : String?, labels? : Array[String]?, assignees? : Array[String]?) -> Issue raise @bit.GitError
 pub fn Collab::update_pr(Self, &@bit.FileSystem, &@bit.RepoFileSystem, String, Int64, title? : String?, body? : String?, labels? : Array[String]?) -> PullRequest raise @bit.GitError
+
+pub struct CollabEvent {
+  kind : String
+  entity : String
+  timestamp : Int64
+  payload : String
+}
+pub fn CollabEvent::entity(Self) -> String
+pub fn CollabEvent::kind(Self) -> String
+pub fn CollabEvent::new(String, String, Int64, String) -> Self
+pub fn CollabEvent::payload(Self) -> String
+pub fn CollabEvent::timestamp(Self) -> Int64
 
 pub struct ImportStats {
   created : Int

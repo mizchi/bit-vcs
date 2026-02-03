@@ -31,6 +31,19 @@ pub fn Collab::import_prs(
   if prs.length() == 0 {
     return ImportStats::new(0, 0)
   }
+  let events = load_events(backing_fs, self.git_dir)
+  let latest_ts : Map[String, Int64] = {}
+  for event in events {
+    if event.kind() != "pr" {
+      continue
+    }
+    let pr = parse_pull_request(event.payload()) catch { _ => continue }
+    let ts = event.timestamp()
+    match latest_ts.get(pr.id) {
+      Some(existing_ts) => if ts >= existing_ts { latest_ts[pr.id] = ts }
+      None => latest_ts[pr.id] = ts
+    }
+  }
   let current = load_counter(backing_fs, self.git_dir)
   let mut max_id = current - 1
   for pr in prs {
@@ -46,27 +59,23 @@ pub fn Collab::import_prs(
   let mut created = 0
   let mut updated = 0
   for pr in prs {
-    let pr_data = pr.serialize()
-    let (pr_blob_id, pr_compressed) = @git.create_blob_string(pr_data)
-    write_object_bytes(fs, self.git_dir, pr_blob_id, pr_compressed)
-    let existing = self.get_pr(backing_fs, pr.id())
-    match existing {
-      Some(_) => {
-        update_pr_data(fs, backing_fs, self.git_dir, pr.id(), pr_blob_id)
-        updated += 1
-      }
-      None => {
-        update_collab_tree(
-          fs,
-          backing_fs,
-          self.git_dir,
-          pr.id(),
-          pr_blob_id,
-          next_id,
-        )
-        created += 1
-      }
+    let existing_ts = latest_ts.get(pr.id())
+    let event_ts = match existing_ts {
+      Some(ts) => if pr.updated_at <= ts { ts + 1 } else { pr.updated_at }
+      None => pr.updated_at
     }
+    let event = CollabEvent::new(
+      "pr",
+      "pr/" + pr.id(),
+      event_ts,
+      pr.serialize(),
+    )
+    append_event(fs, backing_fs, self.git_dir, event, counter=Some(next_id))
+    match existing_ts {
+      Some(_) => updated += 1
+      None => created += 1
+    }
+    latest_ts[pr.id()] = event_ts
   }
   if next_id > self.next_id {
     self.next_id = next_id
@@ -84,6 +93,19 @@ pub fn Collab::import_issues(
   if issues.length() == 0 {
     return ImportStats::new(0, 0)
   }
+  let events = load_events(backing_fs, self.git_dir)
+  let latest_ts : Map[String, Int64] = {}
+  for event in events {
+    if event.kind() != "issue" {
+      continue
+    }
+    let issue = parse_issue(event.payload()) catch { _ => continue }
+    let ts = event.timestamp()
+    match latest_ts.get(issue.id) {
+      Some(existing_ts) => if ts >= existing_ts { latest_ts[issue.id] = ts }
+      None => latest_ts[issue.id] = ts
+    }
+  }
   let current = load_issue_counter(backing_fs, self.git_dir)
   let mut max_id = current - 1
   for issue in issues {
@@ -99,33 +121,29 @@ pub fn Collab::import_issues(
   let mut created = 0
   let mut updated = 0
   for issue in issues {
-    let issue_data = issue.serialize()
-    let (issue_blob_id, issue_compressed) = @git.create_blob_string(issue_data)
-    write_object_bytes(fs, self.git_dir, issue_blob_id, issue_compressed)
-    let existing = self.get_issue(backing_fs, issue.id())
-    match existing {
-      Some(_) => {
-        update_issue_data(
-          fs,
-          backing_fs,
-          self.git_dir,
-          issue.id(),
-          issue_blob_id,
-        )
-        updated += 1
-      }
-      None => {
-        update_issues_tree(
-          fs,
-          backing_fs,
-          self.git_dir,
-          issue.id(),
-          issue_blob_id,
-          next_id,
-        )
-        created += 1
-      }
+    let existing_ts = latest_ts.get(issue.id())
+    let event_ts = match existing_ts {
+      Some(ts) => if issue.updated_at <= ts { ts + 1 } else { issue.updated_at }
+      None => issue.updated_at
     }
+    let event = CollabEvent::new(
+      "issue",
+      "issue/" + issue.id(),
+      event_ts,
+      issue.serialize(),
+    )
+    append_event(
+      fs,
+      backing_fs,
+      self.git_dir,
+      event,
+      issue_counter=Some(next_id),
+    )
+    match existing_ts {
+      Some(_) => updated += 1
+      None => created += 1
+    }
+    latest_ts[issue.id()] = event_ts
   }
   ImportStats::new(created, updated)
 }

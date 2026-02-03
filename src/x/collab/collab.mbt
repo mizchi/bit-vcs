@@ -57,15 +57,13 @@ pub fn Collab::init(
         ]
         let (meta_tree_id, meta_compressed) = @git.create_tree(meta_entries)
         write_object_bytes(fs, git_dir, meta_tree_id, meta_compressed)
-        // Create empty prs, issues, and index directories
+        // Create empty events directory
         let (empty_tree_id, empty_compressed) = @git.create_tree([])
         write_object_bytes(fs, git_dir, empty_tree_id, empty_compressed)
-        // Create root tree
+        // Create root tree (events + meta)
         let root_entries = [
-          @git.TreeEntry::new("040000", "index", empty_tree_id),
-          @git.TreeEntry::new("040000", "issues", empty_tree_id),
+          @git.TreeEntry::new("040000", "events", empty_tree_id),
           @git.TreeEntry::new("040000", "meta", meta_tree_id),
-          @git.TreeEntry::new("040000", "prs", empty_tree_id),
         ]
         let (root_tree_id, root_compressed) = @git.create_tree(root_entries)
         write_object_bytes(fs, git_dir, root_tree_id, root_compressed)
@@ -144,19 +142,8 @@ pub fn Collab::create_pr(
     PrState::Open,
     [],
   )
-  // Serialize and store
-  let pr_data = pr.serialize()
-  let (pr_blob_id, pr_compressed) = @git.create_blob_string(pr_data)
-  write_object_bytes(fs, self.git_dir, pr_blob_id, pr_compressed)
-  // Update _collab tree structure
-  update_collab_tree(
-    fs,
-    backing_fs,
-    self.git_dir,
-    pr_id,
-    pr_blob_id,
-    self.next_id,
-  )
+  let event = CollabEvent::new("pr", "pr/" + pr_id, timestamp, pr.serialize())
+  append_event(fs, backing_fs, self.git_dir, event, counter=Some(self.next_id))
   pr
 }
 
@@ -167,23 +154,24 @@ pub fn Collab::get_pr(
   backing_fs : &@git.RepoFileSystem,
   pr_id : String,
 ) -> PullRequest? raise @git.GitError {
-  let db = @lib.ObjectDb::load_lazy(backing_fs, self.git_dir)
-  let collab_commit = get_collab_commit(backing_fs, self.git_dir)
-  guard collab_commit is Some(commit_id) else { return None }
-  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard collab_tree is Some(tree_id) else { return None }
-  // Navigate to prs/<id>/pr.data
-  let pr_tree_id = find_tree_entry(db, backing_fs, tree_id, "prs")
-  guard pr_tree_id is Some(prs_dir_id) else { return None }
-  let pr_dir_id = find_tree_entry(db, backing_fs, prs_dir_id, pr_id)
-  guard pr_dir_id is Some(pr_dir) else { return None }
-  let pr_data_id = find_tree_entry(db, backing_fs, pr_dir, "pr.data")
-  guard pr_data_id is Some(data_id) else { return None }
-  // Read and parse
-  let obj = db.get(backing_fs, data_id)
-  guard obj is Some(data_obj) else { return None }
-  let text = @utf8.decode_lossy(data_obj.data[:])
-  Some(parse_pull_request(text) catch { _ => return None })
+  let events = load_events(backing_fs, self.git_dir)
+  let mut latest_ts : Int64 = -1
+  let mut latest : PullRequest? = None
+  for event in events {
+    if event.kind() != "pr" {
+      continue
+    }
+    let pr = parse_pull_request(event.payload()) catch { _ => continue }
+    if pr.id != pr_id {
+      continue
+    }
+    let ts = event.timestamp()
+    if ts >= latest_ts {
+      latest_ts = ts
+      latest = Some(pr)
+    }
+  }
+  latest
 }
 
 ///|
@@ -193,26 +181,30 @@ pub fn Collab::list_prs(
   backing_fs : &@git.RepoFileSystem,
   state? : PrState? = None,
 ) -> Array[PullRequest] raise @git.GitError {
+  let events = load_events(backing_fs, self.git_dir)
+  let latest_map : Map[String, PullRequest] = {}
+  let latest_ts : Map[String, Int64] = {}
+  for event in events {
+    if event.kind() != "pr" {
+      continue
+    }
+    let pr = parse_pull_request(event.payload()) catch { _ => continue }
+    let ts = event.timestamp()
+    match latest_ts.get(pr.id) {
+      Some(existing_ts) =>
+        if ts >= existing_ts {
+          latest_ts[pr.id] = ts
+          latest_map[pr.id] = pr
+        }
+      None => {
+        latest_ts[pr.id] = ts
+        latest_map[pr.id] = pr
+      }
+    }
+  }
   let result : Array[PullRequest] = []
-  let db = @lib.ObjectDb::load_lazy(backing_fs, self.git_dir)
-  let collab_commit = get_collab_commit(backing_fs, self.git_dir)
-  guard collab_commit is Some(commit_id) else { return result }
-  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard collab_tree is Some(tree_id) else { return result }
-  let pr_tree_id = find_tree_entry(db, backing_fs, tree_id, "prs")
-  guard pr_tree_id is Some(prs_dir_id) else { return result }
-  // List all PR directories
-  let prs_obj = db.get(backing_fs, prs_dir_id)
-  guard prs_obj is Some(collab_tree_obj) else { return result }
-  let entries = @git.parse_tree(collab_tree_obj.data)
-  for entry in entries {
-    // Each entry is a PR directory
-    let pr_data_id = find_tree_entry(db, backing_fs, entry.id, "pr.data")
-    guard pr_data_id is Some(data_id) else { continue }
-    let obj = db.get(backing_fs, data_id)
-    guard obj is Some(data_obj) else { continue }
-    let text = @utf8.decode_lossy(data_obj.data[:])
-    let pr = parse_pull_request(text) catch { _ => continue }
+  for item in latest_map.to_array() {
+    let (_, pr) = item
     match state {
       None => result.push(pr)
       Some(s) => if pr.state == s { result.push(pr) }
@@ -264,10 +256,13 @@ pub fn Collab::update_pr(
     existing.state,
     new_labels,
   )
-  let pr_data = updated.serialize()
-  let (pr_blob_id, pr_compressed) = @git.create_blob_string(pr_data)
-  write_object_bytes(fs, self.git_dir, pr_blob_id, pr_compressed)
-  update_pr_data(fs, backing_fs, self.git_dir, pr_id, pr_blob_id)
+  let event = CollabEvent::new(
+    "pr",
+    "pr/" + pr_id,
+    timestamp,
+    updated.serialize(),
+  )
+  append_event(fs, backing_fs, self.git_dir, event)
   updated
 }
 
@@ -302,12 +297,13 @@ pub fn Collab::close_pr(
     PrState::Closed,
     existing.labels,
   )
-  // Store updated PR
-  let pr_data = updated.serialize()
-  let (pr_blob_id, pr_compressed) = @git.create_blob_string(pr_data)
-  write_object_bytes(fs, self.git_dir, pr_blob_id, pr_compressed)
-  // Update tree
-  update_pr_data(fs, backing_fs, self.git_dir, pr_id, pr_blob_id)
+  let event = CollabEvent::new(
+    "pr",
+    "pr/" + pr_id,
+    timestamp,
+    updated.serialize(),
+  )
+  append_event(fs, backing_fs, self.git_dir, event)
 }
 
 ///|
@@ -408,229 +404,6 @@ fn trim_whitespace(s : String) -> String {
 }
 
 ///|
-fn update_collab_tree(
-  fs : &@git.FileSystem,
-  backing_fs : &@git.RepoFileSystem,
-  git_dir : String,
-  pr_id : String,
-  pr_blob_id : @git.ObjectId,
-  next_id : Int,
-) -> Unit raise @git.GitError {
-  let db = @lib.ObjectDb::load_lazy(backing_fs, git_dir)
-  let collab_commit = get_collab_commit(backing_fs, git_dir)
-  guard collab_commit is Some(commit_id) else {
-    raise @git.GitError::InvalidObject("_collab branch not found")
-  }
-  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard collab_tree is Some(root_tree_id) else {
-    raise @git.GitError::InvalidObject("_collab tree not found")
-  }
-  // Get current tree entries
-  let root_obj = db.get(backing_fs, root_tree_id)
-  guard root_obj is Some(root_tree_obj) else {
-    raise @git.GitError::InvalidObject("Cannot read root tree")
-  }
-  let root_entries = @git.parse_tree(root_tree_obj.data)
-  // Find prs, meta, index, issues tree IDs
-  let mut collab_tree_id = @git.ObjectId::zero()
-  let mut meta_tree_id = @git.ObjectId::zero()
-  let mut index_tree_id = @git.ObjectId::zero()
-  let mut issues_tree_id = @git.ObjectId::zero()
-  for entry in root_entries {
-    match entry.name {
-      "prs" => collab_tree_id = entry.id
-      "meta" => meta_tree_id = entry.id
-      "index" => index_tree_id = entry.id
-      "issues" => issues_tree_id = entry.id
-      _ => ()
-    }
-  }
-  // Create new PR directory tree with pr.data, empty comments, empty reviews
-  let (empty_tree_id, empty_compressed) = @git.create_tree([])
-  write_object_bytes(fs, git_dir, empty_tree_id, empty_compressed)
-  let pr_dir_entries = [
-    @git.TreeEntry::new("040000", "comments", empty_tree_id),
-    @git.TreeEntry::new("100644", "pr.data", pr_blob_id),
-    @git.TreeEntry::new("040000", "reviews", empty_tree_id),
-  ]
-  let (pr_dir_id, pr_dir_compressed) = @git.create_tree(pr_dir_entries)
-  write_object_bytes(fs, git_dir, pr_dir_id, pr_dir_compressed)
-  // Update prs tree with new entry
-  let prs_obj = db.get(backing_fs, collab_tree_id)
-  let existing_collab_entries = match prs_obj {
-    Some(obj) => @git.parse_tree(obj.data)
-    None => []
-  }
-  let new_collab_entries : Array[@git.TreeEntry] = []
-  for entry in existing_collab_entries {
-    new_collab_entries.push(entry)
-  }
-  new_collab_entries.push(@git.TreeEntry::new("040000", pr_id, pr_dir_id))
-  new_collab_entries.sort_by(fn(a, b) { String::compare(a.name, b.name) })
-  let (new_collab_tree_id, new_collab_compressed) = @git.create_tree(
-    new_collab_entries,
-  )
-  write_object_bytes(fs, git_dir, new_collab_tree_id, new_collab_compressed)
-  // Update counter in meta (preserve issue_counter if exists)
-  let counter_content = next_id.to_string() + "\n"
-  let (counter_id, counter_compressed) = @git.create_blob_string(
-    counter_content,
-  )
-  write_object_bytes(fs, git_dir, counter_id, counter_compressed)
-  let meta_obj = db.get(backing_fs, meta_tree_id)
-  let existing_meta_entries = match meta_obj {
-    Some(obj) => @git.parse_tree(obj.data)
-    None => []
-  }
-  let new_meta_entries : Array[@git.TreeEntry] = []
-  let mut found_counter = false
-  for entry in existing_meta_entries {
-    if entry.name == "counter" {
-      new_meta_entries.push(
-        @git.TreeEntry::new("100644", "counter", counter_id),
-      )
-      found_counter = true
-    } else {
-      new_meta_entries.push(entry)
-    }
-  }
-  if not(found_counter) {
-    new_meta_entries.push(@git.TreeEntry::new("100644", "counter", counter_id))
-  }
-  new_meta_entries.sort_by(fn(a, b) { String::compare(a.name, b.name) })
-  let (new_meta_tree_id, new_meta_compressed) = @git.create_tree(
-    new_meta_entries,
-  )
-  write_object_bytes(fs, git_dir, new_meta_tree_id, new_meta_compressed)
-  // Create new root tree (include issues tree)
-  let new_root_entries = [
-    @git.TreeEntry::new("040000", "index", index_tree_id),
-    @git.TreeEntry::new("040000", "issues", issues_tree_id),
-    @git.TreeEntry::new("040000", "meta", new_meta_tree_id),
-    @git.TreeEntry::new("040000", "prs", new_collab_tree_id),
-  ]
-  let (new_root_tree_id, new_root_compressed) = @git.create_tree(
-    new_root_entries,
-  )
-  write_object_bytes(fs, git_dir, new_root_tree_id, new_root_compressed)
-  // Create commit
-  let commit = @git.Commit::new(
-    new_root_tree_id,
-    [commit_id],
-    "Collab <collab@local>",
-    0L,
-    "+0000",
-    "Collab <collab@local>",
-    0L,
-    "+0000",
-    "Create PR #\{pr_id}\n",
-  )
-  let (new_commit_id, commit_compressed) = @git.create_commit(commit)
-  write_object_bytes(fs, git_dir, new_commit_id, commit_compressed)
-  // Update ref
-  write_collab_ref(fs, backing_fs, git_dir, new_commit_id)
-}
-
-///|
-fn update_pr_data(
-  fs : &@git.FileSystem,
-  backing_fs : &@git.RepoFileSystem,
-  git_dir : String,
-  pr_id : String,
-  pr_blob_id : @git.ObjectId,
-) -> Unit raise @git.GitError {
-  let db = @lib.ObjectDb::load_lazy(backing_fs, git_dir)
-  let collab_commit = get_collab_commit(backing_fs, git_dir)
-  guard collab_commit is Some(commit_id) else {
-    raise @git.GitError::InvalidObject("_collab branch not found")
-  }
-  let collab_tree = get_commit_tree(db, backing_fs, commit_id)
-  guard collab_tree is Some(root_tree_id) else {
-    raise @git.GitError::InvalidObject("_collab tree not found")
-  }
-  let root_obj = db.get(backing_fs, root_tree_id)
-  guard root_obj is Some(root_tree_obj) else {
-    raise @git.GitError::InvalidObject("Cannot read root tree")
-  }
-  let root_entries = @git.parse_tree(root_tree_obj.data)
-  let mut collab_tree_id = @git.ObjectId::zero()
-  let mut meta_tree_id = @git.ObjectId::zero()
-  let mut index_tree_id = @git.ObjectId::zero()
-  let mut issues_tree_id = @git.ObjectId::zero()
-  for entry in root_entries {
-    match entry.name {
-      "prs" => collab_tree_id = entry.id
-      "meta" => meta_tree_id = entry.id
-      "index" => index_tree_id = entry.id
-      "issues" => issues_tree_id = entry.id
-      _ => ()
-    }
-  }
-  // Get existing prs tree
-  let prs_obj = db.get(backing_fs, collab_tree_id)
-  guard prs_obj is Some(collab_tree_obj) else {
-    raise @git.GitError::InvalidObject("Cannot read prs tree")
-  }
-  let prs_entries = @git.parse_tree(collab_tree_obj.data)
-  // Find and update the PR directory
-  let new_collab_entries : Array[@git.TreeEntry] = []
-  for entry in prs_entries {
-    if entry.name == pr_id {
-      // Update this PR's directory
-      let pr_dir_obj = db.get(backing_fs, entry.id)
-      guard pr_dir_obj is Some(dir_obj) else { continue }
-      let dir_entries = @git.parse_tree(dir_obj.data)
-      let new_dir_entries : Array[@git.TreeEntry] = []
-      for de in dir_entries {
-        if de.name == "pr.data" {
-          new_dir_entries.push(
-            @git.TreeEntry::new("100644", "pr.data", pr_blob_id),
-          )
-        } else {
-          new_dir_entries.push(de)
-        }
-      }
-      new_dir_entries.sort_by(fn(a, b) { String::compare(a.name, b.name) })
-      let (new_dir_id, dir_compressed) = @git.create_tree(new_dir_entries)
-      write_object_bytes(fs, git_dir, new_dir_id, dir_compressed)
-      new_collab_entries.push(@git.TreeEntry::new("040000", pr_id, new_dir_id))
-    } else {
-      new_collab_entries.push(entry)
-    }
-  }
-  new_collab_entries.sort_by(fn(a, b) { String::compare(a.name, b.name) })
-  let (new_collab_tree_id, new_collab_compressed) = @git.create_tree(
-    new_collab_entries,
-  )
-  write_object_bytes(fs, git_dir, new_collab_tree_id, new_collab_compressed)
-  // Create new root tree (include issues tree)
-  let new_root_entries = [
-    @git.TreeEntry::new("040000", "index", index_tree_id),
-    @git.TreeEntry::new("040000", "issues", issues_tree_id),
-    @git.TreeEntry::new("040000", "meta", meta_tree_id),
-    @git.TreeEntry::new("040000", "prs", new_collab_tree_id),
-  ]
-  let (new_root_tree_id, new_root_compressed) = @git.create_tree(
-    new_root_entries,
-  )
-  write_object_bytes(fs, git_dir, new_root_tree_id, new_root_compressed)
-  // Create commit
-  let commit = @git.Commit::new(
-    new_root_tree_id,
-    [commit_id],
-    "Collab <collab@local>",
-    0L,
-    "+0000",
-    "Collab <collab@local>",
-    0L,
-    "+0000",
-    "Update PR #\{pr_id}\n",
-  )
-  let (new_commit_id, commit_compressed) = @git.create_commit(commit)
-  write_object_bytes(fs, git_dir, new_commit_id, commit_compressed)
-  // Update ref
-  write_collab_ref(fs, backing_fs, git_dir, new_commit_id)
-}
 
 ///|
 fn write_collab_ref(

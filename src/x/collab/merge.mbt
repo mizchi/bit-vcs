@@ -618,10 +618,11 @@ fn mark_pr_merged(
     PrState::Merged,
     existing.labels,
   )
-  // Store updated PR
-  let pr_data = updated.serialize()
-  let (pr_blob_id, pr_compressed) = @git.create_blob_string(pr_data)
-  write_object_bytes(fs, prs.git_dir, pr_blob_id, pr_compressed)
-  // Update tree
-  update_pr_data(fs, backing_fs, prs.git_dir, pr_id, pr_blob_id)
+  let event = CollabEvent::new(
+    "pr",
+    "pr/" + pr_id,
+    timestamp,
+    updated.serialize(),
+  )
+  append_event(fs, backing_fs, prs.git_dir, event)
 }

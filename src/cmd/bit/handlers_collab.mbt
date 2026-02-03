@@ -1759,7 +1759,14 @@ async fn handle_collab_note_remove(args : Array[String]) -> Unit raise Error {
   let git_dir = root + "/.git"
   let fs = OsFs::new()
   let collab = @collab.Collab::init(fs, fs, git_dir)
-  collab.remove_note(fs, fs, @git.ObjectId::from_hex(hex), ns=note_ns(ns))
+  let timestamp = get_commit_timestamp()
+  collab.remove_note(
+    fs,
+    fs,
+    @git.ObjectId::from_hex(hex),
+    timestamp,
+    ns=note_ns(ns),
+  )
   print_line("Removed note for \{hex}")
 }
 
