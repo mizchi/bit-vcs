@@ -54,20 +54,29 @@ async fn die_remote(code : Int, msg : String) -> Unit {
 }
 
 ///|
-fn emit_trace_region(category : String, label : String) -> Unit raise @git.GitError {
+fn emit_trace_region(
+  category : String,
+  label : String,
+) -> Unit raise @git.GitError {
   let path = @sys.get_env_var("GIT_TRACE2_EVENT")
   guard path is Some(target) else { return () }
-  let enter =
-    "{\"event\":\"region_enter\",\"category\":\"" + category + "\",\"label\":\"" +
+  let enter = "{\"event\":\"region_enter\",\"category\":\"" +
+    category +
+    "\",\"label\":\"" +
     label +
     "\"}\n"
-  let leave =
-    "{\"event\":\"region_leave\",\"category\":\"" + category + "\",\"label\":\"" +
+  let leave = "{\"event\":\"region_leave\",\"category\":\"" +
+    category +
+    "\",\"label\":\"" +
     label +
     "\"}\n"
   let fs = OsFs::new()
   if fs.is_file(target) {
-    let existing = decode_bytes(fs.read_file(target) catch { _ => Bytes::default() })
+    let existing = decode_bytes(
+      fs.read_file(target) catch {
+        _ => Bytes::default()
+      },
+    )
     fs.write_string(target, existing + enter + leave)
   } else {
     fs.write_string(target, enter + leave)
@@ -115,7 +124,8 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
               "fetch" | "push" =>
                 match mirror_mode {
                   None => mirror_mode = Some(mode)
-                  Some(_) => die_remote(129, "usage: git remote add <name> <url>")
+                  Some(_) =>
+                    die_remote(129, "usage: git remote add <name> <url>")
                 }
               _ => die_remote(129, "usage: git remote add <name> <url>")
             }
@@ -129,7 +139,8 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
             } else {
               die_remote(129, "usage: git remote add <name> <url>")
             }
-          _ if arg.has_prefix("-") => die_remote(129, "usage: git remote add <name> <url>")
+          _ if arg.has_prefix("-") =>
+            die_remote(129, "usage: git remote add <name> <url>")
           _ => positional.push(arg)
         }
         i += 1
@@ -142,7 +153,9 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
       if not(@gitlib.is_valid_remote_name(name)) {
         die_remote(1, "fatal: '\{name}' is not a valid remote name")
       }
-      let blocks = @gitlib.parse_config_blocks(@gitlib.read_config_content(fs, git_dir))
+      let blocks = @gitlib.parse_config_blocks(
+        @gitlib.read_config_content(fs, git_dir),
+      )
       if @gitlib.config_has_remote_section(blocks, name) ||
         @gitlib.legacy_remote_exists(fs, git_dir, name) {
         die_remote(3, "error: remote \{name} already exists.")
@@ -170,8 +183,10 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
           )
         }
       }
-      let mirror_fetch = mirror_mode == Some("mirror") || mirror_mode == Some("fetch")
-      let mirror_push = mirror_mode == Some("mirror") || mirror_mode == Some("push")
+      let mirror_fetch = mirror_mode == Some("mirror") ||
+        mirror_mode == Some("fetch")
+      let mirror_push = mirror_mode == Some("mirror") ||
+        mirror_mode == Some("push")
       if mirror_push && track_branches.length() > 0 {
         die_remote(129, "usage: git remote add <name> <url>")
       }
@@ -185,29 +200,16 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
         } else {
           fetch_specs.push("+refs/*:refs/*")
         }
-      } else {
-        if track_branches.length() > 0 {
-          for t in track_branches {
-            let src_ref = @gitlib.normalize_track_ref(t)
-            let short = @gitlib.normalize_remote_branch_name(src_ref)
-            fetch_specs.push(
-              "+\{src_ref}:refs/remotes/\{name}/\{short}",
-            )
-          }
-        } else {
-          fetch_specs.push("+refs/heads/*:refs/remotes/\{name}/*")
+      } else if track_branches.length() > 0 {
+        for t in track_branches {
+          let src_ref = @gitlib.normalize_track_ref(t)
+          let short = @gitlib.normalize_remote_branch_name(src_ref)
+          fetch_specs.push("+\{src_ref}:refs/remotes/\{name}/\{short}")
         }
+      } else {
+        fetch_specs.push("+refs/heads/*:refs/remotes/\{name}/*")
       }
-      remote_add(
-        fs,
-        fs,
-        git_dir,
-        name,
-        url,
-        fetch_specs,
-        mirror_push,
-        tagopt,
-      )
+      remote_add(fs, fs, git_dir, name, url, fetch_specs, mirror_push, tagopt)
       if fetch_after_add {
         fetch_from_remote(fs, git_dir, root, name, url)
       }
@@ -217,7 +219,9 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
         die_remote(129, "usage: git remote remove <name>")
       }
       let name = args[1]
-      let blocks = @gitlib.parse_config_blocks(@gitlib.read_config_content(fs, git_dir))
+      let blocks = @gitlib.parse_config_blocks(
+        @gitlib.read_config_content(fs, git_dir),
+      )
       if not(@gitlib.config_has_remote_section(blocks, name)) &&
         not(@gitlib.legacy_remote_exists(fs, git_dir, name)) {
         die_remote(2, "error: No such remote: '\{name}'")
@@ -244,7 +248,9 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
       if not(@gitlib.is_valid_remote_name(new_name)) {
         die_remote(1, "fatal: '\{new_name}' is not a valid remote name")
       }
-      let blocks = @gitlib.parse_config_blocks(@gitlib.read_config_content(fs, git_dir))
+      let blocks = @gitlib.parse_config_blocks(
+        @gitlib.read_config_content(fs, git_dir),
+      )
       let old_exists = @gitlib.config_has_remote_section(blocks, old_name) ||
         @gitlib.legacy_remote_exists(fs, git_dir, old_name)
       if not(old_exists) {
@@ -312,7 +318,11 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
       match remotes.get(name) {
         Some(rc) => {
           let urls = if push {
-            if rc.pushurls.length() > 0 { rc.pushurls } else { rc.urls }
+            if rc.pushurls.length() > 0 {
+              rc.pushurls
+            } else {
+              rc.urls
+            }
           } else {
             rc.urls
           }
@@ -343,23 +353,20 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
           "--delete" => delete = true
           _ if arg.has_prefix("-") =>
             die_remote(
-              129,
-              "usage: git remote set-url [--push] [--add] [--delete] <name> <newurl> [<oldurl>]",
+              129, "usage: git remote set-url [--push] [--add] [--delete] <name> <newurl> [<oldurl>]",
             )
           _ => positional.push(arg)
         }
       }
       if add && delete {
         die_remote(
-          129,
-          "usage: git remote set-url [--push] [--add] [--delete] <name> <newurl> [<oldurl>]",
+          129, "usage: git remote set-url [--push] [--add] [--delete] <name> <newurl> [<oldurl>]",
         )
       }
       if delete {
         if positional.length() != 2 {
           die_remote(
-            129,
-            "usage: git remote set-url [--push] [--add] [--delete] <name> <newurl> [<oldurl>]",
+            129, "usage: git remote set-url [--push] [--add] [--delete] <name> <newurl> [<oldurl>]",
           )
         }
         remote_set_url(
@@ -376,8 +383,7 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
       } else if add {
         if positional.length() != 2 {
           die_remote(
-            129,
-            "usage: git remote set-url [--push] [--add] [--delete] <name> <newurl> [<oldurl>]",
+            129, "usage: git remote set-url [--push] [--add] [--delete] <name> <newurl> [<oldurl>]",
           )
         }
         remote_set_url(
@@ -394,8 +400,7 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
       } else {
         if positional.length() < 2 || positional.length() > 3 {
           die_remote(
-            129,
-            "usage: git remote set-url [--push] [--add] [--delete] <name> <newurl> [<oldurl>]",
+            129, "usage: git remote set-url [--push] [--add] [--delete] <name> <newurl> [<oldurl>]",
           )
         }
         let old_url = if positional.length() == 3 {
@@ -458,16 +463,14 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
           "--add" => add = true
           _ if arg.has_prefix("-") =>
             die_remote(
-              129,
-              "usage: git remote set-branches [--add] <name> <branch>...",
+              129, "usage: git remote set-branches [--add] <name> <branch>...",
             )
           _ => positional.push(arg)
         }
       }
       if positional.length() == 0 {
         die_remote(
-          129,
-          "usage: git remote set-branches [--add] <name> <branch>...",
+          129, "usage: git remote set-branches [--add] <name> <branch>...",
         )
       }
       let name = positional[0]
@@ -477,8 +480,7 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
       }
       if branches.length() == 0 {
         die_remote(
-          129,
-          "usage: git remote set-branches [--add] <name> <branch>...",
+          129, "usage: git remote set-branches [--add] <name> <branch>...",
         )
       }
       @gitlib.remote_set_branches(fs, fs, git_dir, name, branches, add)
@@ -526,6 +528,7 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
+
 ///|
 fn remote_add(
   fs : &@git.FileSystem,
@@ -670,11 +673,7 @@ async fn remote_remove(
   let packed_prefix = "refs/remotes/" + name + "/"
   let packed_exact = "refs/remotes/" + name
   @gitlib.remove_packed_refs_with_prefix(
-    fs,
-    rfs,
-    git_dir,
-    packed_prefix,
-    packed_exact,
+    fs, rfs, git_dir, packed_prefix, packed_exact,
   )
   if warn_branches.length() > 0 {
     @gitlib.sort_strings_lex(warn_branches)
@@ -965,7 +964,11 @@ async fn remote_rename(
     let old_prefix = "refs/remotes/" + old_name + "/"
     let old_exact = "refs/remotes/" + old_name
     let new_prefix = "refs/remotes/" + new_name
-    let conflict_refs = @gitlib.list_refs_with_ids(fs, git_dir, Some(new_prefix))
+    let conflict_refs = @gitlib.list_refs_with_ids(
+      fs,
+      git_dir,
+      Some(new_prefix),
+    )
     let mut has_conflict = false
     for refname, _ in conflict_refs {
       if refname == new_prefix {
@@ -992,7 +995,11 @@ async fn remote_rename(
       }
       rename_failed = true
     } else {
-      let old_ref_ids = @gitlib.list_refs_with_ids(fs, git_dir, Some(old_prefix))
+      let old_ref_ids = @gitlib.list_refs_with_ids(
+        fs,
+        git_dir,
+        Some(old_prefix),
+      )
       @gitlib.move_tree_safe(fs, rfs, old_refs, new_refs)
       @gitlib.move_tree_safe(fs, rfs, old_logs, new_logs)
       let packed_old_prefix = "refs/remotes/" + old_name + "/"
@@ -1000,12 +1007,7 @@ async fn remote_rename(
       let packed_old_exact = "refs/remotes/" + old_name
       let packed_new_exact = "refs/remotes/" + new_name
       @gitlib.rename_packed_refs_prefix(
-        fs,
-        rfs,
-        git_dir,
-        packed_old_prefix,
-        packed_new_prefix,
-        packed_old_exact,
+        fs, rfs, git_dir, packed_old_prefix, packed_new_prefix, packed_old_exact,
         packed_new_exact,
       )
       let head_path = git_dir + "/refs/remotes/" + new_name + "/HEAD"
@@ -1033,7 +1035,9 @@ async fn remote_rename(
           end=refname.length(),
         )
         let new_ref = "refs/remotes/" + new_name + "/" + suffix
-        let (should_log, _) = @gitlib.should_log_ref(fs, git_dir, new_ref, is_bare)
+        let (should_log, _) = @gitlib.should_log_ref(
+          fs, git_dir, new_ref, is_bare,
+        )
         if should_log {
           @gitlib.append_reflog(
             fs,
@@ -1167,7 +1171,9 @@ async fn remote_update(
 ) -> Unit raise Error {
   let (remotes, _) = @gitlib.read_repo_config(fs, git_dir)
   let config_path = git_dir + "/config"
-  let blocks = @gitlib.parse_config_blocks(@gitlib.read_config_content(fs, git_dir))
+  let blocks = @gitlib.parse_config_blocks(
+    @gitlib.read_config_content(fs, git_dir),
+  )
   let names : Array[String] = []
   let seen : Map[String, Bool] = {}
   let mut default_update = false
@@ -1197,7 +1203,9 @@ async fn remote_update(
   } else {
     for target in targets {
       if target == "default" {
-        let group = @gitlib.read_config_value(fs, config_path, "remotes", "default")
+        let group = @gitlib.read_config_value(
+          fs, config_path, "remotes", "default",
+        )
         match group {
           Some(value) => {
             let items = @gitlib.split_whitespace_all(value)
@@ -1478,13 +1486,7 @@ fn clone_local_repo(
   // Partial clone markers
   if filter.is_partial() {
     @gitlib.set_config_key(
-      fs,
-      fs,
-      dest_git_dir,
-      "remote",
-      "origin",
-      "promisor",
-      "true",
+      fs, fs, dest_git_dir, "remote", "origin", "promisor", "true",
     )
     @gitlib.set_config_key(
       fs,
@@ -1613,14 +1615,13 @@ fn fetch_local_repo(
   if not(fetches_tags) {
     match tagopt {
       Some("--no-tags") => ()
-      Some("--tags") => {
+      Some("--tags") =>
         for refname, id in remote_refs {
           if refname.has_prefix("refs/tags/") {
             write_ref_file(fs, git_dir, refname, id)
           }
         }
-      }
-      _ => {
+      _ =>
         if fetched_heads.length() > 0 {
           let local_db = @gitlib.ObjectDb::load(fs, git_dir)
           for refname, id in remote_refs {
@@ -1641,7 +1642,6 @@ fn fetch_local_repo(
             }
           }
         }
-      }
     }
   }
   if mirror_fetch && @gitlib.is_bare_git_dir(git_dir) {
@@ -1734,7 +1734,9 @@ async fn fetch_from_remote(
 }
 
 ///|
+
 ///|
+
 ///|
 fn is_ancestor_commit(
   db : @gitlib.ObjectDb,
@@ -2015,9 +2017,7 @@ async fn remote_show(
       let padded = pad_right(branch, max_len)
       let base = "    " + padded + " "
       match bc.rebase {
-        Some(true) => {
-          print_line(base + "rebases onto remote " + merge_target)
-        }
+        Some(true) => print_line(base + "rebases onto remote " + merge_target)
         _ => {
           if any_rebase {
             print_line(base + " merges with remote " + merge_target)
@@ -2074,7 +2074,8 @@ async fn remote_show(
               Some(rgd) => @gitlib.resolve_ref(fs, rgd, dst_ref)
               None => None
             }
-            let status = match (local_id, remote_id, remote_git_dir, remote_db) {
+            let status = match
+              (local_id, remote_id, remote_git_dir, remote_db) {
               (Some(lid), Some(rid), Some(_), Some(rdb)) =>
                 if lid == rid {
                   Some("(up to date)")

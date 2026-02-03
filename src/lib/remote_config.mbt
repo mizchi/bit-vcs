@@ -431,7 +431,8 @@ pub fn apply_config_overrides(
           .get(name)
           .unwrap_or({ name, remote: None, merges: [], rebase: None })
         match key {
-          "remote" => bc.remote = if value.length() == 0 { None } else { Some(value) }
+          "remote" =>
+            bc.remote = if value.length() == 0 { None } else { Some(value) }
           "merge" =>
             if value.length() == 0 {
               bc.merges = []
@@ -479,7 +480,10 @@ pub fn read_repo_config(
 }
 
 ///|
-pub fn list_remotes(fs : &@git.RepoFileSystem, git_dir : String) -> Array[String] {
+pub fn list_remotes(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> Array[String] {
   let (remotes, _) = read_repo_config(fs, git_dir)
   let out : Array[String] = []
   for name, _ in remotes {
@@ -867,7 +871,8 @@ pub fn set_config_key(
       lines.push("\t\{key} = \{value}")
     }
   } else {
-    if lines.length() > 0 && trim_string_internal(lines[lines.length() - 1]) != "" {
+    if lines.length() > 0 &&
+      trim_string_internal(lines[lines.length() - 1]) != "" {
       lines.push("")
     }
     lines.push(target_section)

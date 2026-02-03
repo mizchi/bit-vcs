@@ -255,20 +255,14 @@ fn find_repo_root(start : String) -> String? {
 ///|
 fn get_work_root() -> String {
   match @env.current_dir() {
-    Some(dir) =>
-      if is_bare_repo_dir(dir) {
-        return dir
-      }
+    Some(dir) => if is_bare_repo_dir(dir) { return dir }
     None => ()
   }
   if is_bare_repo_dir(".") {
     return "."
   }
   match @sys.get_env_var("PWD") {
-    Some(pwd) =>
-      if is_bare_repo_dir(pwd) {
-        return pwd
-      }
+    Some(pwd) => if is_bare_repo_dir(pwd) { return pwd }
     None => ()
   }
   match @sys.get_env_var("GIT_SHIM_CWD") {

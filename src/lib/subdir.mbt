@@ -167,6 +167,9 @@ fn find_subtree(
     let mut found = false
     for entry in entries {
       if entry.name == part {
+        if entry.mode != "40000" && entry.mode != "040000" {
+          return None
+        }
         current = entry.id
         found = true
         break

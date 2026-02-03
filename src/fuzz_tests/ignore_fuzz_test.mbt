@@ -10,7 +10,7 @@ fn build_rule_content(rng : Lcg, len : Int) -> String {
     } else if v < 9 {
       '!'
     } else {
-      ((v % 95) + 32).unsafe_to_char()
+      (v % 95 + 32).unsafe_to_char()
     }
     sb.write_char(c)
   }
@@ -29,7 +29,7 @@ fn build_pattern(rng : Lcg, len : Int) -> String {
       3 => ']'
       4 => '.'
       5 => '/'
-      _ => ((v % 26) + 97).unsafe_to_char()
+      _ => (v % 26 + 97).unsafe_to_char()
     }
     sb.write_char(c)
   }
@@ -41,7 +41,7 @@ fn build_path(rng : Lcg, len : Int) -> String {
   let sb = StringBuilder::new()
   for _ in 0..<len {
     let v = rng.next_int() % 20
-    let c = if v == 0 { '/' } else { ((v % 26) + 97).unsafe_to_char() }
+    let c = if v == 0 { '/' } else { (v % 26 + 97).unsafe_to_char() }
     sb.write_char(c)
   }
   sb.to_string()

@@ -43,6 +43,16 @@ $ ls
 fs.mbt  types.mbt  ...
 ```
 
+`@<ref>` を付けるとブランチ/コミットを指定できます（short-hash も可）。
+
+```bash
+# ブランチ指定
+$ bit clone mizchi/bit@main:src/x/fs
+
+# コミット指定 (short-hash OK)
+$ bit clone mizchi/bit@<commit>:src/x/fs
+```
+
 GitHub の URL をそのまま貼り付けることもできます。
 
 ```bash
@@ -51,6 +61,12 @@ $ bit clone https://github.com/user/repo/tree/main/packages/core
 
 # blob は単一ファイル取得
 $ bit clone https://github.com/user/repo/blob/main/README.md
+```
+
+明示的に `subdir-clone` を使うこともできます。
+
+```bash
+$ bit subdir-clone https://github.com/user/repo src/lib mylib
 ```
 
 クローン先はパス末尾の名前になります。必要なら `bit clone <src> <dest>` で明示的に指定できます。

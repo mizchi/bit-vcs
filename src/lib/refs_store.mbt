@@ -56,7 +56,11 @@ pub fn collect_loose_ref_ids(
       if filter_prefix is Some(pfx) && not(name.has_prefix(pfx)) {
         continue
       }
-      let content = decode_bytes_lossy_refs(fs.read_file(path) catch { _ => continue })
+      let content = decode_bytes_lossy_refs(
+        fs.read_file(path) catch {
+          _ => continue
+        },
+      )
       let hex = trim_string_refs(content)
       if hex.length() == 0 {
         continue
@@ -181,9 +185,7 @@ pub fn rewrite_packed_refs(
             lines.push(oid + " " + new_ref)
             skip_peeled = false
           }
-          None => {
-            skip_peeled = true
-          }
+          None => skip_peeled = true
         }
       }
     }
@@ -204,12 +206,13 @@ pub fn remove_packed_ref(
   git_dir : String,
   refname : String,
 ) -> Unit raise @git.GitError {
-  rewrite_packed_refs(
-    fs,
-    rfs,
-    git_dir,
-    fn(name) { if name == refname { None } else { Some(name) } },
-  )
+  rewrite_packed_refs(fs, rfs, git_dir, fn(name) {
+    if name == refname {
+      None
+    } else {
+      Some(name)
+    }
+  })
 }
 
 ///|
@@ -220,18 +223,13 @@ pub fn remove_packed_refs_with_prefix(
   prefix : String,
   exact : String,
 ) -> Unit raise @git.GitError {
-  rewrite_packed_refs(
-    fs,
-    rfs,
-    git_dir,
-    fn(name) {
-      if name == exact || name.has_prefix(prefix) {
-        None
-      } else {
-        Some(name)
-      }
-    },
-  )
+  rewrite_packed_refs(fs, rfs, git_dir, fn(name) {
+    if name == exact || name.has_prefix(prefix) {
+      None
+    } else {
+      Some(name)
+    }
+  })
 }
 
 ///|
@@ -244,25 +242,20 @@ pub fn rename_packed_refs_prefix(
   old_exact : String,
   new_exact : String,
 ) -> Unit raise @git.GitError {
-  rewrite_packed_refs(
-    fs,
-    rfs,
-    git_dir,
-    fn(name) {
-      if name == old_exact {
-        Some(new_exact)
-      } else if name.has_prefix(old_prefix) {
-        let suffix = String::unsafe_substring(
-          name,
-          start=old_prefix.length(),
-          end=name.length(),
-        )
-        Some(new_prefix + suffix)
-      } else {
-        Some(name)
-      }
-    },
-  )
+  rewrite_packed_refs(fs, rfs, git_dir, fn(name) {
+    if name == old_exact {
+      Some(new_exact)
+    } else if name.has_prefix(old_prefix) {
+      let suffix = String::unsafe_substring(
+        name,
+        start=old_prefix.length(),
+        end=name.length(),
+      )
+      Some(new_prefix + suffix)
+    } else {
+      Some(name)
+    }
+  })
 }
 
 ///|

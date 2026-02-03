@@ -105,11 +105,11 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
             return PackObjectsParse::Unsupported
           }
           let value = args[i + 1]
-            let parsed = @strconv.parse_int(value) catch {
-              _ => return PackObjectsParse::Unsupported
-            }
-            window = parsed
-            i += 1
+          let parsed = @strconv.parse_int(value) catch {
+            _ => return PackObjectsParse::Unsupported
+          }
+          window = parsed
+          i += 1
         }
         "--name-hash-version" => {
           if i + 1 >= args.length() {
@@ -538,7 +538,10 @@ fn collect_pack_ids_from_marker(
 }
 
 ///|
-fn collect_loose_object_ids(fs : OsFs, objects_dir : String) -> Map[String, Bool] {
+fn collect_loose_object_ids(
+  fs : OsFs,
+  objects_dir : String,
+) -> Map[String, Bool] {
   let out : Map[String, Bool] = {}
   if !fs.is_dir(objects_dir) {
     return out
@@ -630,10 +633,10 @@ fn resolve_pack_path(
 
 ///|
 fn read_pack_objects(fs : OsFs, pack_path : String) -> Array[@git.PackObject] {
-  let data = fs.read_file(pack_path) catch {
-    _ => return []
+  let data = fs.read_file(pack_path) catch { _ => return [] }
+  @git.parse_packfile(data) catch {
+    _ => []
   }
-  @git.parse_packfile(data) catch { _ => [] }
 }
 
 ///|
@@ -722,11 +725,14 @@ fn collect_loose_objects(
   for item in ids {
     let (hex, _v) = item
     let id = @git.ObjectId::from_hex(hex) catch { _ => continue }
-    try db.get(fs, id) catch { _ => () } noraise { value =>
-      match value {
-        Some(obj) => out.push(obj)
-        None => ()
-      }
+    try db.get(fs, id) catch {
+      _ => ()
+    } noraise {
+      value =>
+        match value {
+          Some(obj) => out.push(obj)
+          None => ()
+        }
     }
   }
   out
@@ -776,8 +782,10 @@ fn collect_commit_objects_allow_missing(
     return ()
   }
   seen[hex] = true
-  let obj = try db.get(fs, commit_id) catch { _ => None } noraise { value =>
-    value
+  let obj = try db.get(fs, commit_id) catch {
+    _ => None
+  } noraise {
+    value => value
   }
   match obj {
     Some(o) if o.obj_type == @git.ObjectType::Commit => {
@@ -809,7 +817,11 @@ fn collect_tree_objects_allow_missing(
     return ()
   }
   seen[hex] = true
-  let obj = try db.get(fs, tree_id) catch { _ => None } noraise { value => value }
+  let obj = try db.get(fs, tree_id) catch {
+    _ => None
+  } noraise {
+    value => value
+  }
   match obj {
     Some(o) if o.obj_type == @git.ObjectType::Tree => {
       out.push(o)
@@ -825,7 +837,14 @@ fn collect_tree_objects_allow_missing(
             out,
           )
         } else {
-          collect_blob_object_allow_missing(db, fs, entry.id, blocked, seen, out)
+          collect_blob_object_allow_missing(
+            db,
+            fs,
+            entry.id,
+            blocked,
+            seen,
+            out,
+          )
         }
       }
     }
@@ -850,11 +869,14 @@ fn collect_blob_object_allow_missing(
     return ()
   }
   seen[hex] = true
-  try db.get(fs, blob_id) catch { _ => () } noraise { value =>
-    match value {
-      Some(o) if o.obj_type == @git.ObjectType::Blob => out.push(o)
-      _ => ()
-    }
+  try db.get(fs, blob_id) catch {
+    _ => ()
+  } noraise {
+    value =>
+      match value {
+        Some(o) if o.obj_type == @git.ObjectType::Blob => out.push(o)
+        _ => ()
+      }
   }
 }
 
@@ -890,7 +912,9 @@ async fn collect_objects_from_stdin_packs(
     for path in include_paths {
       if is_promisor_pack(fs, path) {
         @stdio.stderr.write(
-          "fatal: packfile '" + path + "' is a promisor but --exclude-promisor-objects was given\n",
+          "fatal: packfile '" +
+          path +
+          "' is a promisor but --exclude-promisor-objects was given\n",
         )
         @sys.exit(1)
       }
@@ -938,10 +962,7 @@ async fn collect_objects_from_stdin_packs(
   }
   if cfg.stdin_packs_follow && seed_commits.length() > 0 {
     let reachable = collect_reachable_objects_from_commits_allow_missing(
-      db,
-      fs,
-      seed_commits,
-      promisor_ids,
+      db, fs, seed_commits, promisor_ids,
     )
     objects.append(reachable)
   }
@@ -1052,12 +1073,11 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
             let code = @process.run(real_git, real_args)
             @sys.exit(code)
           }
-          None => {
+          None =>
             if cfg.delegate_to_real_git {
               @stdio.stderr.write("bit: unsupported pack-objects options\n")
               @sys.exit(1)
             }
-          }
         }
       }
       if cfg.name_hash_version is Some(version) &&
@@ -1085,21 +1105,12 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
         let input = read_all_stdin()
         let (include_names, exclude_names) = parse_stdin_pack_lines(input)
         if try_reuse_single_stdin_pack(
-          fs,
-          git_dir,
-          cfg,
-          include_names,
-          exclude_names,
-        ) {
+            fs, git_dir, cfg, include_names, exclude_names,
+          ) {
           return ()
         }
         objects = collect_objects_from_stdin_packs(
-          fs,
-          git_dir,
-          db,
-          cfg,
-          include_names,
-          exclude_names,
+          fs, git_dir, db, cfg, include_names, exclude_names,
         )
       } else if cfg.all {
         let refs = @gitlib.show_ref(fs, git_dir)
@@ -1301,7 +1312,9 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
         objects = filter_objects(objects, packed_ids)
       }
       if cfg.exclude_promisor_objects {
-        let promisor_ids = collect_pack_ids_from_marker(fs, pack_dir, ".promisor")
+        let promisor_ids = collect_pack_ids_from_marker(
+          fs, pack_dir, ".promisor",
+        )
         objects = filter_objects(objects, promisor_ids)
       }
       objects = dedup_objects(objects)

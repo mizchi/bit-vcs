@@ -1,5 +1,5 @@
-///| Remote path helpers
-
+///|
+/// Remote path helpers
 fn is_http_url(url : String) -> Bool {
   url.has_prefix("http://") || url.has_prefix("https://")
 }
@@ -123,7 +123,10 @@ pub fn resolve_gitdir(fs : &@git.RepoFileSystem, git_path : String) -> String {
 }
 
 ///|
-pub fn detect_git_dir(fs : &@git.RepoFileSystem, path : String) -> (String, Bool)? {
+pub fn detect_git_dir(
+  fs : &@git.RepoFileSystem,
+  path : String,
+) -> (String, Bool)? {
   let bare_head = fs.is_file(path + "/HEAD")
   let bare_objs = fs.is_dir(path + "/objects")
   if bare_head && bare_objs {

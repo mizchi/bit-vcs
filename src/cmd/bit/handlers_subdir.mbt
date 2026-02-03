@@ -94,6 +94,7 @@ async fn subdir_clone(
     "Cloning '\{subdir_path}' from '\{remote_url}' into '\{relative_target}'...",
   )
   let fs = OsFs::new()
+  let target_existed = fs.is_dir(target)
   // Step 1: Create target directory
   fs.mkdir_p(target) catch {
     _ => raise @git.GitError::IoError("Failed to create directory: " + target)
@@ -166,13 +167,13 @@ async fn subdir_clone(
   // Navigate to subdirectory tree
   print_line("  Finding subdirectory '\{subdir_path}'...")
   let subdir_tree_id = @gitlib.get_subdir_tree_from_commit(
-    db,
-    fs,
-    commit_id,
-    subdir_path,
+    db, fs, commit_id, subdir_path,
   )
   guard subdir_tree_id is Some(tree_id) else {
     @gitlib.subdir_remove_dir(fs, fs, temp_clone)
+    if not(target_existed) {
+      @gitlib.subdir_remove_dir(fs, fs, target)
+    }
     raise @git.GitError::InvalidObject("Subdirectory not found: " + subdir_path)
   }
   // Fetch blobs for the subdirectory
@@ -250,11 +251,7 @@ fn write_subdir_attributes(
   base_commit : @git.ObjectId,
 ) -> Unit {
   @gitlib.write_subdir_attributes(
-    fs,
-    git_dir,
-    remote_url,
-    subdir_path,
-    base_commit,
+    fs, git_dir, remote_url, subdir_path, base_commit,
   )
 }
 
