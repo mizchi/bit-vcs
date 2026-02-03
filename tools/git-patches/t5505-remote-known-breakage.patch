@@ -1,0 +1,13 @@
+diff --git a/t/t5505-remote.sh b/t/t5505-remote.sh
+index e592c0bcde..1c1adb41ad 100755
+--- a/t/t5505-remote.sh
++++ b/t/t5505-remote.sh
+@@ -364,7 +364,7 @@ cat >expect <<EOF
+     main pushes to upstream (create)
+ EOF
+ 
+-test_expect_failure 'show stale with negative refspecs' '
++test_expect_success 'show stale with negative refspecs' '
+ 	test_when_finished "git -C test config --unset-all --fixed-value remote.origin.fetch ^refs/heads/side" &&
+ 	git -C test config --add remote.origin.fetch ^refs/heads/side &&
+ 	git -C test remote show origin >output &&

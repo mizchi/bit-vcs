@@ -172,6 +172,13 @@ fn normalize_path(path : String) -> String {
 }
 
 ///|
+fn is_bare_repo_dir(path : String) -> Bool {
+  let head_ok = @fs.is_file(path + "/HEAD") catch { _ => false }
+  let objs_ok = @fs.is_dir(path + "/objects") catch { _ => false }
+  head_ok && objs_ok
+}
+
+///|
 fn find_repo_root(start : String) -> String? {
   let mut current = normalize_path(start)
   if current.length() == 0 {
@@ -229,6 +236,23 @@ fn find_repo_root(start : String) -> String? {
 
 ///|
 fn get_work_root() -> String {
+  match @env.current_dir() {
+    Some(dir) =>
+      if is_bare_repo_dir(dir) {
+        return dir
+      }
+    None => ()
+  }
+  if is_bare_repo_dir(".") {
+    return "."
+  }
+  match @sys.get_env_var("PWD") {
+    Some(pwd) =>
+      if is_bare_repo_dir(pwd) {
+        return pwd
+      }
+    None => ()
+  }
   match @sys.get_env_var("GIT_SHIM_CWD") {
     Some(dir) => dir
     None =>
@@ -240,9 +264,13 @@ fn get_work_root() -> String {
             None =>
               match @sys.get_env_var("GIT_SHIM_PWD") {
                 Some(pwd) =>
-                  match find_repo_root(pwd) {
-                    Some(root) => root
-                    None => "."
+                  if is_bare_repo_dir(pwd) {
+                    pwd
+                  } else {
+                    match find_repo_root(pwd) {
+                      Some(root) => root
+                      None => "."
+                    }
                   }
                 None => "."
               }

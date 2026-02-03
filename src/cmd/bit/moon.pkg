@@ -11,6 +11,7 @@ import {
   "moonbitlang/async/stdio" as @stdio,
   "moonbitlang/core/bench" as @bench,
   "moonbitlang/core/encoding/utf8" as @utf8,
+  "moonbitlang/core/env" as @env,
   "moonbitlang/core/json" as @json,
   "moonbitlang/core/strconv" as @strconv,
   "moonbitlang/x/encoding" as @encoding,
