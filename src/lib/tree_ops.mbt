@@ -106,6 +106,15 @@ pub fn write_worktree_from_files(
       fs.mkdir_p(full_path)
       continue
     }
+    let full_path = join_path(root, path)
+    if rfs.is_dir(full_path) {
+      let git_marker = join_path(full_path, ".git")
+      if rfs.is_file(git_marker) || rfs.is_dir(git_marker) {
+        raise @git.GitError::InvalidObject(
+          "Refusing to overwrite submodule: \{path}",
+        )
+      }
+    }
     let obj = db.get(rfs, info.id)
     match obj {
       None => raise @git.GitError::InvalidObject("Missing blob object")

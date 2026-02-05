@@ -816,9 +816,31 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
   let fs = OsFs::new()
   let git_dir = find_git_dir(fs)
   let pack_dir = git_dir + "/objects/pack"
+  let mut subcommand : String? = None
+  for arg in args {
+    match arg {
+      "write" | "verify" | "expire" | "repack" => {
+        subcommand = Some(arg)
+        break
+      }
+      _ => ()
+    }
+  }
+  match subcommand {
+    Some("expire") | Some("repack") =>
+      match real_git_path() {
+        Some(real_git) => {
+          let real_args = real_git_args_from_cli()
+          let code = @process.run(real_git, real_args, inherit_env=true)
+          @sys.exit(code)
+        }
+        None => ()
+      }
+    _ => ()
+  }
   let mut object_dir : String? = None
   let mut progress = false
-  let mut subcommand : String? = None
+  let mut preferred_pack : String? = None
   let mut batch_size = 0
   let mut i = 0
   while i < args.length() {
@@ -840,6 +862,13 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
       }
       _ if arg.has_prefix("--batch-size=") =>
         batch_size = @strconv.parse_int(arg[13:].to_string()) catch { _ => 0 }
+      "--preferred-pack" if i + 1 < args.length() => {
+        preferred_pack = Some(args[i + 1])
+        i += 2
+        continue
+      }
+      _ if arg.has_prefix("--preferred-pack=") =>
+        preferred_pack = Some(arg[17:].to_string())
       "write" | "verify" | "expire" | "repack" => subcommand = Some(arg)
       _ if arg.has_prefix("-") =>
         warn_unimplemented_arg("multi-pack-index", arg)
@@ -852,7 +881,7 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
     None => pack_dir
   }
   match subcommand {
-    Some("write") => midx_write(fs, effective_pack_dir, progress)
+    Some("write") => midx_write(fs, effective_pack_dir, progress, preferred_pack)
     Some("verify") => midx_verify(fs, effective_pack_dir)
     Some("expire") => midx_expire(fs, effective_pack_dir, progress)
     Some("repack") => midx_repack(fs, effective_pack_dir, batch_size, progress)
@@ -875,6 +904,7 @@ async fn midx_write(
   fs : OsFs,
   pack_dir : String,
   progress : Bool,
+  preferred_pack : String?,
 ) -> Unit raise Error {
   // Find all pack files
   let pack_files = midx_find_pack_files(fs, pack_dir)
@@ -884,6 +914,22 @@ async fn midx_write(
     }
     return
   }
+  let normalized_preferred = match preferred_pack {
+    Some(name) => {
+      let mut value = name
+      if value.has_suffix(".idx") {
+        let end = value.length() - 4
+        value = String::unsafe_substring(value, start=0, end=end) + ".pack"
+      }
+      match value.rev_find("/") {
+        Some(idx) =>
+          String::unsafe_substring(value, start=idx + 1, end=value.length())
+        None => value
+      }
+    }
+    None => ""
+  }
+  let mut preferred_pack_idx : Int? = None
   // Collect all objects from all packs
   let all_entries : Array[MidxEntry] = []
   for pack_idx, pack_name in pack_files {
@@ -894,13 +940,38 @@ async fn midx_write(
     if not(fs.is_file(idx_path)) {
       continue
     }
+    if normalized_preferred.length() > 0 && pack_name == normalized_preferred {
+      preferred_pack_idx = Some(pack_idx)
+    }
     let entries = midx_read_pack_index(fs, idx_path, pack_idx)
+    if normalized_preferred.length() > 0 && pack_name == normalized_preferred &&
+      entries.length() == 0 {
+      eprint_line("preferred pack " + pack_name + " with no objects")
+      @sys.exit(1)
+    }
     for entry in entries {
       all_entries.push(entry)
     }
   }
   // Sort entries by object ID
-  all_entries.sort_by(fn(a, b) { midx_compare_oid(a.id, b.id) })
+  all_entries.sort_by(fn(a, b) {
+    let cmp = midx_compare_oid(a.id, b.id)
+    if cmp != 0 {
+      return cmp
+    }
+    match preferred_pack_idx {
+      Some(pref_idx) => {
+        if a.pack_idx == pref_idx && b.pack_idx != pref_idx {
+          -1
+        } else if a.pack_idx != pref_idx && b.pack_idx == pref_idx {
+          1
+        } else {
+          0
+        }
+      }
+      None => 0
+    }
+  })
   // Remove duplicates (keep first occurrence = preferred pack)
   let unique_entries : Array[MidxEntry] = []
   let mut last_id : @git.ObjectId? = None
@@ -1051,7 +1122,7 @@ async fn midx_expire(
   }
   // Rewrite MIDX without expired packs
   if expired > 0 {
-    midx_write(fs, pack_dir, false)
+    midx_write(fs, pack_dir, false, None)
   }
 }
 

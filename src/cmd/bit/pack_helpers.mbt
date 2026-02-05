@@ -133,11 +133,36 @@ fn parse_size_value(value : String) -> Int64? {
 }
 
 ///|
+fn parse_bool_value(value : String) -> Bool? {
+  let trimmed = value.trim().to_string().to_lower()
+  match trimmed {
+    "true" | "yes" | "on" | "1" => Some(true)
+    "false" | "no" | "off" | "0" => Some(false)
+    _ => {
+      let parsed = @strconv.parse_int(trimmed) catch { _ => return None }
+      Some(parsed != 0)
+    }
+  }
+}
+
+///|
 /// Get pack.packSizeLimit from git config
 fn get_pack_size_limit(git_dir : String) -> Int64? {
   match git_config_get(git_dir, "pack", "packSizeLimit") {
     None => None
     Some(value) => parse_size_value(value)
+  }
+}
+
+///|
+fn get_pack_use_sparse(git_dir : String) -> Bool {
+  match git_config_get(git_dir, "pack", "useSparse") {
+    Some(value) =>
+      match parse_bool_value(value) {
+        Some(flag) => flag
+        None => false
+      }
+    None => false
   }
 }
 

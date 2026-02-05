@@ -14,6 +14,19 @@ pub struct BranchInfo {
 }
 
 ///|
+fn resolve_worktree_git_dir(
+  fs : &@git.RepoFileSystem,
+  root : String,
+) -> String {
+  let git_path = join_path(root, ".git")
+  if fs.is_file(git_path) {
+    resolve_gitdir(fs, git_path)
+  } else {
+    git_path
+  }
+}
+
+///|
 /// Read HEAD and return its reference.
 pub fn read_head_ref(
   fs : &@git.RepoFileSystem,
@@ -149,7 +162,7 @@ pub fn create_branch(
   root : String,
   name : String,
 ) -> Unit raise @git.GitError {
-  let git_dir = join_path(root, ".git")
+  let git_dir = resolve_worktree_git_dir(rfs, root)
   let refname = branch_ref_name(name)
   let ref_path = join_path(git_dir, refname)
   let dir = parent_dir(ref_path)
@@ -170,7 +183,7 @@ pub fn create_branch_at(
   name : String,
   commit_id : @git.ObjectId,
 ) -> Unit raise @git.GitError {
-  let git_dir = join_path(root, ".git")
+  let git_dir = resolve_worktree_git_dir(rfs, root)
   let refname = branch_ref_name(name)
   let ref_path = join_path(git_dir, refname)
   let dir = parent_dir(ref_path)
@@ -188,7 +201,7 @@ pub fn delete_branch(
   name : String,
   force? : Bool = false,
 ) -> Unit raise @git.GitError {
-  let git_dir = join_path(root, ".git")
+  let git_dir = resolve_worktree_git_dir(rfs, root)
   let head = read_head_ref(rfs, git_dir)
   match head {
     Branch(current) =>
@@ -235,7 +248,7 @@ pub fn rename_branch(
   new_name : String,
   force? : Bool = false,
 ) -> Unit raise @git.GitError {
-  let git_dir = join_path(root, ".git")
+  let git_dir = resolve_worktree_git_dir(rfs, root)
   let old_ref = branch_ref_name(old_name)
   let new_ref = branch_ref_name(new_name)
   let old_path = join_path(git_dir, old_ref)
@@ -340,7 +353,7 @@ pub fn switch_branch(
   create? : Bool = false,
   checkout_files? : Bool = true,
 ) -> Unit raise @git.GitError {
-  let git_dir = join_path(root, ".git")
+  let git_dir = resolve_worktree_git_dir(rfs, root)
   let refname = branch_ref_name(name)
   let ref_path = join_path(git_dir, refname)
   if create {

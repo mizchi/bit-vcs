@@ -1517,15 +1517,23 @@ fn clone_local_repo(
 }
 
 ///|
-fn fetch_local_repo(
+async fn fetch_local_repo(
   fs : OsFs,
   src_path : String,
   git_dir : String,
   remote_name : String,
+  remote_url : String,
 ) -> Unit raise Error {
   guard @gitlib.detect_git_dir(fs, src_path) is Some((src_git_dir, _)) else {
     raise @git.GitError::InvalidObject("Not a git repository: \{src_path}")
   }
+  let display_url = if remote_url.has_prefix("/") ||
+    remote_url.has_prefix("file://") {
+    remote_url
+  } else {
+    src_path
+  }
+  print_line("From \{display_url}")
   @gitlib.copy_tree(fs, fs, src_git_dir + "/objects", git_dir + "/objects")
   let (remotes, _) = @gitlib.read_repo_config(fs, git_dir)
   let rc = remotes
@@ -1667,7 +1675,7 @@ async fn fetch_from_remote(
   }
   match @gitlib.resolve_local_repo_path(fs, local_root, remote_url) {
     Some(src_path) => {
-      fetch_local_repo(fs, src_path, git_dir, remote_name)
+      fetch_local_repo(fs, src_path, git_dir, remote_name, remote_url)
       return ()
     }
     None => ()
@@ -2579,6 +2587,12 @@ async fn handle_fetch(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let fs = OsFs::new()
+  let rfs : &@git.RepoFileSystem = fs
+  let git_dir = if rfs.is_file(git_dir) {
+    @gitlib.resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
   let (remotes, _) = @gitlib.read_repo_config(fs, git_dir)
   // Read remote URL - prefer subdir-clone remote, then config
   let mut remote_name = "origin"
@@ -2597,6 +2611,10 @@ async fn handle_fetch(args : Array[String]) -> Unit raise Error {
       }
       break
     }
+    if arg == "--prune" || arg == "-p" || arg == "--prune-tags" ||
+      arg == "--tags" || arg == "--no-tags" {
+      continue
+    }
     warn_unimplemented_arg("fetch", arg)
   }
   guard remote_url is Some(url) else {
@@ -2610,38 +2628,200 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let fs = OsFs::new()
+  let rfs : &@git.RepoFileSystem = fs
+  let git_dir = if rfs.is_file(git_dir) {
+    @gitlib.resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
+  let (remotes, branches) = @gitlib.read_repo_config(fs, git_dir)
   // Read remote URL - prefer subdir-clone remote, then config
+  let mut remote_name = "origin"
   let mut remote_url : String? = get_effective_remote_url(fs, git_dir)
   let mut rebase = false
+  let mut arg_remote : String? = None
+  let mut arg_refspec : String? = None
   for arg in args {
     match arg {
       "--rebase" | "-r" => rebase = true
-      _ if arg.has_prefix("-") => {
-        warn_unimplemented_arg("pull", arg)
-        continue
-      }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("pull", arg)
       _ => {
-        remote_url = Some(arg)
-        break
+        if arg_remote is None {
+          arg_remote = Some(arg)
+        } else if arg_refspec is None {
+          arg_refspec = Some(arg)
+        }
       }
     }
+  }
+  // Apply explicit remote argument
+  match arg_remote {
+    Some(r) =>
+      match remotes.get(r) {
+        Some(rc) => {
+          remote_name = r
+          if rc.urls.length() > 0 {
+            remote_url = Some(rc.urls[0])
+          }
+        }
+        None => remote_url = Some(r)
+      }
+    None => ()
+  }
+  // Resolve upstream from branch config when available
+  let head_ref = @gitlib.read_head_ref(fs, git_dir)
+  let mut merge_ref : String? = None
+  match head_ref {
+    @gitlib.HeadRef::Branch(branch) => {
+      match branches.get(branch) {
+        Some(cfg) => {
+          if cfg.remote is Some(r) && arg_remote is None {
+            remote_name = r
+            match @gitlib.get_remote_url(fs, git_dir, r) {
+              Some(u) => remote_url = Some(u)
+              None => ()
+            }
+          }
+          if cfg.merges.length() > 0 {
+            merge_ref = Some(cfg.merges[0])
+          }
+        }
+        None => ()
+      }
+      if merge_ref is None && arg_refspec is None {
+        merge_ref = Some("refs/heads/" + branch)
+      }
+    }
+    _ => ()
+  }
+  // Apply explicit refspec argument
+  match arg_refspec {
+    Some(r) =>
+      if r.has_prefix("refs/") {
+        merge_ref = Some(r)
+      } else {
+        merge_ref = Some("refs/heads/" + r)
+      }
+    None => ()
   }
   guard remote_url is Some(url) else {
     raise @git.GitError::InvalidObject("No remote configured")
   }
-  print_line("Pulling from \{url}...")
-  let result = @gitlib.pull_http(fs, fs, root, url, true, rebase~)
-  match result {
-    None => print_line("Already up to date.")
-    Some(id) => print_line("Updated to \{id.to_hex()}")
+  print_line("Fetching from \{url}...")
+  fetch_from_remote(fs, git_dir, root, remote_name, url)
+  let target_ref = match merge_ref {
+    Some(r) =>
+      if r.has_prefix("refs/remotes/") {
+        r
+      } else if r.has_prefix("refs/heads/") {
+        let name = String::unsafe_substring(r, start=11, end=r.length())
+        "refs/remotes/" + remote_name + "/" + name
+      } else if r.has_prefix("refs/") {
+        r
+      } else {
+        "refs/remotes/" + remote_name + "/" + r
+      }
+    None => "refs/remotes/" + remote_name + "/HEAD"
+  }
+  let upstream_ref = match merge_ref {
+    Some(r) => {
+      let remote_prefix = "refs/remotes/" + remote_name + "/"
+      if r.has_prefix("refs/heads/") {
+        r
+      } else if r.has_prefix(remote_prefix) {
+        let name = String::unsafe_substring(
+          r,
+          start=remote_prefix.length(),
+          end=r.length(),
+        )
+        "refs/heads/" + name
+      } else if r.has_prefix("refs/") {
+        r
+      } else {
+        "refs/heads/" + r
+      }
+    }
+    None => "HEAD"
+  }
+  let mut target_id = @gitlib.resolve_ref(fs, git_dir, target_ref)
+  if target_id is None {
+    match @gitlib.resolve_local_repo_path(fs, root, url) {
+      Some(src_path) =>
+        match @gitlib.detect_git_dir(fs, src_path) {
+          Some((src_git_dir, _)) =>
+            match @gitlib.resolve_ref(fs, src_git_dir, upstream_ref) {
+              Some(id) => {
+                @gitlib.copy_tree(fs, fs, src_git_dir + "/objects", git_dir + "/objects")
+                write_ref_file(fs, git_dir, target_ref, id)
+                target_id = Some(id)
+              }
+              None => ()
+            }
+          None => ()
+        }
+      None =>
+        match resolve_remote_ref_id(url, upstream_ref) {
+          Some((id, _)) => {
+            let pack = @git.fetch_pack_http(url, [id], true)
+            let objects = @git.parse_packfile(pack)
+            @git.write_packfile_with_index(fs, git_dir, pack, objects)
+            write_ref_file(fs, git_dir, target_ref, id)
+            target_id = Some(id)
+          }
+          None => ()
+        }
+    }
+  }
+  guard target_id is Some(tid) else {
+    raise @git.GitError::InvalidObject("Unknown ref: " + target_ref)
+  }
+  if rebase {
+    let id = @gitlib.rebase_onto(fs, fs, root, tid)
+    print_line("Updated to \{id.to_hex()}")
+    return
+  }
+  let author = get_author_string()
+  let timestamp = get_commit_timestamp()
+  let msg = "Merge " + target_ref
+  let result = @gitlib.merge(fs, fs, root, tid, msg, author, timestamp)
+  match result.status {
+    @gitlib.MergeStatus::AlreadyUpToDate => print_line("Already up to date.")
+    @gitlib.MergeStatus::FastForward =>
+      match result.commit_id {
+        Some(id) => {
+          let short = String::unsafe_substring(id.to_hex(), start=0, end=7)
+          print_line("Fast-forward to \{short}")
+        }
+        None => print_line("Fast-forward")
+      }
+    @gitlib.MergeStatus::Merged =>
+      match result.commit_id {
+        Some(id) => {
+          let short = String::unsafe_substring(id.to_hex(), start=0, end=7)
+          print_line("Merge made by the 'ort' strategy. [\{short}]")
+        }
+        None => print_line("Merged")
+      }
+    @gitlib.MergeStatus::Conflicted => {
+      print_line("CONFLICT (content): Merge conflict in the following files:")
+      for path in result.conflicts {
+        print_line("  \{path}")
+      }
+      print_line("Automatic merge failed; fix conflicts and then commit.")
+    }
   }
 }
-
 ///|
 async fn handle_push(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let fs = OsFs::new()
+  let rfs : &@git.RepoFileSystem = fs
+  let git_dir = if rfs.is_file(git_dir) {
+    @gitlib.resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
   // Check if this is a subdir-clone
   let subdir_remote = match get_subdir_info(fs, git_dir) {
     Some((remote, _, _)) => Some(remote)
@@ -2709,9 +2889,34 @@ async fn handle_push(args : Array[String]) -> Unit raise Error {
     }
     None => {
       print_line("Pushing to \{url}...")
-      ignore(force) // TODO: implement force push
-      let result = @gitlib.push_http(fs, root, url, refname)
-      print_line(result)
+      match @gitlib.resolve_local_repo_path(fs, root, url) {
+        Some(remote_path) => {
+          let remote_git_dir = @gitlib.detect_git_dir(fs, remote_path)
+            .map(fn(pair) { pair.0 })
+          guard remote_git_dir is Some(rgd) else {
+            raise @git.GitError::InvalidObject(
+              "Not a git repository: " + remote_path,
+            )
+          }
+          let local_id = match @gitlib.resolve_ref(fs, git_dir, refname) {
+            Some(id) => id
+            None =>
+              match @gitlib.resolve_head_commit(fs, git_dir) {
+                Some(id) => id
+                None =>
+                  raise @git.GitError::InvalidObject("HEAD not found")
+              }
+          }
+          @gitlib.copy_tree(fs, fs, git_dir + "/objects", rgd + "/objects")
+          write_ref_file(fs, rgd, refname, local_id)
+          print_line("Push successful")
+        }
+        None => {
+          ignore(force) // TODO: implement force push
+          let result = @gitlib.push_http(fs, root, url, refname)
+          print_line(result)
+        }
+      }
     }
   }
   if set_upstream {

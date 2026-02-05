@@ -495,13 +495,25 @@ fn rebase_write_worktree_except(
     if except_set.contains(path) {
       continue // Skip conflicting files
     }
+    let full = join_path(root, path)
+    if is_gitlink_mode_int(info.mode) {
+      fs.mkdir_p(full)
+      continue
+    }
+    if rfs.is_dir(full) {
+      let git_marker = join_path(full, ".git")
+      if rfs.is_file(git_marker) || rfs.is_dir(git_marker) {
+        raise @git.GitError::InvalidObject(
+          "Refusing to overwrite submodule: \{path}",
+        )
+      }
+    }
     let obj = db.get(rfs, info.id)
     match obj {
       Some(o) => {
         if o.obj_type != @git.ObjectType::Blob {
           raise @git.GitError::InvalidObject("Object is not a blob")
         }
-        let full = join_path(root, path)
         let dir = rebase_parent_dir(full)
         fs.mkdir_p(dir)
         fs.write_file(full, o.data)
@@ -520,6 +532,17 @@ fn rebase_map_to_index(
   let entries : Array[IndexEntry] = []
   for item in map.to_array() {
     let (path, e) = item
+    if is_gitlink_mode_int(e.mode) {
+      entries.push({
+        path,
+        id: e.id,
+        mode: e.mode,
+        size: 0,
+        mtime_sec: 0,
+        mtime_nsec: 0,
+      })
+      continue
+    }
     let obj = db.get(fs, e.id)
     match obj {
       Some(o) => {

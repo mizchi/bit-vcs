@@ -109,11 +109,16 @@ pub async fn push_http(
   refname : String,
 ) -> String raise @git.GitError {
   let git_dir = join_path(root, ".git")
-  let head = resolve_head_commit(rfs, git_dir)
+  let actual_git_dir = if rfs.is_file(git_dir) {
+    resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
+  let head = resolve_head_commit(rfs, actual_git_dir)
   match head {
     None => raise @git.GitError::InvalidObject("HEAD not found")
     Some(head_id) => {
-      let db = ObjectDb::load(rfs, git_dir)
+      let db = ObjectDb::load(rfs, actual_git_dir)
       let objects = collect_reachable_objects(db, rfs, head_id)
       let pack = @git.create_packfile(objects)
       let remote = @git.Remote::new(remote_url)

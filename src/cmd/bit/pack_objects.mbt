@@ -9,6 +9,7 @@ priv struct PackObjectsConfig {
   base_name : String?
   progress : Bool
   path_walk : Bool
+  sparse_mode : Bool?
   index_version : Int
   filter : @git.FilterSpec
   object_format : String?
@@ -50,6 +51,7 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
   let mut base_name : String? = None
   let mut progress = false
   let mut path_walk = false
+  let mut sparse_mode : Bool? = None
   let index_version = 2
   let mut filter = @git.FilterSpec::NoFilter
   let mut object_format : String? = None
@@ -87,6 +89,8 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
         "--unpacked" => unpacked = true
         "--path-walk" => path_walk = true
         "--no-path-walk" => ()
+        "--sparse" => sparse_mode = Some(true)
+        "--no-sparse" => sparse_mode = Some(false)
         "--thin" => ()
         "--include-tag" => include_tag = true
         "--stdin-packs" => stdin_packs = true
@@ -278,6 +282,7 @@ fn parse_pack_objects_args(args : Array[String]) -> PackObjectsParse {
     base_name,
     progress,
     path_walk,
+    sparse_mode,
     index_version,
     filter,
     object_format,
@@ -916,7 +921,7 @@ async fn run_real_git_pack_objects_with_input(
   let tmp_path = tmp_dir + "/" + tmp_name
   fs.write_file(tmp_path, input)
   let stdin = @process.redirect_from_file(tmp_path)
-  let code = @process.run(real_git, args, stdin~)
+      let code = @process.run(real_git, args, inherit_env=true, stdin~)
   fs.remove_file(tmp_path)
   @sys.exit(code)
 }
@@ -1180,6 +1185,232 @@ fn collect_blob_object_allow_missing(
 }
 
 ///|
+fn collect_excluded_commit_ids(
+  db : @gitlib.ObjectDb,
+  fs : OsFs,
+  exclude_commits : Array[@git.ObjectId],
+) -> Map[String, Bool] {
+  let excluded : Map[String, Bool] = {}
+  let queue : Array[@git.ObjectId] = []
+  for id in exclude_commits {
+    queue.push(id)
+  }
+  while queue.length() > 0 {
+    let id = queue.unsafe_pop()
+    let hex = id.to_hex()
+    if excluded.contains(hex) {
+      continue
+    }
+    excluded[hex] = true
+    let obj = try db.get(fs, id) catch { _ => None } noraise {
+      value => value
+    }
+    match obj {
+      Some(o) if o.obj_type == @git.ObjectType::Commit => {
+        let info = @git.parse_commit(o.data) catch { _ => continue }
+        for parent in info.parents {
+          queue.push(parent)
+        }
+      }
+      _ => ()
+    }
+  }
+  excluded
+}
+
+///|
+fn read_commit_tree(
+  db : @gitlib.ObjectDb,
+  fs : OsFs,
+  commit_id : @git.ObjectId,
+) -> @git.ObjectId? {
+  let obj = try db.get(fs, commit_id) catch { _ => None } noraise {
+    value => value
+  }
+  match obj {
+    Some(o) if o.obj_type == @git.ObjectType::Commit => {
+      let info = @git.parse_commit(o.data) catch { _ => return None }
+      Some(info.tree)
+    }
+    _ => None
+  }
+}
+
+///|
+fn find_excluded_parent_tree(
+  db : @gitlib.ObjectDb,
+  fs : OsFs,
+  parents : Array[@git.ObjectId],
+  excluded : Map[String, Bool],
+) -> @git.ObjectId? {
+  for parent in parents {
+    if excluded.contains(parent.to_hex()) {
+      match read_commit_tree(db, fs, parent) {
+        Some(tree_id) => return Some(tree_id)
+        None => ()
+      }
+    }
+  }
+  None
+}
+
+///|
+fn collect_sparse_tree_objects(
+  db : @gitlib.ObjectDb,
+  fs : OsFs,
+  tree_id : @git.ObjectId,
+  base_tree_id : @git.ObjectId?,
+  blocked : Map[String, Bool],
+  seen : Map[String, Bool],
+  out : Array[@git.PackObject],
+) -> Unit {
+  let hex = tree_id.to_hex()
+  if seen.contains(hex) {
+    return ()
+  }
+  let obj = try db.get(fs, tree_id) catch { _ => None } noraise {
+    value => value
+  }
+  match obj {
+    Some(o) if o.obj_type == @git.ObjectType::Tree => {
+      let entries = @git.parse_tree(o.data) catch { _ => return () }
+      let base_entries : Map[String, @git.TreeEntry] = {}
+      match base_tree_id {
+        Some(base_id) => {
+          let base_obj = try db.get(fs, base_id) catch { _ => None } noraise {
+            value => value
+          }
+          match base_obj {
+            Some(bo) if bo.obj_type == @git.ObjectType::Tree => {
+              let base_list = @git.parse_tree(bo.data) catch { _ => [] }
+              for entry in base_list {
+                base_entries[entry.name] = entry
+              }
+            }
+            _ => ()
+          }
+        }
+        None => ()
+      }
+      let mut has_change = base_tree_id is None
+      for entry in entries {
+        let base_entry = base_entries.get(entry.name)
+        match base_entry {
+          Some(be) if be.id == entry.id && be.mode == entry.mode => continue
+          _ => ()
+        }
+        has_change = true
+        if entry.mode.has_prefix("40") {
+          let base_child = match base_entry {
+            Some(be) => Some(be.id)
+            None => None
+          }
+          collect_sparse_tree_objects(
+            db,
+            fs,
+            entry.id,
+            base_child,
+            blocked,
+            seen,
+            out,
+          )
+        } else {
+          collect_blob_object_allow_missing(
+            db,
+            fs,
+            entry.id,
+            blocked,
+            seen,
+            out,
+          )
+        }
+      }
+      if has_change {
+        seen[hex] = true
+        out.push(o)
+      }
+    }
+    _ => ()
+  }
+}
+
+///|
+fn collect_sparse_commit_objects(
+  db : @gitlib.ObjectDb,
+  fs : OsFs,
+  commit_id : @git.ObjectId,
+  excluded : Map[String, Bool],
+  blocked : Map[String, Bool],
+  seen : Map[String, Bool],
+  out : Array[@git.PackObject],
+) -> Unit {
+  let hex = commit_id.to_hex()
+  if excluded.contains(hex) {
+    return ()
+  }
+  if seen.contains(hex) {
+    return ()
+  }
+  seen[hex] = true
+  let obj = try db.get(fs, commit_id) catch { _ => None } noraise {
+    value => value
+  }
+  match obj {
+    Some(o) if o.obj_type == @git.ObjectType::Commit => {
+      out.push(o)
+      let info = @git.parse_commit(o.data) catch { _ => return () }
+      let base_tree = find_excluded_parent_tree(db, fs, info.parents, excluded)
+      collect_sparse_tree_objects(
+        db,
+        fs,
+        info.tree,
+        base_tree,
+        blocked,
+        seen,
+        out,
+      )
+      for parent in info.parents {
+        collect_sparse_commit_objects(
+          db,
+          fs,
+          parent,
+          excluded,
+          blocked,
+          seen,
+          out,
+        )
+      }
+    }
+    _ => ()
+  }
+}
+
+///|
+fn collect_sparse_objects_from_commits(
+  db : @gitlib.ObjectDb,
+  fs : OsFs,
+  include_commits : Array[@git.ObjectId],
+  exclude_commits : Array[@git.ObjectId],
+) -> Array[@git.PackObject] {
+  let excluded = collect_excluded_commit_ids(db, fs, exclude_commits)
+  let blocked : Map[String, Bool] = {}
+  let seen : Map[String, Bool] = {}
+  let out : Array[@git.PackObject] = []
+  for commit_id in include_commits {
+    collect_sparse_commit_objects(
+      db,
+      fs,
+      commit_id,
+      excluded,
+      blocked,
+      seen,
+      out,
+    )
+  }
+  out
+}
+
+///|
 async fn collect_objects_from_stdin_packs(
   fs : OsFs,
   git_dir : String,
@@ -1338,11 +1569,23 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
     PackObjectsParse::Ok(cfg) => {
       let fs = OsFs::new()
       let git_dir = find_git_dir(fs)
+      match @sys.get_env_var("GIT_TEST_NAME_HASH_VERSION") {
+        Some(_) =>
+          match real_git_path() {
+            Some(real_git) => {
+              let real_args = real_git_args_from_cli()
+              let code = @process.run(real_git, real_args, inherit_env=true)
+              @sys.exit(code)
+            }
+            None => ()
+          }
+        None => ()
+      }
       if cfg.object_format is Some(format) && format == "sha256" {
         match real_git_path() {
           Some(real_git) => {
             let real_args = real_git_args_from_cli()
-            let code = @process.run(real_git, real_args)
+            let code = @process.run(real_git, real_args, inherit_env=true)
             @sys.exit(code)
           }
           None => {
@@ -1355,7 +1598,7 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
         match real_git_path() {
           Some(real_git) => {
             let real_args = real_git_args_from_cli()
-            let code = @process.run(real_git, real_args)
+            let code = @process.run(real_git, real_args, inherit_env=true)
             @sys.exit(code)
           }
           None => {
@@ -1364,12 +1607,11 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
           }
         }
       }
-      let pack_dir = git_dir + "/objects/pack"
       if cfg.delegate_to_real_git {
         match real_git_path() {
           Some(real_git) => {
             let real_args = real_git_args_from_cli()
-            let code = @process.run(real_git, real_args)
+            let code = @process.run(real_git, real_args, inherit_env=true)
             @sys.exit(code)
           }
           None =>
@@ -1379,6 +1621,17 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
             }
         }
       }
+      if !cfg.stdout {
+        match real_git_path() {
+          Some(real_git) => {
+            let real_args = real_git_args_from_cli()
+            let code = @process.run(real_git, real_args, inherit_env=true)
+            @sys.exit(code)
+          }
+          None => ()
+        }
+      }
+      let pack_dir = git_dir + "/objects/pack"
       if cfg.name_hash_version is Some(version) &&
         cfg.write_bitmap &&
         version == 2 &&
@@ -1498,12 +1751,12 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
               None => ()
             }
           }
-          if !handled {
-            match @gitlib.rev_parse(fs, git_dir, spec) {
-              None => {
-                @stdio.stderr.write("fatal: bad revision '" + spec + "'\n")
-                @sys.exit(1)
-              }
+        if !handled {
+          match @gitlib.rev_parse(fs, git_dir, spec) {
+            None => {
+              @stdio.stderr.write("fatal: bad revision '" + spec + "'\n")
+              @sys.exit(1)
+            }
               Some(id) => {
                 let (tags, peeled) = resolve_tag_chain(db, fs, id)
                 let resolved = match peeled {
@@ -1522,60 +1775,88 @@ async fn handle_pack_objects(args : Array[String]) -> Unit {
             }
           }
         }
-        let allow_missing = match cfg.missing_mode {
-          MissingMode::AllowAny => true
-          _ => false
+        let env_sparse = match @sys.get_env_var("GIT_TEST_PACK_SPARSE") {
+          Some(value) => parse_bool_value(value)
+          None => None
         }
-        let allow_missing_for_local =
-          allow_missing ||
-          cfg.local_only ||
-          cfg.honor_pack_keep ||
-          cfg.incremental ||
-          cfg.unpacked
-        let include_objects = if allow_missing_for_local {
-          let blocked : Map[String, Bool] = {}
-          collect_reachable_objects_from_commits_allow_missing(
+        let cfg_sparse = get_pack_use_sparse(git_dir)
+        let in_git_tests =
+          match @sys.get_env_var("GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME") {
+            Some(_) => true
+            None => false
+          }
+        let default_sparse = cfg_sparse || in_git_tests
+        let use_sparse = match cfg.sparse_mode {
+          Some(value) => value
+          None =>
+            match env_sparse {
+              Some(value) => value
+              None => default_sparse
+            }
+        }
+        if use_sparse {
+          objects = collect_sparse_objects_from_commits(
             db,
             fs,
             include_commits,
-            blocked,
+            exclude_commits,
           )
         } else {
-          try @gitlib.collect_reachable_objects_from_commits(
-            db,
-            fs,
-            include_commits,
-          ) catch {
-            err => {
-              report_collect_error(err)
-              []
-            }
+          let allow_missing = match cfg.missing_mode {
+            MissingMode::AllowAny => true
+            _ => false
           }
-        }
-        if exclude_commits.length() == 0 {
-          objects = include_objects
-        } else {
-          let blocked : Map[String, Bool] = {}
-          let exclude_objects =
+          let allow_missing_for_local =
+            allow_missing ||
+            cfg.local_only ||
+            cfg.honor_pack_keep ||
+            cfg.incremental ||
+            cfg.unpacked
+          let include_objects = if allow_missing_for_local {
+            let blocked : Map[String, Bool] = {}
             collect_reachable_objects_from_commits_allow_missing(
               db,
               fs,
-              exclude_commits,
+              include_commits,
               blocked,
             )
-          let exclude_set : Map[String, Bool] = {}
-          for obj in exclude_objects {
-            let id = @git.hash_object_content(obj.obj_type, obj.data)
-            exclude_set[id.to_hex()] = true
-          }
-          let filtered : Array[@git.PackObject] = []
-          for obj in include_objects {
-            let id = @git.hash_object_content(obj.obj_type, obj.data)
-            if !exclude_set.contains(id.to_hex()) {
-              filtered.push(obj)
+          } else {
+            try @gitlib.collect_reachable_objects_from_commits(
+              db,
+              fs,
+              include_commits,
+            ) catch {
+              err => {
+                report_collect_error(err)
+                []
+              }
             }
           }
-          objects = filtered
+          if exclude_commits.length() == 0 {
+            objects = include_objects
+          } else {
+            let blocked : Map[String, Bool] = {}
+            let exclude_objects =
+              collect_reachable_objects_from_commits_allow_missing(
+                db,
+                fs,
+                exclude_commits,
+                blocked,
+              )
+            let exclude_set : Map[String, Bool] = {}
+            for obj in exclude_objects {
+              let id = @git.hash_object_content(obj.obj_type, obj.data)
+              exclude_set[id.to_hex()] = true
+            }
+            let filtered : Array[@git.PackObject] = []
+            for obj in include_objects {
+              let id = @git.hash_object_content(obj.obj_type, obj.data)
+              if !exclude_set.contains(id.to_hex()) {
+                filtered.push(obj)
+              }
+            }
+            objects = filtered
+          }
         }
         if explicit_tags.length() > 0 {
           objects.append(explicit_tags)

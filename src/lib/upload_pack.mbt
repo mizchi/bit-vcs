@@ -407,7 +407,10 @@ fn build_upload_pack_response(
   // NAK (no common commits)
   upload_push_bytes(out, @git.pktline_encode("NAK\n"))
   // Create packfile
-  let pack = @git.create_packfile(objects)
+  let pack = @git.create_packfile_with_delta(
+    objects,
+    @git.PackDeltaMode::NoDelta,
+  )
   if use_side_band {
     // Send packfile via side-band-64k (band 1)
     let chunk_size = 65515 // 65520 - 4 (pkt-line header) - 1 (band byte)
@@ -866,7 +869,10 @@ fn build_upload_pack_response_v2(
   upload_push_bytes(out, @git.pktline_encode("packfile\n"))
 
   // Create packfile
-  let pack = @git.create_packfile(objects)
+  let pack = @git.create_packfile_with_delta(
+    objects,
+    @git.PackDeltaMode::NoDelta,
+  )
 
   // Send packfile via side-band-64k (band 1)
   let chunk_size = 65515 // 65520 - 4 (pkt-line header) - 1 (band byte)

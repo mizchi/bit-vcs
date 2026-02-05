@@ -19,9 +19,14 @@ pub async fn status(
   let profile = profile_enabled()
   let mut t0 = profile_start(profile)
   let git_dir = join_path(root, ".git")
-  let autocrlf = read_autocrlf_setting(fs, git_dir)
+  let actual_git_dir = if fs.is_file(git_dir) {
+    resolve_gitdir(fs, git_dir)
+  } else {
+    git_dir
+  }
+  let autocrlf = read_autocrlf_setting(fs, actual_git_dir)
   let racy_git = racy_git_enabled()
-  let index_entries = read_index_entries(fs, git_dir)
+  let index_entries = read_index_entries(fs, actual_git_dir)
   t0 = profile_lap(profile, "status read_index_entries", t0)
   let index_map : Map[String, IndexEntry] = {}
   for e in index_entries {
@@ -263,8 +268,13 @@ pub fn add_paths(
   paths : Array[String],
 ) -> Unit raise @git.GitError {
   let git_dir = join_path(root, ".git")
-  let autocrlf = read_autocrlf_setting(rfs, git_dir)
-  let entries = read_index_entries(rfs, git_dir)
+  let actual_git_dir = if rfs.is_file(git_dir) {
+    resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
+  let autocrlf = read_autocrlf_setting(rfs, actual_git_dir)
+  let entries = read_index_entries(rfs, actual_git_dir)
   let map : Map[String, IndexEntry] = {}
   for e in entries {
     map[e.path] = e
@@ -277,7 +287,7 @@ pub fn add_paths(
       let normalized = normalize_worktree_content(content, autocrlf)
       let id = write_loose_object(
         fs,
-        git_dir,
+        actual_git_dir,
         @git.ObjectType::Blob,
         normalized,
       )
@@ -299,7 +309,7 @@ pub fn add_paths(
     let (_, entry) = item
     out.push(entry)
   }
-  write_index_entries(fs, git_dir, out)
+  write_index_entries(fs, actual_git_dir, out)
 }
 
 ///|
@@ -311,8 +321,13 @@ pub async fn add_paths_async(
   paths : Array[String],
 ) -> Unit raise @git.GitError {
   let git_dir = join_path(root, ".git")
-  let autocrlf = read_autocrlf_setting(rfs, git_dir)
-  let entries = read_index_entries(rfs, git_dir)
+  let actual_git_dir = if rfs.is_file(git_dir) {
+    resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
+  let autocrlf = read_autocrlf_setting(rfs, actual_git_dir)
+  let entries = read_index_entries(rfs, actual_git_dir)
   let map : Map[String, IndexEntry] = {}
   for e in entries {
     map[e.path] = e
@@ -329,7 +344,7 @@ pub async fn add_paths_async(
             let normalized = normalize_worktree_content(content, autocrlf)
             let id = write_loose_object(
               fs,
-              git_dir,
+              actual_git_dir,
               @git.ObjectType::Blob,
               normalized,
             )
@@ -355,7 +370,7 @@ pub async fn add_paths_async(
             let bytes = @utf8.encode(target)
             let id = write_loose_object(
               fs,
-              git_dir,
+              actual_git_dir,
               @git.ObjectType::Blob,
               bytes,
             )
@@ -385,7 +400,7 @@ pub async fn add_paths_async(
     let (_, entry) = item
     out.push(entry)
   }
-  write_index_entries(fs, git_dir, out)
+  write_index_entries(fs, actual_git_dir, out)
 }
 
 ///|
@@ -401,12 +416,17 @@ pub fn commit(
   committer_timestamp? : Int64 = author_timestamp,
 ) -> @git.ObjectId raise @git.GitError {
   let git_dir = join_path(root, ".git")
-  let entries = read_index_entries(rfs, git_dir)
+  let actual_git_dir = if rfs.is_file(git_dir) {
+    resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
+  let entries = read_index_entries(rfs, actual_git_dir)
   if entries.length() == 0 {
     raise @git.GitError::InvalidObject("Empty index")
   }
-  let tree_id = write_tree_from_index(fs, git_dir, entries)
-  let parent = resolve_head_commit(rfs, git_dir)
+  let tree_id = write_tree_from_index(fs, actual_git_dir, entries)
+  let parent = resolve_head_commit(rfs, actual_git_dir)
   let parents = match parent {
     Some(p) => [p]
     None => []
@@ -416,8 +436,8 @@ pub fn commit(
     "+0000", message,
   )
   let (commit_id, compressed) = @git.create_commit(commit)
-  write_object_bytes(fs, git_dir, commit_id, compressed)
-  update_head_ref(fs, rfs, git_dir, commit_id)
+  write_object_bytes(fs, actual_git_dir, commit_id, compressed)
+  update_head_ref(fs, rfs, actual_git_dir, commit_id)
   commit_id
 }
 
@@ -990,17 +1010,22 @@ pub fn commit_amend(
   committer_timestamp? : Int64 = author_timestamp,
 ) -> @git.ObjectId raise @git.GitError {
   let git_dir = join_path(root, ".git")
-  let entries = read_index_entries(rfs, git_dir)
+  let actual_git_dir = if rfs.is_file(git_dir) {
+    resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
+  let entries = read_index_entries(rfs, actual_git_dir)
   if entries.length() == 0 {
     raise @git.GitError::InvalidObject("Empty index")
   }
-  let tree_id = write_tree_from_index(fs, git_dir, entries)
+  let tree_id = write_tree_from_index(fs, actual_git_dir, entries)
   // Get the parent of the current HEAD (grandparent of new commit)
-  let current_head = resolve_head_commit(rfs, git_dir)
+  let current_head = resolve_head_commit(rfs, actual_git_dir)
   let parents = match current_head {
     Some(head_id) => {
       // Get parent of current HEAD
-      let db = ObjectDb::load(rfs, git_dir)
+      let db = ObjectDb::load(rfs, actual_git_dir)
       let obj = db.get(rfs, head_id)
       match obj {
         Some(o) => {
@@ -1017,8 +1042,8 @@ pub fn commit_amend(
     "+0000", message,
   )
   let (commit_id, compressed) = @git.create_commit(commit)
-  write_object_bytes(fs, git_dir, commit_id, compressed)
-  update_head_ref(fs, rfs, git_dir, commit_id)
+  write_object_bytes(fs, actual_git_dir, commit_id, compressed)
+  update_head_ref(fs, rfs, actual_git_dir, commit_id)
   commit_id
 }
 
@@ -1034,7 +1059,12 @@ pub fn rm_paths(
   recursive? : Bool = false,
 ) -> Unit raise @git.GitError {
   let git_dir = join_path(root, ".git")
-  let entries = read_index_entries(rfs, git_dir)
+  let actual_git_dir = if rfs.is_file(git_dir) {
+    resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
+  let entries = read_index_entries(rfs, actual_git_dir)
   let map : Map[String, IndexEntry] = {}
   for e in entries {
     map[e.path] = e
@@ -1063,7 +1093,7 @@ pub fn rm_paths(
     let (_, entry) = item
     out.push(entry)
   }
-  write_index_entries(fs, git_dir, out)
+  write_index_entries(fs, actual_git_dir, out)
 }
 
 ///|
@@ -1108,6 +1138,11 @@ pub fn mv_path(
   force? : Bool = false,
 ) -> Unit raise @git.GitError {
   let git_dir = join_path(root, ".git")
+  let actual_git_dir = if rfs.is_file(git_dir) {
+    resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
   let src_norm = normalize_rel_path(source)
   let dst_norm = normalize_rel_path(dest)
   let src_abs = join_path(root, src_norm)
@@ -1121,7 +1156,7 @@ pub fn mv_path(
     raise @git.GitError::InvalidObject("destination '\{dest}' already exists")
   }
   // Read index
-  let entries = read_index_entries(rfs, git_dir)
+  let entries = read_index_entries(rfs, actual_git_dir)
   let map : Map[String, IndexEntry] = {}
   for e in entries {
     map[e.path] = e
@@ -1150,5 +1185,5 @@ pub fn mv_path(
     let (_, entry) = item
     out.push(entry)
   }
-  write_index_entries(fs, git_dir, out)
+  write_index_entries(fs, actual_git_dir, out)
 }

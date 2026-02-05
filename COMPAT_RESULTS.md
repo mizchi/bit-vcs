@@ -99,18 +99,12 @@ Failures:
 ### t5 (non-allowlist, complete) — 2026-02-04 (re-run)
 
 - executed: 5427 / 5427 (100%)
-- pass: 5239
-- fail: 98
+- pass: 5267
+- fail: 70
 - broken: 16
 
 Failures (t5 re-run):
 
-- t5305-include-tag.sh: 9 / 15 failed
-- t5309-pack-delta-cycles.sh: 2 / 7 failed
-- t5314-pack-cycle-detection.sh: 1 / 2 failed
-- t5316-pack-delta-depth.sh: 5 / 5 failed
-- t5319-multi-pack-index.sh: 1 / 96 failed
-- t5322-pack-objects-sparse.sh: 8 / 11 failed
 - t5323-pack-redundant.sh: 13 / 18 failed
 - t5325-reverse-index.sh: 7 / 16 failed
 - t5326-multi-pack-bitmaps.sh: 4 / 357 failed
@@ -119,7 +113,6 @@ Failures (t5 re-run):
 - t5332-multi-pack-reuse.sh: 13 / 14 failed
 - t5410-receive-pack.sh: 4 / 5 failed
 - t5411-proc-receive-hook.sh: 1 / 354 failed
-- t5510-fetch.sh: 1 / 215 failed
 - t5555-http-smart-common.sh: 7 / 10 failed
 - t5616-partial-clone.sh: 3 / 47 failed
 
@@ -239,5 +232,3 @@ do
   just git-t-one "$t"
 done
 ```
-
-

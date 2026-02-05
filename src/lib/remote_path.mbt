@@ -71,6 +71,14 @@ pub fn resolve_local_repo_path(
   if fs.is_dir(candidate) {
     return Some(candidate)
   }
+  let parent = match root.rev_find("/") {
+    Some(i) => String::unsafe_substring(root, start=0, end=i)
+    None => "."
+  }
+  let parent_candidate = normalize_local_path(parent + "/" + raw)
+  if fs.is_dir(parent_candidate) {
+    return Some(parent_candidate)
+  }
   {
     let base = match @env.current_dir() {
       Some(dir) => dir

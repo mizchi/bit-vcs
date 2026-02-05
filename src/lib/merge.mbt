@@ -35,7 +35,7 @@ pub fn merge(
   }
   let db = ObjectDb::load(rfs, git_dir)
   if merge_is_ancestor(db, rfs, head, target) {
-    ignore(reset(fs, rfs, root, target.to_hex(), ResetMode::Hard))
+    let _ = reset(fs, rfs, root, target.to_hex(), ResetMode::Hard)
     return { status: FastForward, commit_id: Some(target), conflicts: [] }
   }
   if merge_is_ancestor(db, rfs, target, head) {

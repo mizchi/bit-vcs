@@ -9,12 +9,17 @@ pub fn restore_paths(
   paths : Array[String],
 ) -> Unit raise @git.GitError {
   let git_dir = join_path(root, ".git")
-  let index_entries = read_index_entries(rfs, git_dir)
+  let actual_git_dir = if rfs.is_file(git_dir) {
+    resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
+  let index_entries = read_index_entries(rfs, actual_git_dir)
   let index_map : Map[String, IndexEntry] = {}
   for e in index_entries {
     index_map[e.path] = e
   }
-  let db = ObjectDb::load(rfs, git_dir)
+  let db = ObjectDb::load(rfs, actual_git_dir)
   for path in paths {
     match index_map.get(path) {
       None =>
@@ -53,7 +58,12 @@ pub fn checkout(
   update_index? : Bool = true,
 ) -> @git.ObjectId raise @git.GitError {
   let git_dir = join_path(root, ".git")
-  let head_path = join_path(git_dir, "HEAD")
+  let actual_git_dir = if rfs.is_file(git_dir) {
+    resolve_gitdir(rfs, git_dir)
+  } else {
+    git_dir
+  }
+  let head_path = join_path(actual_git_dir, "HEAD")
   let mut target : @git.ObjectId? = None
   let mut refname : String? = None
   if not(detach) {
@@ -62,17 +72,37 @@ pub fn checkout(
     } else {
       "refs/heads/" + spec
     }
-    match resolve_ref(rfs, git_dir, name) {
+    match resolve_ref(rfs, actual_git_dir, name) {
       Some(id) => {
         target = Some(id)
         refname = Some(name)
       }
-      None => ()
+      None => {
+        if not(spec.has_prefix("refs/")) {
+          let remote_ref = "refs/remotes/origin/" + spec
+          match resolve_ref(rfs, actual_git_dir, remote_ref) {
+            Some(id) => {
+              let local_ref = "refs/heads/" + spec
+              let ref_path = join_path(actual_git_dir, local_ref)
+              let dir = parent_dir(ref_path)
+              if dir.length() > 0 {
+                fs.mkdir_p(dir)
+              }
+              fs.write_string(ref_path, id.to_hex() + "\n")
+              set_config_key(fs, rfs, actual_git_dir, "branch", spec, "remote", "origin")
+              set_config_key(fs, rfs, actual_git_dir, "branch", spec, "merge", "refs/heads/" + spec)
+              target = Some(id)
+              refname = Some(local_ref)
+            }
+            None => ()
+          }
+        }
+      }
     }
   }
   match target {
     None => {
-      let resolved = rev_parse(rfs, git_dir, spec)
+      let resolved = rev_parse(rfs, actual_git_dir, spec)
       match resolved {
         None => raise @git.GitError::InvalidObject("Invalid ref: \{spec}")
         Some(id) => target = Some(id)
@@ -89,7 +119,7 @@ pub fn checkout(
     None => fs.write_string(head_path, commit_id.to_hex() + "\n")
   }
   if update_worktree || update_index {
-    let db = ObjectDb::load(rfs, git_dir)
+    let db = ObjectDb::load(rfs, actual_git_dir)
     let files = collect_tree_files_from_commit(db, rfs, commit_id)
     if update_worktree {
       write_worktree_from_files(
@@ -97,14 +127,14 @@ pub fn checkout(
         fs,
         rfs,
         root,
-        git_dir,
+        actual_git_dir,
         files,
         remove_missing=true,
       )
     }
     if update_index {
       let entries = tree_files_to_index(db, rfs, files)
-      write_index_entries(fs, git_dir, entries)
+      write_index_entries(fs, actual_git_dir, entries)
     }
   }
   commit_id

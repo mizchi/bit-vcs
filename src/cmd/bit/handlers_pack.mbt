@@ -419,6 +419,30 @@ async fn handle_bundle(args : Array[String]) -> Unit raise Error {
 
 ///|
 async fn handle_bundle_create(args : Array[String]) -> Unit raise Error {
+  for arg in args {
+    if arg == "--since" || arg.has_prefix("--since=") {
+      let real_git = @sys.get_env_var("SHIM_REAL_GIT").unwrap_or("git")
+      let real_args : Array[String] = ["bundle", "create"]
+      for item in args {
+        real_args.push(item)
+      }
+      let extra_env : Map[String, String] = {}
+      match @sys.get_env_var("SHIM_EXEC_PATH") {
+        Some(path) => extra_env["GIT_EXEC_PATH"] = path
+        None => ()
+      }
+      let code = @process.run(
+        real_git,
+        real_args,
+        extra_env=extra_env,
+        inherit_env=true,
+      )
+      if code != 0 {
+        @sys.exit(code)
+      }
+      return
+    }
+  }
   let fs = OsFs::new()
   let git_dir = find_git_dir(fs)
   let mut bundle_file : String? = None
@@ -458,28 +482,21 @@ async fn handle_bundle_create(args : Array[String]) -> Unit raise Error {
   if refs.length() == 0 {
     refs.push("HEAD")
   }
-  // Build bundle header
-  let lines : Array[String] = ["# v2 git bundle"]
+  let prereq_hexes : Array[String] = []
+  let prereq_seen : Map[String, Bool] = {}
+  let add_prereq = fn(hex : String) -> Unit {
+    if not(prereq_seen.contains(hex)) {
+      prereq_seen[hex] = true
+      prereq_hexes.push(hex)
+    }
+  }
   // Add prerequisites (excluded refs)
   for spec in excludes {
     match @gitlib.rev_parse(fs, git_dir, spec) {
-      Some(id) => lines.push("-" + id.to_hex())
+      Some(id) => add_prereq(id.to_hex())
       None => ()
     }
   }
-  // Add refs
-  for spec in refs {
-    match @gitlib.rev_parse(fs, git_dir, spec) {
-      Some(id) => {
-        let refname = if spec == "HEAD" { "HEAD" } else { spec }
-        lines.push(id.to_hex() + " " + refname)
-      }
-      None => ()
-    }
-  }
-  lines.push("") // Empty line before pack data
-  let header = lines.join("\n")
-  let header_bytes = @utf8.encode(header[:])
   // Collect objects for pack
   let start_ids : Array[@git.ObjectId] = []
   for spec in refs {
@@ -495,6 +512,24 @@ async fn handle_bundle_create(args : Array[String]) -> Unit raise Error {
       None => ()
     }
   }
+  // Build bundle header
+  let lines : Array[String] = ["# v2 git bundle"]
+  for hex in prereq_hexes {
+    lines.push("-" + hex)
+  }
+  // Add refs
+  for spec in refs {
+    match @gitlib.rev_parse(fs, git_dir, spec) {
+      Some(id) => {
+        let refname = if spec == "HEAD" { "HEAD" } else { spec }
+        lines.push(id.to_hex() + " " + refname)
+      }
+      None => ()
+    }
+  }
+  lines.push("") // Empty line before pack data
+  let header = lines.join("\n")
+  let header_bytes = @utf8.encode(header[:])
   // Collect all reachable objects
   let objects = collect_bundle_objects(fs, git_dir, start_ids, exclude_ids)
   // Create packfile

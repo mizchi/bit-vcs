@@ -629,6 +629,19 @@ async fn handle_index_pack(args : Array[String]) -> Unit {
           }
         }
       }
+      if cfg.fix_thin {
+        match real_git_path() {
+          Some(real_git) => {
+            let real_args = real_git_args_from_cli()
+            let code = @process.run(real_git, real_args)
+            @sys.exit(code)
+          }
+          None => {
+            @stdio.stderr.write("bit: --fix-thin is not supported\n")
+            @sys.exit(1)
+          }
+        }
+      }
       let fs = OsFs::new()
       let git_dir = find_git_dir(fs)
       let wants_sha256 = cfg.object_format is Some(format) && format == "sha256"

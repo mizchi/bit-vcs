@@ -6,6 +6,18 @@ pub fn rev_parse(
   git_dir : String,
   spec : String,
 ) -> @git.ObjectId? raise @git.GitError {
+  match spec.find(":") {
+    Some(idx) => {
+      if idx > 0 && idx + 1 < spec.length() {
+        let rev_part = substring_revparse(spec, 0, idx)
+        let path_part = substring_revparse(spec, idx + 1, spec.length())
+        let base = rev_parse(fs, git_dir, rev_part)
+        guard base is Some(base_id) else { return None }
+        return resolve_path_in_commit(fs, git_dir, base_id, path_part)
+      }
+    }
+    None => ()
+  }
   // Parse suffix (^, ^^, ~n, ^n)
   let (base_spec, ancestor_count) = parse_rev_suffix(spec)
   // Resolve base reference
@@ -132,11 +144,45 @@ fn resolve_base_ref(
     Some(id) => return Some(id)
     None => ()
   }
+  match resolve_ref(fs, git_dir, "refs/remotes/" + spec) {
+    Some(id) => return Some(id)
+    None => ()
+  }
   match resolve_ref(fs, git_dir, "refs/tags/" + spec) {
     Some(id) => return Some(id)
     None => ()
   }
   None
+}
+
+///|
+/// Resolve path within a commit/tree
+fn resolve_path_in_commit(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+  base_id : @git.ObjectId,
+  path : String,
+) -> @git.ObjectId? raise @git.GitError {
+  if path.length() == 0 {
+    return None
+  }
+  let db = ObjectDb::load(fs, git_dir)
+  let obj = db.get(fs, base_id)
+  match obj {
+    None => return None
+    Some(o) => {
+      let tree_id = match o.obj_type {
+        @git.ObjectType::Commit => @git.parse_commit(o.data).tree
+        @git.ObjectType::Tree => base_id
+        _ => return None
+      }
+      let entry = find_tree_entry(db, fs, tree_id, path)
+      match entry {
+        Some(e) => Some(e.id)
+        None => None
+      }
+    }
+  }
 }
 
 ///|
