@@ -1,7 +1,6 @@
 import {
   "mizchi/bit" as @git,
   "mizchi/bit/ignore" as @ignore,
-  "moonbitlang/async" as @async,
   "mizchi/zlib",
   "moonbitlang/core/bench" as @bench,
   "moonbitlang/core/encoding/utf8",
@@ -10,6 +9,7 @@ import {
 }
 
 import "test" {
+  "moonbitlang/async" as @async,
   "moonbitlang/core/bench" as @bench,
   "mizchi/bit/osfs" as @osfs,
 }
@@ -24,7 +24,5 @@ options(
     "bench_index_diff_test.mbt": [ "native" ],
     "bench_list_working_files_test.mbt": [ "native" ],
     "bench_status_test.mbt": [ "native" ],
-    "gitignore_async_js.mbt": [ "js", "wasm", "wasm-gc" ],
-    "gitignore_async_native.mbt": [ "native" ],
   },
 )
