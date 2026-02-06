@@ -209,6 +209,33 @@ git-t-full test_file:
     CPATH="$prefix/include" LDFLAGS="-L$prefix/lib" LIBRARY_PATH="$prefix/lib" \
     make -C third_party/git test T="{{test_file}}"
 
-# Run status benchmarks
+# Run all benchmarks
+bench:
+    moon bench --target native
+
+# Run benchmarks by package
+bench-fs:
+    moon bench --target native -p mizchi/bit/x/fs -f bench_test.mbt
+
+bench-fs-real:
+    moon bench --target native -p mizchi/bit/x/fs -f bench_real_test.mbt
+
+bench-kv:
+    moon bench --target native -p mizchi/bit/x/kv
+
+bench-lib:
+    moon bench --target native -p mizchi/bit/lib
+
+bench-init:
+    moon bench --target native -p mizchi/bit/cmd/bit -f bench_init_wbtest.mbt
+
 bench-status:
     moon bench --target native -p mizchi/bit/lib -f bench_status_test.mbt
+
+# Save benchmark results with a name
+bench-save name:
+    moon bench --target native 2>&1 | bash tools/bench-save.sh {{name}}
+
+# Compare two most recent benchmark results
+bench-compare *args:
+    bash tools/bench-compare.sh {{args}}

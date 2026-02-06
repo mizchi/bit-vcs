@@ -53,6 +53,9 @@ async fn show_help() -> Unit {
     #|   subdir-clone  Clone subdirectory as independent repository
     #|   hq            ghq-compatible repository management (~/bhq)
     #|
+    #|setup
+    #|   completion    Generate shell completion scripts (bash/zsh)
+    #|
     #|low-level / plumbing
     #|   bundle          Create, verify, list-heads, and unbundle Git bundles
     #|   cat-file        Provide content or type info for repository objects
@@ -606,6 +609,13 @@ async fn show_command_help(cmd : String) -> Bool {
       show_simple_command_help(
         "git apply [<options>] <patch>...",
         summary="Apply a patch to files and/or to the index.",
+      )
+      true
+    }
+    "completion" => {
+      show_simple_command_help(
+        "bit completion <bash|zsh>",
+        summary="Generate shell completion scripts.\n\nInstall:\n  bash: eval \"$(bit completion bash)\"\n  zsh:  eval \"$(bit completion zsh)\"",
       )
       true
     }
@@ -1203,6 +1213,7 @@ async fn dispatch_command(
         err if @async.is_cancellation_error(err) => raise err
         err => exit_with_error("cherry", err)
       }
+    "completion" => handle_completion(rest)
     "version" | "--version" => print_line("git version 2.47.0 (bit)")
     // Error for unknown commands
     _ => {

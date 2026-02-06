@@ -1,6 +1,7 @@
 import {
   "mizchi/bit" as @git,
   "mizchi/bit/lib" as @lib,
+  "moonbitlang/core/buffer" as @buffer,
 }
 
 import "test" {
