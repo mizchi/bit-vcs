@@ -29,6 +29,7 @@ options(
   is_main: true,
   targets: {
     "bench_init_wbtest.mbt": [ "native" ],
+    "completion.mbt": [ "native" ],
     "gitconfig.mbt": [ "native" ],
     "gitconfig_test.mbt": [ "native" ],
     "handlers_branch.mbt": [ "native" ],
