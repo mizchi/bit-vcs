@@ -1,4 +1,4 @@
-///| Merge implementation (file-level, no conflict resolution)
+///| Merge implementation with content-level 3-way merge
 
 ///|
 pub enum MergeStatus {
@@ -48,7 +48,45 @@ pub fn merge(
   }
   let ours = collect_tree_files_from_commit(db, rfs, head)
   let theirs = collect_tree_files_from_commit(db, rfs, target)
-  let (merged, conflicts) = merge_files(base_files, ours, theirs)
+  let file_result = merge_files(base_files, ours, theirs)
+  let merged = file_result.merged
+  let conflicts = file_result.conflicts
+  // Try content-level merge for files modified on both sides
+  for candidate in file_result.needs_content_merge {
+    let base_content = match candidate.base_id {
+      Some(id) => merge_get_blob_text(db, rfs, id)
+      None => ""
+    }
+    let ours_content = merge_get_blob_text(db, rfs, candidate.ours_id)
+    let theirs_content = merge_get_blob_text(db, rfs, candidate.theirs_id)
+    // Skip binary files
+    let ours_data = merge_get_blob_data(db, rfs, candidate.ours_id)
+    let theirs_data = merge_get_blob_data(db, rfs, candidate.theirs_id)
+    if is_binary_content(ours_data) || is_binary_content(theirs_data) {
+      conflicts.push(candidate.path)
+      continue
+    }
+    let result = content_merge(
+      base_content,
+      ours_content,
+      theirs_content,
+      ContentMergeOptions::default(),
+    )
+    if result.has_conflicts {
+      // Write conflict markers to worktree
+      let full_path = join_path(root, candidate.path)
+      let dir = rebase_parent_dir(full_path)
+      fs.mkdir_p(dir)
+      fs.write_string(full_path, result.content)
+      conflicts.push(candidate.path)
+    } else {
+      // Clean merge - create new blob
+      let content_bytes = @utf8.encode(result.content)
+      let (blob_id, compressed) = @git.create_blob(content_bytes)
+      write_object_bytes(fs, git_dir, blob_id, compressed)
+      merged[candidate.path] = { id: blob_id, mode: candidate.mode }
+    }
+  }
   if conflicts.length() > 0 {
     conflicts.sort()
     return { status: Conflicted, commit_id: None, conflicts }
@@ -174,13 +212,30 @@ fn merge_commit_parents(
 }
 
 ///|
+priv struct MergeFilesResult {
+  merged : Map[String, TreeFileEntry]
+  conflicts : Array[String]
+  needs_content_merge : Array[ContentMergeCandidate]
+}
+
+///|
+priv struct ContentMergeCandidate {
+  path : String
+  base_id : @git.ObjectId?
+  ours_id : @git.ObjectId
+  theirs_id : @git.ObjectId
+  mode : Int
+}
+
+///|
 fn merge_files(
   base : Map[String, TreeFileEntry],
   ours : Map[String, TreeFileEntry],
   theirs : Map[String, TreeFileEntry],
-) -> (Map[String, TreeFileEntry], Array[String]) {
+) -> MergeFilesResult {
   let merged : Map[String, TreeFileEntry] = {}
   let conflicts : Array[String] = []
+  let needs_content_merge : Array[ContentMergeCandidate] = []
   let all_paths : Map[String, Bool] = {}
   for item in base.to_array() {
     let (path, _) = item
@@ -215,10 +270,55 @@ fn merge_files(
         Some(v) => merged[path] = v
       }
     } else {
-      conflicts.push(path)
+      // Both sides modified - try content merge if both have the file
+      match (o, t) {
+        (Some(ours_entry), Some(theirs_entry)) => {
+          let base_id = match b {
+            Some(base_entry) => Some(base_entry.id)
+            None => None
+          }
+          needs_content_merge.push({
+            path,
+            base_id,
+            ours_id: ours_entry.id,
+            theirs_id: theirs_entry.id,
+            mode: ours_entry.mode,
+          })
+        }
+        _ =>
+          // One side deleted, other modified - file-level conflict
+          conflicts.push(path)
+      }
     }
   }
-  (merged, conflicts)
+  { merged, conflicts, needs_content_merge }
+}
+
+///|
+fn merge_get_blob_text(
+  db : ObjectDb,
+  fs : &@git.RepoFileSystem,
+  id : @git.ObjectId,
+) -> String {
+  get_blob_content(db, fs, id)
+}
+
+///|
+fn merge_get_blob_data(
+  db : ObjectDb,
+  fs : &@git.RepoFileSystem,
+  id : @git.ObjectId,
+) -> Bytes {
+  let obj = db.get(fs, id) catch { _ => return Bytes::default() }
+  match obj {
+    Some(o) =>
+      if o.obj_type == @git.ObjectType::Blob {
+        o.data
+      } else {
+        Bytes::default()
+      }
+    None => Bytes::default()
+  }
 }
 
 ///|

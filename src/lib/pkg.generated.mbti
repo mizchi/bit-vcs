@@ -60,6 +60,8 @@ pub fn config_has_remote_section(Array[ConfigBlock], String) -> Bool
 
 pub fn config_strip_quotes(String) -> String
 
+pub fn content_merge(String, String, String, ContentMergeOptions) -> ContentMergeResult
+
 pub fn copy_tree(&@bit.FileSystem, &@bit.RepoFileSystem, String, String) -> Unit raise @bit.GitError
 
 pub fn create_annotated_tag(&@bit.FileSystem, &@bit.RepoFileSystem, String, String, @bit.ObjectId, String, String, Int64) -> Unit raise @bit.GitError
@@ -448,6 +450,29 @@ pub(all) struct ConfigBlock {
   mut lines : Array[String]
 }
 
+pub enum ConflictStyle {
+  Merge
+  Diff3
+}
+
+pub struct ContentMergeOptions {
+  conflict_style : ConflictStyle
+  ours_label : String
+  base_label : String
+  theirs_label : String
+  marker_size : Int
+  favor : MergeFavor
+}
+pub fn ContentMergeOptions::default() -> Self
+pub fn ContentMergeOptions::favor_ours() -> Self
+pub fn ContentMergeOptions::favor_theirs() -> Self
+
+pub struct ContentMergeResult {
+  content : String
+  has_conflicts : Bool
+  conflict_count : Int
+}
+
 pub struct DiffFile {
   path : String
   kind : DiffKind
@@ -533,6 +558,12 @@ pub struct LogEntry {
   message : String
   author : String
   timestamp : Int64
+}
+
+pub enum MergeFavor {
+  NoFavor
+  FavorOurs
+  FavorTheirs
 }
 
 pub struct MergeResult {

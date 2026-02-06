@@ -8,6 +8,76 @@ fn setup_repo_merge() -> @git.TestFs {
 }
 
 ///|
+test "merge: content-level merge non-overlapping changes" {
+  let fs = setup_repo_merge()
+  // Create base with multi-line file
+  fs.write_string("/repo/file.txt", "line1\nline2\nline3\nline4\nline5\n")
+  add_paths(fs, fs, "/repo", ["file.txt"])
+  ignore(commit(fs, fs, "/repo", "base", "Test <t@example.com>", 1700000000L))
+  // Feature branch: change line2
+  switch_branch(fs, fs, "/repo", "feature", create=true, checkout_files=true)
+  fs.write_string("/repo/file.txt", "line1\nchanged2\nline3\nline4\nline5\n")
+  add_paths(fs, fs, "/repo", ["file.txt"])
+  let feature_commit = commit(
+    fs, fs, "/repo", "feature", "Test <t@example.com>", 1700000001L,
+  )
+  // Main branch: change line4
+  switch_branch(fs, fs, "/repo", "main", checkout_files=true)
+  fs.write_string("/repo/file.txt", "line1\nline2\nline3\nchanged4\nline5\n")
+  add_paths(fs, fs, "/repo", ["file.txt"])
+  ignore(commit(fs, fs, "/repo", "main", "Test <t@example.com>", 1700000002L))
+  // Merge should succeed with content merge
+  let result = merge(
+    fs, fs, "/repo", feature_commit, "merge", "Test <t@example.com>", 1700000003L,
+  )
+  match result.status {
+    Merged => ()
+    _ => {
+      println("Expected Merged, got conflicts: \{result.conflicts}")
+      assert_true(false)
+    }
+  }
+  let content = fs.read_string("/repo/file.txt")
+  assert_eq(content, "line1\nchanged2\nline3\nchanged4\nline5\n")
+}
+
+///|
+test "merge: content-level merge with conflict" {
+  let fs = setup_repo_merge()
+  fs.write_string("/repo/file.txt", "line1\nline2\nline3\n")
+  add_paths(fs, fs, "/repo", ["file.txt"])
+  ignore(commit(fs, fs, "/repo", "base", "Test <t@example.com>", 1700000000L))
+  // Feature branch: change line2 to X
+  switch_branch(fs, fs, "/repo", "feature", create=true, checkout_files=true)
+  fs.write_string("/repo/file.txt", "line1\nfeature_change\nline3\n")
+  add_paths(fs, fs, "/repo", ["file.txt"])
+  let feature_commit = commit(
+    fs, fs, "/repo", "feature", "Test <t@example.com>", 1700000001L,
+  )
+  // Main branch: change line2 to Y
+  switch_branch(fs, fs, "/repo", "main", checkout_files=true)
+  fs.write_string("/repo/file.txt", "line1\nmain_change\nline3\n")
+  add_paths(fs, fs, "/repo", ["file.txt"])
+  ignore(commit(fs, fs, "/repo", "main", "Test <t@example.com>", 1700000002L))
+  // Merge should produce conflict
+  let result = merge(
+    fs, fs, "/repo", feature_commit, "merge", "Test <t@example.com>", 1700000003L,
+  )
+  match result.status {
+    Conflicted => ()
+    _ => {
+      println("Expected Conflicted")
+      assert_true(false)
+    }
+  }
+  assert_true(result.conflicts.contains("file.txt"))
+  // Conflict markers should be written to worktree
+  let content = fs.read_string("/repo/file.txt")
+  assert_true(content.contains("<<<<<<< HEAD"))
+  assert_true(content.contains(">>>>>>> incoming"))
+}
+
+///|
 test "merge: file-level merge without conflicts" {
   let fs = setup_repo_merge()
   fs.write_string("/repo/a.txt", "base\n")

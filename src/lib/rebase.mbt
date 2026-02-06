@@ -1358,18 +1358,51 @@ fn rebase_apply_changes_with_conflicts(
         match (base.get(path), parent_map.get(path)) {
           (Some(b), Some(p)) =>
             if b.id != p.id || b.mode != p.mode {
-              // Three-way conflict: base, parent, and commit all different
-              write_conflict_file(
-                db,
-                rfs,
-                fs,
-                root,
-                path,
-                Some(b),
-                Some(p),
-                Some(entry),
-              )
-              conflicts.push(path)
+              // Try content-level merge before falling back to conflict markers
+              let merge_base_content = get_blob_content(db, rfs, p.id)
+              let ours_content = get_blob_content(db, rfs, b.id)
+              let theirs_content = get_blob_content(db, rfs, entry.id)
+              let ours_data = rebase_get_blob_data(db, rfs, b.id)
+              let theirs_data = rebase_get_blob_data(db, rfs, entry.id)
+              if is_binary_content(ours_data) || is_binary_content(theirs_data) {
+                write_conflict_file(
+                  db,
+                  rfs,
+                  fs,
+                  root,
+                  path,
+                  Some(b),
+                  Some(p),
+                  Some(entry),
+                )
+                conflicts.push(path)
+              } else {
+                let merge_result = content_merge(
+                  merge_base_content,
+                  ours_content,
+                  theirs_content,
+                  ContentMergeOptions::default(),
+                )
+                if merge_result.has_conflicts {
+                  // Write conflict markers
+                  let full_path = join_path(root, path)
+                  let dir = rebase_parent_dir(full_path)
+                  fs.mkdir_p(dir)
+                  fs.write_string(full_path, merge_result.content)
+                  conflicts.push(path)
+                } else {
+                  // Clean merge - create new blob and update base map
+                  let content_bytes = @utf8.encode(merge_result.content)
+                  let (blob_id, compressed) = @git.create_blob(content_bytes)
+                  rebase_write_object(
+                    fs,
+                    join_path(root, ".git"),
+                    blob_id,
+                    compressed,
+                  )
+                  base[path] = { id: blob_id, mode: entry.mode }
+                }
+              }
             } else {
               // Base matches parent, apply modification
               base[path] = entry
@@ -1416,7 +1449,7 @@ fn rebase_apply_changes_with_conflicts(
 }
 
 ///|
-/// Write a file with conflict markers.
+/// Write a file with conflict markers using content_merge with diff3 style.
 fn write_conflict_file(
   db : ObjectDb,
   rfs : &@git.RepoFileSystem,
@@ -1430,7 +1463,6 @@ fn write_conflict_file(
   let full_path = join_path(root, path)
   let dir = rebase_parent_dir(full_path)
   fs.mkdir_p(dir)
-  // Get content from each version
   let ours_content = match ours {
     Some(e) => get_blob_content(db, rfs, e.id)
     None => ""
@@ -1443,30 +1475,34 @@ fn write_conflict_file(
     Some(e) => get_blob_content(db, rfs, e.id)
     None => ""
   }
-  // Write conflict markers
-  let merged = "<<<<<<< HEAD\n" +
-    ours_content +
-    (if ours_content.length() > 0 && not(ours_content.has_suffix("\n")) {
-      "\n"
-    } else {
-      ""
-    }) +
-    "||||||| parent\n" +
-    base_content +
-    (if base_content.length() > 0 && not(base_content.has_suffix("\n")) {
-      "\n"
-    } else {
-      ""
-    }) +
-    "=======\n" +
-    theirs_content +
-    (if theirs_content.length() > 0 && not(theirs_content.has_suffix("\n")) {
-      "\n"
-    } else {
-      ""
-    }) +
-    ">>>>>>> incoming\n"
-  fs.write_string(full_path, merged)
+  let opts : ContentMergeOptions = {
+    conflict_style: ConflictStyle::Diff3,
+    ours_label: "HEAD",
+    base_label: "parent",
+    theirs_label: "incoming",
+    marker_size: 7,
+    favor: MergeFavor::NoFavor,
+  }
+  let result = content_merge(base_content, ours_content, theirs_content, opts)
+  fs.write_string(full_path, result.content)
+}
+
+///|
+fn rebase_get_blob_data(
+  db : ObjectDb,
+  fs : &@git.RepoFileSystem,
+  id : @git.ObjectId,
+) -> Bytes {
+  let obj = db.get(fs, id) catch { _ => return Bytes::default() }
+  match obj {
+    Some(o) =>
+      if o.obj_type == @git.ObjectType::Blob {
+        o.data
+      } else {
+        Bytes::default()
+      }
+    None => Bytes::default()
+  }
 }
 
 ///|
