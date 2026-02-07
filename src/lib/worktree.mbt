@@ -153,7 +153,7 @@ pub async fn status(
     }
   }
   t0 = profile_lap(profile, "status scan_deleted", t0)
-  let head_entries = read_head_tree_entries(fs, git_dir)
+  let head_entries = read_head_tree_entries(fs, actual_git_dir)
   t0 = profile_lap(profile, "status read_head_entries", t0)
   let staged_added : Array[String] = []
   let staged_modified : Array[String] = []

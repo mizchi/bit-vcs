@@ -686,12 +686,13 @@ async fn main_async() -> Unit {
     }
     @sys.set_env_var("GIT_CONFIG_OVERRIDES", encoded.join("\n"))
   }
+  let fs = OsFs::new()
   // Set working directory if -C was used
   match opts.cwd {
     Some(dir) => {
       @sys.set_env_var("GIT_SHIM_CWD", dir)
       if @sys.get_env_var("GIT_DIR") is None {
-        @sys.set_env_var("GIT_DIR", dir + "/.git")
+        @sys.set_env_var("GIT_DIR", default_repo_marker_path(fs, dir))
       }
       if @sys.get_env_var("GIT_WORK_TREE") is None {
         @sys.set_env_var("GIT_WORK_TREE", dir)
@@ -699,7 +700,6 @@ async fn main_async() -> Unit {
     }
     None => ()
   }
-  let fs = OsFs::new()
   let aliases = load_global_aliases(fs)
   apply_alias_overrides(aliases, opts.config_overrides)
   let (alias_cmd, alias_rest) = match resolve_alias(aliases, cmd, opts.rest) {
@@ -845,8 +845,12 @@ async fn dispatch_command(
   rest : Array[String],
 ) -> Unit raise Error {
   let cmd_handles_help = match cmd {
-    "receive-pack" | "git-receive-pack" | "upload-pack" | "git-upload-pack" |
-    "pack-objects" | "index-pack" => true
+    "receive-pack"
+    | "git-receive-pack"
+    | "upload-pack"
+    | "git-upload-pack"
+    | "pack-objects"
+    | "index-pack" => true
     _ => false
   }
   if not(cmd_handles_help) {

@@ -1,0 +1,66 @@
+///|
+fn cleanup_tree(fs : OsFs, path : String) -> Unit {
+  if fs.is_file(path) {
+    fs.remove_file(path) catch {
+      _ => ()
+    }
+    return
+  }
+  if not(fs.is_dir(path)) {
+    return
+  }
+  let entries = fs.readdir(path) catch { _ => [] }
+  for entry in entries {
+    if entry == "." || entry == ".." {
+      continue
+    }
+    cleanup_tree(fs, path + "/" + entry)
+  }
+  fs.remove_dir(path) catch {
+    _ => ()
+  }
+}
+
+///|
+async test "core: init --bit creates .bit repository metadata directory" {
+  let fs = OsFs::new()
+  let path = "/tmp/bit-test-init-bit-" + get_current_timestamp().to_string()
+  cleanup_tree(fs, path)
+  let prev_git_dir = @sys.get_env_var("GIT_DIR")
+  let prev_work_tree = @sys.get_env_var("GIT_WORK_TREE")
+  let prev_shim_cwd = @sys.get_env_var("GIT_SHIM_CWD")
+  let prev_shim_pwd = @sys.get_env_var("GIT_SHIM_PWD")
+  @sys.unset_env_var("GIT_DIR")
+  @sys.unset_env_var("GIT_WORK_TREE")
+  @sys.unset_env_var("GIT_SHIM_CWD")
+  @sys.set_env_var("GIT_SHIM_PWD", ".")
+  handle_init(["--bit", path])
+  assert_true(fs.is_dir(path + "/.bit"))
+  assert_true(fs.is_file(path + "/.bit/HEAD"))
+  let resolved = resolve_git_dir(fs, path)
+  assert_eq(resolved, path + "/.bit")
+  let status = @gitlib.status(fs, path)
+  assert_eq(status.untracked.length(), 0)
+  @sys.set_env_var("GIT_SHIM_CWD", path)
+  @sys.set_env_var("GIT_SHIM_PWD", path)
+  @sys.unset_env_var("GIT_DIR")
+  @sys.unset_env_var("GIT_WORK_TREE")
+  handle_status(["--porcelain"])
+  match prev_git_dir {
+    Some(value) => @sys.set_env_var("GIT_DIR", value)
+    None => @sys.unset_env_var("GIT_DIR")
+  }
+  match prev_work_tree {
+    Some(value) => @sys.set_env_var("GIT_WORK_TREE", value)
+    None => @sys.unset_env_var("GIT_WORK_TREE")
+  }
+  match prev_shim_cwd {
+    Some(value) => @sys.set_env_var("GIT_SHIM_CWD", value)
+    None => @sys.unset_env_var("GIT_SHIM_CWD")
+  }
+  match prev_shim_pwd {
+    Some(value) => @sys.set_env_var("GIT_SHIM_PWD", value)
+    None => @sys.unset_env_var("GIT_SHIM_PWD")
+  }
+  cleanup_tree(fs, path)
+}

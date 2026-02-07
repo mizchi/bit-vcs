@@ -190,6 +190,38 @@ fn normalize_path(path : String) -> String {
 }
 
 ///|
+fn join_repo_marker(root : String, marker : String) -> String {
+  if root == "/" {
+    "/" + marker
+  } else if root == "." {
+    marker
+  } else {
+    root + "/" + marker
+  }
+}
+
+///|
+fn detect_repo_marker_path(fs : &@git.RepoFileSystem, root : String) -> String? {
+  let bit_path = join_repo_marker(root, ".bit")
+  if fs.is_dir(bit_path) || fs.is_file(bit_path) {
+    return Some(bit_path)
+  }
+  let git_path = join_repo_marker(root, ".git")
+  if fs.is_dir(git_path) || fs.is_file(git_path) {
+    return Some(git_path)
+  }
+  None
+}
+
+///|
+fn default_repo_marker_path(fs : &@git.RepoFileSystem, root : String) -> String {
+  match detect_repo_marker_path(fs, root) {
+    Some(path) => path
+    None => join_repo_marker(root, ".git")
+  }
+}
+
+///|
 fn is_bare_repo_dir(path : String) -> Bool {
   let head_ok = @fs.is_file(path + "/HEAD") catch { _ => false }
   let objs_ok = @fs.is_dir(path + "/objects") catch { _ => false }
@@ -223,13 +255,19 @@ fn find_repo_root(start : String) -> String? {
         }
       }
     }
-    let git_path = if current == "/" {
-      "/.git"
-    } else if current == "." {
-      ".git"
+    let bit_path = join_repo_marker(current, ".bit")
+    let is_bit_dir = @fs.is_dir(bit_path) catch { _ => false }
+    let is_bit_file = if is_bit_dir {
+      false
     } else {
-      current + "/.git"
+      @fs.is_file(bit_path) catch {
+        _ => false
+      }
     }
+    if is_bit_dir || is_bit_file {
+      return Some(current)
+    }
+    let git_path = join_repo_marker(current, ".git")
     let is_git_dir = @fs.is_dir(git_path) catch { _ => false }
     let is_git_file = if is_git_dir {
       false
@@ -292,10 +330,13 @@ fn get_work_root() -> String {
 
 ///|
 fn normalize_repo_root(path : String) -> String {
-  if path == ".git" {
+  if path == ".git" || path == ".bit" {
     return "."
   }
   if path.has_suffix("/.git") && path.length() > 5 {
+    return (try! path[:path.length() - 5]).to_string()
+  }
+  if path.has_suffix("/.bit") && path.length() > 5 {
     return (try! path[:path.length() - 5]).to_string()
   }
   path
@@ -303,7 +344,7 @@ fn normalize_repo_root(path : String) -> String {
 
 ///|
 fn resolve_git_dir(fs : &@git.RepoFileSystem, root : String) -> String {
-  let default_git_dir = root + "/.git"
+  let default_git_dir = default_repo_marker_path(fs, root)
   match @sys.get_env_var("GIT_DIR") {
     Some(dir) => {
       let resolved = if dir.has_prefix("/") {

@@ -18,11 +18,13 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
   let mut target_dir : String? = None
   let mut separate_git_dir : String? = None
   let mut template_dir : String? = None
+  let mut use_bit = false
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
     match arg {
       "--bare" => bare = true
+      "--bit" => use_bit = true
       "-q" | "--quiet" => quiet = true
       "-b" if i + 1 < args.length() => {
         initial_branch = Some(args[i + 1])
@@ -89,7 +91,12 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
   // Resolve separate_git_dir to absolute path
   let resolved_sep_git_dir : String? = match separate_git_dir {
     Some(d) => Some(if d.has_prefix("/") { d } else { root + "/" + d })
-    None => None
+    None =>
+      if use_bit && not(bare) && effective_git_dir is None {
+        Some(path + "/.bit")
+      } else {
+        None
+      }
   }
   // Determine default branch
   let branch = initial_branch.unwrap_or("main")
@@ -134,26 +141,26 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
 async fn handle_status(args : Array[String]) -> Unit raise Error {
   let fs = OsFs::new()
   let mut root = get_work_root()
-  let mut git_dir = root + "/.git"
+  let mut git_dir = resolve_git_dir(fs, root)
   let mut has_git_dir = fs.is_dir(git_dir)
   let mut has_git_file = if has_git_dir { false } else { fs.is_file(git_dir) }
   if not(has_git_dir) && not(has_git_file) {
     match find_repo_root(".") {
       Some(found) => {
         root = found
-        git_dir = root + "/.git"
+        git_dir = resolve_git_dir(fs, root)
         has_git_dir = fs.is_dir(git_dir)
         has_git_file = if has_git_dir { false } else { fs.is_file(git_dir) }
       }
       None =>
         raise @git.GitError::InvalidObject(
-          "Not a git repository (or any of the parent directories): .git",
+          "Not a git repository (or any of the parent directories): .git/.bit",
         )
     }
   }
   if not(has_git_dir) && not(has_git_file) {
     raise @git.GitError::InvalidObject(
-      "Not a git repository (or any of the parent directories): .git",
+      "Not a git repository (or any of the parent directories): .git/.bit",
     )
   }
   let mut porcelain = false
@@ -269,12 +276,7 @@ fn stage_submodule_gitlinks(
   paths : Array[String],
 ) -> Unit raise Error {
   let rfs : &@git.RepoFileSystem = fs
-  let default_git_dir = root + "/.git"
-  let git_dir = if rfs.is_file(default_git_dir) {
-    @gitlib.resolve_gitdir(rfs, default_git_dir)
-  } else {
-    default_git_dir
-  }
+  let git_dir = resolve_git_dir(fs, root)
   for raw_path in paths {
     let rel_path = normalize_add_path(raw_path)
     if rel_path == "." || rel_path.length() == 0 {
@@ -420,7 +422,7 @@ async fn handle_commit(args : Array[String]) -> Unit raise Error {
     Some(idx) => (try! msg[:idx]).to_string()
     None => msg
   }
-  let git_dir = root + "/.git"
+  let git_dir = resolve_git_dir(fs, root)
   // Show subdir-clone context if applicable
   match get_subdir_info(fs, git_dir) {
     Some((_, path, _)) =>
@@ -493,7 +495,7 @@ fn format_log_oneline(
 
 ///|
 fn get_head_commit_message(fs : &@git.RepoFileSystem, root : String) -> String? {
-  let git_dir = root + "/.git"
+  let git_dir = resolve_git_dir(fs, root)
   let head = @gitlib.resolve_head_commit(fs, git_dir) catch { _ => return None }
   guard head is Some(commit_id) else { return None }
   let db = @gitlib.ObjectDb::load(fs, git_dir) catch { _ => return None }
@@ -972,8 +974,8 @@ fn parse_show_commit(data : Bytes) -> ShowCommitInfo {
 ///|
 async fn handle_show(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
-  let git_dir = root + "/.git"
   let fs = OsFs::new()
+  let git_dir = resolve_git_dir(fs, root)
   // Parse: git show [--pretty=<format>] [<commit>]
   let mut rev = "HEAD"
   let mut pretty_raw = false

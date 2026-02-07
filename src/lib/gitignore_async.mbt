@@ -27,10 +27,11 @@ async fn walk_dir_async(
   out : Array[String],
 ) -> Unit raise @git.GitError {
   let dir = if rel == "" { root } else { join_path(root, rel) }
-  // Skip submodules (directories containing .git file or directory)
+  // Skip submodules (directories containing .git/.bit file or directory)
   if rel != "" {
     let git_marker = join_path(dir, ".git")
-    if fs.is_file(git_marker) {
+    let bit_marker = join_path(dir, ".bit")
+    if fs.is_file(git_marker) || fs.is_file(bit_marker) {
       return ()
     }
   }
@@ -38,7 +39,7 @@ async fn walk_dir_async(
   let mut has_git = false
   let mut has_gitignore = false
   for name in entries {
-    if name == ".git" {
+    if name == ".git" || name == ".bit" {
       has_git = true
     }
     if name == ".gitignore" {
@@ -58,7 +59,11 @@ async fn walk_dir_async(
     matcher.add_rules(rel, content)
   }
   for name in entries {
-    if name == "." || name == ".." || name == ".git" || name == ".jj" {
+    if name == "." ||
+      name == ".." ||
+      name == ".git" ||
+      name == ".bit" ||
+      name == ".jj" {
       continue
     }
     let child_rel = if rel == "" { name } else { rel + "/" + name }

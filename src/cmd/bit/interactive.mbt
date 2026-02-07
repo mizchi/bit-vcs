@@ -182,7 +182,8 @@ async fn read_commit_message_from_editor(
   initial_message? : String? = None,
   editor? : (async (String) -> Bool raise Error)? = None,
 ) -> String? raise Error {
-  let path = root + "/.git/COMMIT_EDITMSG"
+  let git_dir = resolve_git_dir(fs, root)
+  let path = git_dir + "/COMMIT_EDITMSG"
   fs.write_string(path, commit_edit_buffer_template(initial_message))
   let edited = match editor {
     Some(edit) => edit(path)

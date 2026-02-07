@@ -6,7 +6,17 @@ pub async fn status_text(
   fs : &@git.RepoFileSystem,
   root : String,
 ) -> String raise @git.GitError {
-  let git_dir = join_path(root, ".git")
+  let bit_marker = join_path(root, ".bit")
+  let git_marker = if fs.is_dir(bit_marker) || fs.is_file(bit_marker) {
+    bit_marker
+  } else {
+    join_path(root, ".git")
+  }
+  let git_dir = if fs.is_file(git_marker) {
+    resolve_gitdir(fs, git_marker)
+  } else {
+    git_marker
+  }
   let sb = StringBuilder::new()
   let head = read_head_ref(fs, git_dir)
   match head {
