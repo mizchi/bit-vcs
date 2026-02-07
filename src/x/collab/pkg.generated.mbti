@@ -71,8 +71,8 @@ pub struct Collab {
 }
 pub fn Collab::add_comment(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, String, String, String, reply_to? : String?, file_path? : String?, line_number? : Int?, commit_id? : @bit.ObjectId?) -> PrComment raise @bit.GitError
 pub fn Collab::add_issue_comment(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, String, String, String, reply_to? : String?) -> IssueComment raise @bit.GitError
-pub fn Collab::add_note(Self, &@lib.ObjectStore, &@lib.RefStore, @bit.ObjectId, String, String, Int64, ns? : String) -> Note raise @bit.GitError
-pub fn Collab::add_note_plain(Self, &@lib.ObjectStore, &@lib.RefStore, @bit.ObjectId, String, ns? : String) -> Unit raise @bit.GitError
+pub fn Collab::add_note(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, @bit.ObjectId, String, String, Int64, ns? : String) -> Note raise @bit.GitError
+pub fn Collab::add_note_plain(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, @bit.ObjectId, String, ns? : String) -> Unit raise @bit.GitError
 pub fn Collab::can_merge(Self, &@lib.ObjectStore, &@lib.RefStore, String) -> Bool raise @bit.GitError
 pub fn Collab::close_issue(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, String) -> Unit raise @bit.GitError
 pub fn Collab::close_pr(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, String) -> Unit raise @bit.GitError
@@ -95,12 +95,13 @@ pub fn Collab::list_reviews(Self, &@lib.ObjectStore, String) -> Array[PrReview]
 pub fn Collab::load(&@lib.ObjectStore, &@lib.RefStore, node_id? : String) -> Self raise @bit.GitError
 pub fn Collab::merge_pr(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, String, String, strategy? : PrMergeStrategy) -> PrMergeResult raise @bit.GitError
 pub fn Collab::reload_store(Self, &@lib.ObjectStore, &@lib.RefStore) -> Unit raise @bit.GitError
-pub fn Collab::remove_note(Self, &@lib.ObjectStore, &@lib.RefStore, @bit.ObjectId, Int64, ns? : String) -> Unit raise @bit.GitError
+pub fn Collab::remove_note(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, @bit.ObjectId, ns? : String) -> Unit raise @bit.GitError
 pub fn Collab::submit_review(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, String, String, ReviewVerdict, String, @bit.ObjectId) -> PrReview raise @bit.GitError
 pub fn Collab::update_issue(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, String, title? : String?, body? : String?, labels? : Array[String]?, assignees? : Array[String]?) -> Issue raise @bit.GitError
 pub fn Collab::update_pr(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, String, title? : String?, body? : String?, labels? : Array[String]?) -> PullRequest raise @bit.GitError
 
 pub struct CollabRecord {
+  version : Int
   key : String
   kind : String
   clock : Map[String, Int64]
@@ -109,7 +110,7 @@ pub struct CollabRecord {
   deleted : Bool
   payload : String
 }
-pub fn CollabRecord::new(String, String, String, String, Int64, clock? : Map[String, Int64], deleted? : Bool) -> Self
+pub fn CollabRecord::new(String, String, String, String, Int64, clock? : Map[String, Int64], deleted? : Bool, version? : Int) -> Self
 pub fn CollabRecord::serialize(Self) -> String
 
 pub struct CollabStore {
@@ -292,6 +293,7 @@ pub struct PullRequest {
   state : PrState
   labels : Array[String]
   closes_issues : Array[String]
+  merge_commit : @bit.ObjectId?
 }
 pub fn PullRequest::author(Self) -> String
 pub fn PullRequest::body(Self) -> String
@@ -299,7 +301,8 @@ pub fn PullRequest::closes_issues(Self) -> Array[String]
 pub fn PullRequest::created_at(Self) -> Int64
 pub fn PullRequest::id(Self) -> String
 pub fn PullRequest::labels(Self) -> Array[String]
-pub fn PullRequest::new(String, String, String, String, @bit.ObjectId, String, @bit.ObjectId, String, Int64, Int64, PrState, Array[String], closes_issues? : Array[String]) -> Self
+pub fn PullRequest::merge_commit(Self) -> @bit.ObjectId?
+pub fn PullRequest::new(String, String, String, String, @bit.ObjectId, String, @bit.ObjectId, String, Int64, Int64, PrState, Array[String], closes_issues? : Array[String], merge_commit? : @bit.ObjectId?) -> Self
 pub fn PullRequest::serialize(Self) -> String
 pub fn PullRequest::source_branch(Self) -> String
 pub fn PullRequest::source_commit(Self) -> @bit.ObjectId

@@ -1684,11 +1684,12 @@ async fn handle_collab_note_add(args : Array[String]) -> Unit raise Error {
   }
   let root = get_work_root()
   let git_dir = root + "/.git"
-  let (objects, refs, _clock) = make_collab_stores(git_dir)
+  let (objects, refs, clock) = make_collab_stores(git_dir)
   let collab = @collab.Collab::init(objects, refs)
   let note = collab.add_note(
     objects,
     refs,
+    clock,
     @git.ObjectId::from_hex(hex),
     note_body,
     get_author_string(),
@@ -1841,14 +1842,13 @@ async fn handle_collab_note_remove(args : Array[String]) -> Unit raise Error {
   }
   let root = get_work_root()
   let git_dir = root + "/.git"
-  let (objects, refs, _clock) = make_collab_stores(git_dir)
+  let (objects, refs, clock) = make_collab_stores(git_dir)
   let collab = @collab.Collab::init(objects, refs)
-  let timestamp = get_commit_timestamp()
   collab.remove_note(
     objects,
     refs,
+    clock,
     @git.ObjectId::from_hex(hex),
-    timestamp,
     ns=note_ns(ns),
   )
   print_line("Removed note for \{hex}")

@@ -16,6 +16,7 @@ pub fn Collab::add_note(
   self : Collab,
   objects : &@lib.ObjectStore,
   refs : &@lib.RefStore,
+  clock : &@lib.Clock,
   commit_id : @git.ObjectId,
   body : String,
   author : String,
@@ -27,7 +28,7 @@ pub fn Collab::add_note(
   let note_text = note.serialize()
   let note_bytes = @utf8.encode(note_text)
   let blob_id = objects.put(@git.ObjectType::Blob, note_bytes)
-  update_notes_tree(objects, refs, commit_id, blob_id, ns)
+  update_notes_tree(objects, refs, commit_id, blob_id, ns, clock)
   note
 }
 
@@ -37,6 +38,7 @@ pub fn Collab::add_note_plain(
   self : Collab,
   objects : &@lib.ObjectStore,
   refs : &@lib.RefStore,
+  clock : &@lib.Clock,
   commit_id : @git.ObjectId,
   body : String,
   ns? : String = "commits",
@@ -44,7 +46,7 @@ pub fn Collab::add_note_plain(
   ignore(self)
   let body_bytes = @utf8.encode(body)
   let blob_id = objects.put(@git.ObjectType::Blob, body_bytes)
-  update_notes_tree(objects, refs, commit_id, blob_id, ns)
+  update_notes_tree(objects, refs, commit_id, blob_id, ns, clock)
 }
 
 ///|
@@ -125,13 +127,12 @@ pub fn Collab::remove_note(
   self : Collab,
   objects : &@lib.ObjectStore,
   refs : &@lib.RefStore,
+  clock : &@lib.Clock,
   commit_id : @git.ObjectId,
-  timestamp : Int64,
   ns? : String = "commits",
 ) -> Unit raise @git.GitError {
   ignore(self)
-  ignore(timestamp)
-  remove_notes_tree_entry(objects, refs, commit_id, ns)
+  remove_notes_tree_entry(objects, refs, commit_id, ns, clock)
 }
 
 ///|
@@ -198,6 +199,7 @@ fn update_notes_tree(
   commit_id : @git.ObjectId,
   blob_id : @git.ObjectId,
   ns : String,
+  clock : &@lib.Clock,
 ) -> Unit raise @git.GitError {
   let commit_hex = commit_id.to_hex()
   // Get existing tree or create empty
@@ -234,14 +236,15 @@ fn update_notes_tree(
     Some(p) => [p]
     None => []
   }
+  let now = clock.now()
   let commit = @git.Commit::new(
     new_tree_id,
     parents,
     "Collab <collab@local>",
-    0L,
+    now,
     "+0000",
     "Collab <collab@local>",
-    0L,
+    now,
     "+0000",
     "Add note for \{short_hex_note(commit_hex, 8)}...\n",
   )
@@ -258,6 +261,7 @@ fn remove_notes_tree_entry(
   refs : &@lib.RefStore,
   commit_id : @git.ObjectId,
   ns : String,
+  clock : &@lib.Clock,
 ) -> Unit raise @git.GitError {
   let commit_hex = commit_id.to_hex()
   let existing_tree_id = get_notes_tree(objects, refs, ns)
@@ -284,14 +288,15 @@ fn remove_notes_tree_entry(
     Some(p) => [p]
     None => []
   }
+  let now = clock.now()
   let commit = @git.Commit::new(
     new_tree_id,
     parents,
     "Collab <collab@local>",
-    0L,
+    now,
     "+0000",
     "Collab <collab@local>",
-    0L,
+    now,
     "+0000",
     "Remove note for \{short_hex_note(commit_hex, 8)}...\n",
   )

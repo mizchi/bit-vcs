@@ -44,6 +44,14 @@ pub fn PullRequest::serialize(self : PullRequest) -> String {
     sb.write_string(issue_id)
     sb.write_char('\n')
   }
+  match self.merge_commit {
+    Some(mc) => {
+      sb.write_string("merge-commit ")
+      sb.write_string(mc.to_hex())
+      sb.write_char('\n')
+    }
+    None => ()
+  }
   sb.write_char('\n')
   sb.write_string(self.body)
   sb.to_string()
@@ -64,6 +72,7 @@ pub fn parse_pull_request(text : String) -> PullRequest raise PrError {
   let mut state = PrState::Open
   let labels : Array[String] = []
   let closes_issues : Array[String] = []
+  let mut merge_commit : @git.ObjectId? = None
   let body_lines : Array[String] = []
   let mut in_body = false
   for line_view in text.split("\n") {
@@ -99,6 +108,12 @@ pub fn parse_pull_request(text : String) -> PullRequest raise PrError {
           "state" => state = parse_pr_state(value)
           "label" => labels.push(value)
           "closes" => closes_issues.push(value)
+          "merge-commit" =>
+            merge_commit = Some(
+              @git.ObjectId::from_hex(value) catch {
+                _ => raise PrError::InvalidFormat("Invalid merge-commit hex")
+              },
+            )
           _ => ()
         }
       }
@@ -127,6 +142,7 @@ pub fn parse_pull_request(text : String) -> PullRequest raise PrError {
     state,
     labels,
     closes_issues~,
+    merge_commit~,
   )
 }
 

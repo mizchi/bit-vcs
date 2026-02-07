@@ -1,4 +1,10 @@
 ///| Collab notes storage (ObjectStore + RefStore based)
+///
+/// ## Vector Clock Merge Semantics
+///
+/// - Clock merge: take max of each node's counter
+/// - Same-key conflict: higher timestamp wins; if equal, lexicographic node name wins
+/// - Tombstone: deleted=true marks logical deletion; compaction is not yet implemented
 
 ///|
 let collab_notes_ns : String = "bit-collab"
@@ -58,6 +64,7 @@ pub fn issue_comment_key(issue_id : String, comment_id : String) -> String {
 
 ///|
 pub struct CollabRecord {
+  version : Int
   key : String
   kind : String
   clock : Map[String, Int64]
@@ -76,13 +83,17 @@ pub fn CollabRecord::new(
   timestamp : Int64,
   clock? : Map[String, Int64] = {},
   deleted? : Bool = false,
+  version? : Int = 1,
 ) -> CollabRecord {
-  { key, kind, clock, timestamp, node, deleted, payload }
+  { version, key, kind, clock, timestamp, node, deleted, payload }
 }
 
 ///|
 pub fn CollabRecord::serialize(self : CollabRecord) -> String {
   let sb = StringBuilder::new()
+  sb.write_string("version ")
+  sb.write_string(self.version.to_string())
+  sb.write_char('\n')
   sb.write_string("key ")
   sb.write_string(self.key)
   sb.write_char('\n')
@@ -108,6 +119,7 @@ pub fn CollabRecord::serialize(self : CollabRecord) -> String {
 
 ///|
 pub fn parse_collab_record(text : String) -> CollabRecord {
+  let mut version = 0
   let mut key = ""
   let mut kind = ""
   let mut clock = {}
@@ -133,6 +145,7 @@ pub fn parse_collab_record(text : String) -> CollabRecord {
         let k = String::unsafe_substring(line, start=0, end=idx)
         let v = String::unsafe_substring(line, start=idx + 1, end=line.length())
         match k {
+          "version" => version = parse_int(v)
           "key" => key = v
           "kind" => kind = v
           "clock" => clock = parse_clock(v)
@@ -152,6 +165,7 @@ pub fn parse_collab_record(text : String) -> CollabRecord {
     timestamp,
     clock~,
     deleted~,
+    version~,
   )
 }
 

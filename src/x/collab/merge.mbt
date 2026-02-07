@@ -550,14 +550,14 @@ fn mark_pr_merged(
   clock : &@lib.Clock,
   pr_id : String,
   existing : PullRequest,
-  merge_commit : @git.ObjectId,
+  merge_commit_id : @git.ObjectId,
 ) -> Unit raise @git.GitError {
   let updated = PullRequest::new(
     existing.id,
     existing.title,
     existing.body,
     existing.source_branch,
-    merge_commit,
+    existing.source_commit,
     existing.target_branch,
     existing.target_commit,
     existing.author,
@@ -565,6 +565,7 @@ fn mark_pr_merged(
     clock.now(),
     PrState::Merged,
     existing.labels,
+    merge_commit=Some(merge_commit_id),
   )
   ignore(
     prs.store.put_record(

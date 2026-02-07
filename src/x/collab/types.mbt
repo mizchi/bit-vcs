@@ -58,6 +58,7 @@ pub struct PullRequest {
   state : PrState
   labels : Array[String]
   closes_issues : Array[String] // Issues this PR closes
+  merge_commit : @git.ObjectId?
 }
 
 ///|
@@ -75,6 +76,7 @@ pub fn PullRequest::new(
   state : PrState,
   labels : Array[String],
   closes_issues? : Array[String] = [],
+  merge_commit? : @git.ObjectId? = None,
 ) -> PullRequest {
   {
     id,
@@ -90,6 +92,7 @@ pub fn PullRequest::new(
     state,
     labels,
     closes_issues,
+    merge_commit,
   }
 }
 
@@ -156,6 +159,11 @@ pub fn PullRequest::labels(self : PullRequest) -> Array[String] {
 ///|
 pub fn PullRequest::closes_issues(self : PullRequest) -> Array[String] {
   self.closes_issues
+}
+
+///|
+pub fn PullRequest::merge_commit(self : PullRequest) -> @git.ObjectId? {
+  self.merge_commit
 }
 
 ///|
