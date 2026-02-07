@@ -207,7 +207,8 @@ fn get_pack_size_limit(git_dir : String) -> Int64? {
 fn get_pack_use_sparse(git_dir : String) -> Bool {
   match git_config_get(git_dir, "pack", "useSparse") {
     Some(value) => parse_bool_value(value).unwrap_or(false)
-    None => false
+    // Match upstream git default: pack.useSparse is true unless disabled.
+    None => true
   }
 }
 

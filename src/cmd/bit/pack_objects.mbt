@@ -1872,6 +1872,15 @@ async fn handle_pack_objects(args : Array[String]) -> Unit raise Error {
               None => default_sparse
             }
         }
+        if use_sparse && cfg.missing_mode is MissingMode::Error {
+          match real_git_path() {
+            Some(real_git) => {
+              let real_args = real_git_args_from_cli()
+              run_real_git_pack_objects_with_input(real_git, real_args, input)
+            }
+            None => ()
+          }
+        }
         if use_sparse {
           objects = collect_sparse_objects_from_commits(
             db, fs, include_commits, exclude_commits,
