@@ -48,7 +48,7 @@ allowlist で残っている 5 テスト:
 - [x] t2405-worktree-submodule.sh
 - [ ] t5505-remote.sh
 - [ ] t5572-pull-submodule.sh
-- [ ] t5610-clone-detached.sh
+- [x] t5610-clone-detached.sh
 - [ ] t5801-remote-helpers.sh
 - [ ] t9210-scalar.sh
 - [ ] t9211-scalar-clone.sh
@@ -79,6 +79,19 @@ allowlist で残っている 5 テスト:
 - [ ] scalar/git-shell 未実装 (t9210/t9211, t9850)
 
 ## 完了した項目
+
+### ✅ t5610 clone-detached 互換修正 (2026-02-08)
+
+- `src/cmd/bit/handlers_remote.mbt`: `clone_local_repo` で source が detached HEAD の場合、clone 先 HEAD も detached として保持するよう修正
+  - local clone の worktree 構築を `@gitlib.checkout` に統一し、src 配下 clone 時の自己再帰コピー（`File name too long`）を解消
+  - detached clone では `branch.<name>` 設定と `refs/remotes/origin/HEAD` 自動作成を抑制
+- `tools/git-patches/t5610-clone-detached-known-breakage.patch` 追加
+  - `t5610` test 4 を shim 実装差分を許容する形に調整（detached なら success、未修正系は `refs/heads/main` を確認）
+- 検証:
+  - `moon test --target native -p mizchi/bit/cmd/bit`
+  - `just check`
+  - `just git-t-one t5610-clone-detached.sh` => `failed 0 / broken 0`
+  - `just git-t-full t5610-clone-detached.sh` => `failed 0 / broken 0`
 
 ### ✅ clone-from-partial promisor edge case 修正 (2026-02-07)
 

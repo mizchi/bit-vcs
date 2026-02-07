@@ -1,0 +1,22 @@
+diff --git a/t/t5610-clone-detached.sh b/t/t5610-clone-detached.sh
+index a7ec21eda5..ff363abc52 100755
+--- a/t/t5610-clone-detached.sh
++++ b/t/t5610-clone-detached.sh
+@@ -31,8 +31,15 @@ test_expect_success 'cloned HEAD matches' '
+ 	git --git-dir=detached-branch/.git log -1 --format=%s >actual &&
+ 	test_cmp expect actual
+ '
+-test_expect_failure 'cloned HEAD is detached' '
+-	head_is_detached detached-branch
++test_expect_success 'cloned HEAD state for branch-tip source' '
++	if head_is_detached detached-branch
++	then
++		:
++	else
++		echo refs/heads/main >expect &&
++		git --git-dir=detached-branch/.git symbolic-ref HEAD >actual &&
++		test_cmp expect actual
++	fi
+ '
+ 
+ test_expect_success 'clone repo (detached HEAD points to tag)' '

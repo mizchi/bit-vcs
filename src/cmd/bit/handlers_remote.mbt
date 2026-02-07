@@ -1431,7 +1431,7 @@ fn clone_local_repo(
     raise @git.GitError::InvalidObject("Not a git repository: \{src_path}")
   }
   let (head_ref, branches) = @gitlib.list_branches(fs, src_git_dir)
-  let (default_branch, head_id) = match head_ref {
+  let (default_branch, head_id, detached_head) = match head_ref {
     @gitlib.HeadRef::Branch(name) => {
       let refname = "refs/heads/" + name
       let id = match @gitlib.resolve_ref(fs, src_git_dir, refname) {
@@ -1439,16 +1439,20 @@ fn clone_local_repo(
         None =>
           raise @git.GitError::InvalidObject("Invalid HEAD ref: \{refname}")
       }
-      (name, id)
+      (name, id, false)
     }
-    @gitlib.HeadRef::Detached(id) => ("main", id)
+    @gitlib.HeadRef::Detached(id) => ("main", id, true)
   }
   @gitlib.init_repo(fs, dest_path, default_branch~, bare~)
   let dest_git_dir = if bare { dest_path } else { dest_path + "/.git" }
   // Copy object database
   @gitlib.copy_tree(fs, fs, src_git_dir + "/objects", dest_git_dir + "/objects")
-  // Set local HEAD branch to source HEAD
-  write_ref_file(fs, dest_git_dir, "refs/heads/" + default_branch, head_id)
+  if detached_head {
+    // Preserve detached HEAD from source repository.
+    fs.write_string(dest_git_dir + "/HEAD", head_id.to_hex() + "\n")
+  } else {
+    write_ref_file(fs, dest_git_dir, "refs/heads/" + default_branch, head_id)
+  }
   // Configure origin
   remote_add(
     fs,
@@ -1460,7 +1464,7 @@ fn clone_local_repo(
     false,
     None,
   )
-  if not(bare) {
+  if not(bare) && not(detached_head) {
     @gitlib.set_config_key(
       fs, fs, dest_git_dir, "branch", default_branch, "remote", "origin",
     )
@@ -1478,12 +1482,14 @@ fn clone_local_repo(
   for b in branches {
     write_ref_file(fs, dest_git_dir, "refs/remotes/origin/" + b.name, b.id)
   }
-  write_symref_file(
-    fs,
-    dest_git_dir,
-    "refs/remotes/origin/HEAD",
-    "refs/remotes/origin/" + default_branch,
-  )
+  if not(detached_head) {
+    write_symref_file(
+      fs,
+      dest_git_dir,
+      "refs/remotes/origin/HEAD",
+      "refs/remotes/origin/" + default_branch,
+    )
+  }
   // Partial clone markers
   if filter.is_partial() {
     @gitlib.set_config_key(
@@ -1501,19 +1507,16 @@ fn clone_local_repo(
     let promisor_path = dest_git_dir + "/objects/info/promisor"
     fs.write_string(promisor_path, remote_url + "\n")
   }
-  // Copy working tree for non-bare
+  // Populate working tree/index from the cloned commit snapshot.
   if not(bare) {
-    let entries = fs.readdir(src_path) catch { _ => [] }
-    for entry in entries {
-      if entry == ".git" {
-        continue
-      }
-      @gitlib.copy_tree(fs, fs, src_path + "/" + entry, dest_path + "/" + entry)
-    }
-    let db = @gitlib.ObjectDb::load(fs, dest_git_dir)
-    let files = @gitlib.collect_tree_files_from_commit(db, fs, head_id)
-    let index_entries = @gitlib.tree_files_to_index(db, fs, files)
-    @gitlib.write_index_entries(fs, dest_git_dir, index_entries)
+    let checkout_spec = if detached_head { head_id.to_hex() } else { default_branch }
+    let _ = @gitlib.checkout(
+      fs,
+      fs,
+      dest_path,
+      checkout_spec,
+      detach=detached_head,
+    )
   }
 }
 
