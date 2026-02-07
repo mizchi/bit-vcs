@@ -7,6 +7,7 @@
 | MoonBit tests | 617 passing |
 | Git compatibility | 95.5% (744/779) |
 | Allowlist pass | 97.6% (24273/24858, failed 0 / broken 178) |
+| Full git/t run | 96.3% (31832/33046, failed 0 / broken 397) |
 | Pure化 coverage | ~85% |
 | CI | 5 shards all green |
 
@@ -24,6 +25,37 @@ allowlist で残っている 5 テスト:
 - [x] 破損検出の回帰テスト追加
 - [x] allowlist 再計測（t5xxx 拡張後）
 
+## git/t 既知の落ちテスト一覧（2026-02-07）
+
+`failed`/`broken` の代表的な未対応テストファイルを列挙。出典: `COMPAT_RESULTS.md` と直近 `just git-t` サマリ。
+
+### 今後も未対応（方針）
+
+- [ ] t5540-http-push-webdav.sh
+- [ ] t9001-send-email.sh
+
+### 優先修正（次に着手）
+
+- [ ] t5528-push-default.sh
+- [ ] t0411-clone-from-partial.sh
+- [ ] t1006-cat-file.sh
+
+### その他 backlog
+
+- [ ] t0012-help.sh
+- [ ] t0450-txt-doc-vs-help.sh
+- [ ] t1517-outside-repo.sh
+- [ ] t2405-worktree-submodule.sh
+- [ ] t5505-remote.sh
+- [ ] t5572-pull-submodule.sh
+- [ ] t5610-clone-detached.sh
+- [ ] t5801-remote-helpers.sh
+- [ ] t9210-scalar.sh
+- [ ] t9211-scalar-clone.sh
+- [ ] t9350-fast-export.sh
+- [ ] t9850-shell.sh
+- [ ] t9902-completion.sh
+
 ## Tier 2: Agent Features (High)
 
 - [x] **MCP server dispatch**: run_agent/orchestrate ツール呼び出しの実装完了 (`src/x/agent/mcp/server.mbt`)
@@ -33,9 +65,10 @@ allowlist で残っている 5 テスト:
 
 ## Tier 3: Enhancements (Medium)
 
-- [ ] Promisor protocol v2 エッジケース (t0411)
+- [ ] push default matching semantics (t5528)
+- [ ] clone-from-partial promisor edge case (t0411)
+- [ ] cat-file batch/all/unordered (t1006)
 - [ ] Protocol v2 edge cases (t5510, t5616)
-- [ ] cat-file batch/unordered (t1006)
 - [ ] help/doc formatting (t0012, t0450)
 
 ## Tier 4: Future (Low)

@@ -63,14 +63,17 @@ bit push origin feature
 - SHA-256 repositories and `--object-format=sha256` are not supported.
 - Git config: reads global aliases from `~/.gitconfig` (or `GIT_CONFIG_GLOBAL`) only.
 - Shell aliases (prefixed with `!`) are not supported.
+- Intentionally unsupported (for now): `http-push-webdav` and `send-email` paths.
 
 ### Git Test Suite (git/t)
 
-706 test files from the official Git test suite are in the allowlist. Results on macOS:
+706 test files from the official Git test suite are in the allowlist.
+
+Allowlist run (`just git-t-allowlist-shim-strict`) on macOS:
 
 | | Count |
 |---|---|
-| success | 24,278 |
+| success | 24,273 |
 | failed | 0 |
 | broken (prereq skip) | 178 |
 | total | 24,858 |
@@ -87,6 +90,15 @@ bit push origin feature
 | Negative prereqs | !AUTOIDENT, !CASE_INSENSITIVE_FS, !LONG_IS_64BIT, !PTHREADS, !SYMLINKS | ~7 | Tests requiring feature absence |
 
 5 test files are excluded from the allowlist: t5310 (bitmap), t5316 (delta depth), t5317 (filter-objects), t5332 (multi-pack reuse), t5400 (send-pack).
+
+Full upstream run (`just git-t`) summary on macOS (2026-02-07):
+
+| | Count |
+|---|---|
+| success | 31,832 |
+| failed | 0 |
+| broken (known breakage / prereq skip) | 397 |
+| total | 33,046 |
 
 ## Environment Variables
 
