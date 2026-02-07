@@ -18,21 +18,72 @@ pub(all) struct LlmAgentConfig {
 }
 
 ///|
+fn detect_project_hints(work_dir : String) -> String {
+  let has_moon = strip_trailing_whitespace(
+    exec(
+      "test -f " +
+      shell_escape(work_dir + "/moon.mod.json") +
+      " && echo yes || echo no",
+    ),
+  )
+  if has_moon == "yes" {
+    return "## Project: MoonBit\n- Type check: `moon check --deny-warn`\n- Test: `moon test`\n- Format: `moon fmt`\n- Always run `moon check --deny-warn` after writing code to catch errors early.\n"
+  }
+  ""
+}
+
+///|
 fn build_system_prompt(work_dir : String, task : String) -> String {
-  let guidelines =
-    #|
-    #|Guidelines:
-    #|- Read existing code before modifying it
-    #|- Make minimal, focused changes
-    #|- Use run_command to verify your changes (e.g., run tests, type-check)
-    #|- When done, stop calling tools and summarize what you did
   let buf = StringBuilder::new()
-  buf.write_string("You are a coding agent working in the directory: ")
+  buf.write_string("You are a coding agent working in: ")
   buf.write_string(work_dir)
-  buf.write_string("\n\nYour task: ")
+  buf.write_string("\n\nTask: ")
   buf.write_string(task)
-  buf.write_string("\n")
-  buf.write_string(guidelines)
+  let workflow =
+    #|
+    #|
+    #|## Workflow (follow these phases in order)
+    #|
+    #|Phase 1 - Explore: Understand the codebase structure.
+    #|  - Call `list_files_recursive` ONCE to get an overview.
+    #|  - Use `search_text` to find relevant code by pattern.
+    #|  - Use `read_file` to read specific files you need to understand.
+    #|
+    #|Phase 2 - Plan: Decide what changes to make.
+    #|  - Identify which files to create or modify.
+    #|  - Read each file you plan to modify BEFORE writing.
+    #|
+    #|Phase 3 - Implement: Make changes using `write_file`.
+    #|  - You MUST call `write_file` to make progress. Exploring alone is not progress.
+    #|  - Write complete file contents. Do NOT leave placeholders.
+    #|
+    #|Phase 4 - Verify: Run checks and tests.
+    #|  - Use `run_command` to run the project's type checker and tests.
+    #|  - If errors occur, read the error output, fix with `write_file`, and re-verify.
+    #|
+    #|Phase 5 - Complete: Stop calling tools and summarize what you did.
+    #|
+    #|## Anti-patterns (Do NOT do these)
+    #|
+    #|- Do NOT call `list_directory` on the same path more than once.
+    #|- Do NOT call `list_files_recursive` on the same path more than once.
+    #|- Do NOT keep exploring without writing code. If you have read enough, start writing.
+    #|- Do NOT call `read_file` on the same file repeatedly. Read once, then modify.
+    #|- Do NOT run the same failing command without changing code first.
+    #|
+    #|## Tool selection guide
+    #|
+    #|- To find code by content: use `search_text` (regex, fast).
+    #|- To understand project structure: use `list_files_recursive` once.
+    #|- To read a specific file: use `read_file`.
+    #|- To make changes: use `write_file` (REQUIRED for progress).
+    #|- To verify: use `run_command`.
+  buf.write_string(workflow)
+  let hints = detect_project_hints(work_dir)
+  if not(hints.is_empty()) {
+    buf.write_string("\n")
+    buf.write_string(hints)
+  }
   buf.to_string()
 }
 

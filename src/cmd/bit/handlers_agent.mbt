@@ -429,6 +429,7 @@ fn handle_agent_llm(args : Array[String]) -> Unit {
       target_branch,
       auto_pr,
       verbose,
+      in_process: false,
     }
     @agent_llm.run_orchestrator(config, on_output=output)
   } else {

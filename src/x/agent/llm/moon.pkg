@@ -29,5 +29,7 @@ options(
     "tool_env_wbtest.mbt": [ "native" ],
     "tools.mbt": [ "native" ],
     "tools_wbtest.mbt": [ "native" ],
+    "loop_detect.mbt": [ "native" ],
+    "loop_detect_wbtest.mbt": [ "native" ],
   },
 )

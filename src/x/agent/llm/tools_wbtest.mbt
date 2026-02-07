@@ -79,3 +79,25 @@ test "run_command tool" {
   assert_false(is_error)
   assert_eq(result, "hello")
 }
+
+///|
+test "tool descriptions contain usage guidance" {
+  let env = TestToolEnvironment::new()
+  let registry = create_tool_registry(env)
+  let defs = registry.get_defs()
+  let mut found_write = false
+  let mut found_read = false
+  for def in defs {
+    if def.name == "write_file" {
+      assert_true(def.description.contains("Read"))
+      assert_true(def.description.contains("MUST"))
+      found_write = true
+    }
+    if def.name == "read_file" {
+      assert_true(def.description.contains("read before"))
+      found_read = true
+    }
+  }
+  assert_true(found_write)
+  assert_true(found_read)
+}

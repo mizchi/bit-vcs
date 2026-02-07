@@ -264,6 +264,7 @@ fn handle_run_orchestrator(id : Json, args : Json) -> String {
     target_branch: "main",
     auto_pr: false,
     verbose: true,
+    in_process: false,
   }
   let buf = StringBuilder::new()
   log("[mcp] Orchestrating: task=" + task)

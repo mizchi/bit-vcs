@@ -116,7 +116,9 @@ fn make_test_kv_coord() -> &CoordinationBackend {
     write_fs: testfs,
     git_dir,
   }
-  kv_coordination_backend("test-node", tree, store)
+  kv_coordination_backend("test-node", fn() {
+    bit_kv_store("test-node", tree, store)
+  })
 }
 
 ///|
