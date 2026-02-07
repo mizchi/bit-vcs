@@ -692,12 +692,11 @@ test "format: serialize and parse IssueComment" {
 ///|
 test "notes: add and get note" {
   let (_fs, objects, refs, clock) = setup_repo_with_branch()
-  ignore(clock)
   let collab = Collab::init(objects, refs)
   let commit_id = refs.resolve("refs/heads/main")
   guard commit_id is Some(cid) else { panic() }
   let note = collab.add_note(
-    objects, refs, cid, "This commit introduces the initial README.", "alice@example.com",
+    objects, refs, clock, cid, "This commit introduces the initial README.", "alice@example.com",
     1706745600L,
   )
   assert_eq(note.body(), "This commit introduces the initial README.")
@@ -711,17 +710,16 @@ test "notes: add and get note" {
 ///|
 test "notes: list notes" {
   let (_fs, objects, refs, clock) = setup_repo_with_branch()
-  ignore(clock)
   let collab = Collab::init(objects, refs)
   let main_commit = refs.resolve("refs/heads/main")
   guard main_commit is Some(main_id) else { panic() }
   let feature_commit = refs.resolve("refs/heads/feature")
   guard feature_commit is Some(feature_id) else { panic() }
   let _ = collab.add_note(
-    objects, refs, main_id, "Note on main", "alice@example.com", 1706745600L,
+    objects, refs, clock, main_id, "Note on main", "alice@example.com", 1706745600L,
   )
   let _ = collab.add_note(
-    objects, refs, feature_id, "Note on feature", "bob@example.com", 1706832000L,
+    objects, refs, clock, feature_id, "Note on feature", "bob@example.com", 1706832000L,
   )
   let notes = collab.list_notes(objects, refs)
   assert_eq(notes.length(), 2)
@@ -730,16 +728,15 @@ test "notes: list notes" {
 ///|
 test "notes: remove note" {
   let (_fs, objects, refs, clock) = setup_repo_with_branch()
-  ignore(clock)
   let collab = Collab::init(objects, refs)
   let commit_id = refs.resolve("refs/heads/main")
   guard commit_id is Some(cid) else { panic() }
   let _ = collab.add_note(
-    objects, refs, cid, "Temporary note", "alice@example.com", 1706745600L,
+    objects, refs, clock, cid, "Temporary note", "alice@example.com", 1706745600L,
   )
   let before = collab.get_note(objects, refs, cid)
   assert_true(before is Some(_))
-  collab.remove_note(objects, refs, cid, 1707000000L)
+  collab.remove_note(objects, refs, clock, cid)
   let after = collab.get_note(objects, refs, cid)
   assert_true(after is None)
 }
@@ -747,13 +744,13 @@ test "notes: remove note" {
 ///|
 test "notes: custom ns" {
   let (_fs, objects, refs, clock) = setup_repo_with_branch()
-  ignore(clock)
   let collab = Collab::init(objects, refs)
   let commit_id = refs.resolve("refs/heads/main")
   guard commit_id is Some(cid) else { panic() }
   let _ = collab.add_note(
     objects,
     refs,
+    clock,
     cid,
     "Pro tip: use --verbose flag",
     "alice@example.com",
@@ -764,6 +761,91 @@ test "notes: custom ns" {
   assert_true(default_note is None)
   let tips_note = collab.get_note(objects, refs, cid, ns="tips")
   assert_true(tips_note is Some(_))
+}
+
+///|
+test "collab_record version round-trip" {
+  let record = @collab.CollabRecord::new(
+    "collab/pr/1/meta",
+    "pr",
+    "some payload",
+    "node-a",
+    1706745600L,
+    version=1,
+  )
+  let serialized = record.serialize()
+  let parsed = @collab.parse_collab_record(serialized)
+  assert_eq(parsed.version, 1)
+  assert_eq(parsed.key, "collab/pr/1/meta")
+  assert_eq(parsed.kind, "pr")
+  assert_eq(parsed.node, "node-a")
+}
+
+///|
+test "collab_record version=0 backward compat" {
+  // Manually construct text without version line
+  let text =
+    #|key collab/pr/1/meta
+    #|kind pr
+    #|clock
+    #|timestamp 1706745600
+    #|node node-a
+    #|deleted 0
+    #|
+    #|payload data
+  let parsed = @collab.parse_collab_record(text)
+  assert_eq(parsed.version, 0)
+  assert_eq(parsed.key, "collab/pr/1/meta")
+}
+
+///|
+test "pr merge_commit round-trip" {
+  let merge_id = @git.ObjectId::from_hex(
+    "abcdef0123456789abcdef0123456789abcdef01",
+  ) catch {
+    _ => panic()
+  }
+  let pr = PullRequest::new(
+    "42",
+    "Test PR",
+    "Body",
+    "refs/heads/feature",
+    @git.ObjectId::zero(),
+    "refs/heads/main",
+    @git.ObjectId::zero(),
+    "alice@example.com",
+    1706745600L,
+    1706832000L,
+    PrState::Open,
+    [],
+    merge_commit=Some(merge_id),
+  )
+  let serialized = pr.serialize()
+  let parsed = parse_pull_request(serialized) catch { _ => panic() }
+  assert_true(parsed.merge_commit() is Some(_))
+  guard parsed.merge_commit() is Some(mc) else { panic() }
+  assert_eq(mc.to_hex(), "abcdef0123456789abcdef0123456789abcdef01")
+}
+
+///|
+test "pr merge_commit none round-trip" {
+  let pr = PullRequest::new(
+    "43",
+    "No merge commit",
+    "Body",
+    "refs/heads/feature",
+    @git.ObjectId::zero(),
+    "refs/heads/main",
+    @git.ObjectId::zero(),
+    "bob@example.com",
+    1706745600L,
+    1706832000L,
+    PrState::Open,
+    [],
+  )
+  let serialized = pr.serialize()
+  let parsed = parse_pull_request(serialized) catch { _ => panic() }
+  assert_true(parsed.merge_commit() is None)
 }
 
 ///|
