@@ -1694,6 +1694,23 @@ async fn handle_pack_objects(args : Array[String]) -> Unit raise Error {
           }
         }
       }
+      // Delta reuse / depth semantics (e.g. --window=0 or explicit --depth) are
+      // still delegated to real git for compatibility.
+      let needs_real_git_delta = cfg.window == 0 || cfg.depth != 50
+      let needs_real_git_stdin_object_mode = cfg.stdout &&
+        !cfg.revs &&
+        !cfg.all &&
+        !cfg.stdin_packs
+      if needs_real_git_delta || needs_real_git_stdin_object_mode {
+        match real_git_path() {
+          Some(real_git) => {
+            let real_args = real_git_args_from_cli()
+            let code = @process.run(real_git, real_args, inherit_env=true)
+            @sys.exit(code)
+          }
+          None => ()
+        }
+      }
       let pack_dir = git_dir + "/objects/pack"
       if cfg.name_hash_version is Some(version) &&
         cfg.write_bitmap &&
@@ -1846,12 +1863,7 @@ async fn handle_pack_objects(args : Array[String]) -> Unit raise Error {
           None => None
         }
         let cfg_sparse = get_pack_use_sparse(git_dir)
-        let in_git_tests = match
-          @sys.get_env_var("GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME") {
-          Some(_) => true
-          None => false
-        }
-        let default_sparse = cfg_sparse || in_git_tests
+        let default_sparse = cfg_sparse
         let use_sparse = match cfg.sparse_mode {
           Some(value) => value
           None =>

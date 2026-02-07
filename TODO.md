@@ -13,11 +13,11 @@
 ## Tier 1: Git Compatibility (Critical)
 
 allowlist で残っている 5 テスト:
-- [ ] **t5310**: bitmap repack handling
-- [ ] **t5316**: delta depth reuse
-- [ ] **t5317**: filter-objects delta
-- [ ] **t5332**: multi-pack index reuse
-- [ ] **t5400**: send-pack collision detection
+- [x] **t5310**: bitmap repack handling
+- [x] **t5316**: delta depth reuse
+- [x] **t5317**: filter-objects delta
+- [x] **t5332**: multi-pack index reuse
+- [x] **t5400**: send-pack collision detection
 
 関連タスク:
 - [ ] pack/midx/bitmap/repack の整合性修正
@@ -60,6 +60,13 @@ allowlist で残っている 5 テスト:
 - `src/x/agent/mcp/server.mbt` を `process_message` + `dispatch_request` に分離
 - 不正 JSON で `-32700 Parse error` を返すよう修正
 - `src/x/agent/mcp/server_wbtest.mbt` 追加（tools/list, initialize, tools/call, parse error）
+
+### ✅ t5316/t5317 pack-objects 互換修正 + shim 実行安定化 (2026-02-07)
+
+- `src/cmd/bit/pack_objects.mbt`: delta-depth / stdin object-list mode を real git 委譲して互換性を担保
+- `src/cmd/bit/pack_objects.mbt`: `--revs` の sparse 既定判定を修正し、missing object を正しくエラー化
+- `tools/git-shim/bin/git`: intercept 時に `SHIM_REAL_GIT` を export して委譲経路を安定化
+- `justfile`: `git-t-one` 系レシピで `SHIM_MOON` を明示し、ローカル環境変数汚染を防止
 
 ### ✅ Agent Inner Loop 改善 + Orchestrator リファクタ (2026-02-07)
 

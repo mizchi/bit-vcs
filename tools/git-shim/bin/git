@@ -210,6 +210,12 @@ if [ "$intercept" -eq 1 ]; then
     fi
   fi
   if [ -n "$moon" ]; then
+    # Make the resolved real git path visible to the moon binary even when
+    # test harnesses sanitize environment variables.
+    export SHIM_REAL_GIT="$real_git"
+    if [ -n "${GIT_SHIM_EXEC_PATH:-${SHIM_EXEC_PATH:-}}" ]; then
+      export SHIM_EXEC_PATH="${GIT_SHIM_EXEC_PATH:-${SHIM_EXEC_PATH:-}}"
+    fi
     export GIT_SHIM_PWD="${GIT_SHIM_PWD:-$(pwd)}"
     exec "$moon" "$@"
   fi
