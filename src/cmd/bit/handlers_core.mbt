@@ -415,6 +415,35 @@ fn parse_int64(s : String) -> Int64 {
 }
 
 ///|
+fn is_short_count_flag(arg : String) -> Bool {
+  if not(arg.has_prefix("-")) || arg.length() <= 1 {
+    return false
+  }
+  let raw = String::unsafe_substring(arg, start=1, end=arg.length())
+  for c in raw {
+    if c < '0' || c > '9' {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn format_log_oneline(
+  fmt : String,
+  id : @git.ObjectId,
+  subject : String,
+) -> String {
+  let short = (try! id.to_hex()[:7]).to_string()
+  match fmt {
+    "%h %s" => short + " " + subject
+    "%h" => short
+    "%s" => subject
+    _ => short + " " + subject
+  }
+}
+
+///|
 fn get_head_commit_message(fs : &@git.RepoFileSystem, root : String) -> String? {
   let git_dir = root + "/.git"
   let head = @gitlib.resolve_head_commit(fs, git_dir) catch { _ => return None }
@@ -446,9 +475,9 @@ fn get_head_commit_message(fs : &@git.RepoFileSystem, root : String) -> String? 
 ///|
 async fn handle_log(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
-  let git_dir = root + "/.git"
   let fs = OsFs::new()
   let rfs : &@git.RepoFileSystem = fs
+  let git_dir = resolve_git_dir(fs, root)
   let mut oneline = false
   let mut graph = false
   let mut all_refs = false
@@ -458,16 +487,34 @@ async fn handle_log(args : Array[String]) -> Unit raise Error {
   let mut max_count = 10
   let mut since_ts = 0L
   let mut until_ts = 9223372036854775807L
-  for arg in args {
+  let mut no_walk = false
+  let mut format : String? = None
+  let revs : Array[String] = []
+  let mut i = 0
+  while i < args.length() {
+    let arg = args[i]
     match arg {
       "--oneline" => oneline = true
       "--graph" => graph = true
       "--all" => all_refs = true
+      "--no-walk" => no_walk = true
       "--decorate" => decorate = true
       "--stat" => show_stat = true
       "-p" | "--patch" => show_patch = true
-      _ if arg.has_prefix("-n") => {
+      "--format" if i + 1 < args.length() => {
+        format = Some(args[i + 1])
+        i += 1
+      }
+      _ if arg.has_prefix("--format=") => {
+        let value = String::unsafe_substring(arg, start=9, end=arg.length())
+        format = Some(value)
+      }
+      _ if arg.has_prefix("-n") && arg.length() > 2 => {
         let num_str = (try! arg[2:]).to_string()
+        max_count = @strconv.parse_int(num_str)
+      }
+      _ if is_short_count_flag(arg) => {
+        let num_str = String::unsafe_substring(arg, start=1, end=arg.length())
         max_count = @strconv.parse_int(num_str)
       }
       _ if arg.has_prefix("--max-count=") => {
@@ -483,8 +530,49 @@ async fn handle_log(args : Array[String]) -> Unit raise Error {
         until_ts = @strconv.parse_int64(val) catch { _ => 9223372036854775807L }
       }
       _ if arg.has_prefix("-") => warn_unimplemented_arg("log", arg)
-      _ => ()
+      _ => revs.push(arg)
     }
+    i += 1
+  }
+  if format is Some(fmt) {
+    let db = @gitlib.ObjectDb::load(rfs, git_dir)
+    let targets : Array[(String, @git.ObjectId)] = []
+    if all_refs || no_walk {
+      let refs = @gitlib.list_refs_with_ids(rfs, git_dir, None)
+      for name, id in refs {
+        targets.push((name, id))
+      }
+      targets.sort_by((a, b) => a.0.compare(b.0))
+    }
+    for rev in revs {
+      let resolved = @gitlib.rev_parse(rfs, git_dir, rev)
+      guard resolved is Some(id) else {
+        raise @git.GitError::InvalidObject("Unknown revision: " + rev)
+      }
+      targets.push((rev, id))
+    }
+    if targets.length() == 0 {
+      let head = @gitlib.rev_parse(rfs, git_dir, "HEAD")
+      guard head is Some(id) else { return }
+      targets.push(("HEAD", id))
+    }
+    let seen : Map[String, Bool] = {}
+    let mut emitted = 0
+    for target in targets {
+      if emitted >= max_count {
+        break
+      }
+      let id = target.1
+      let hex = id.to_hex()
+      if seen.contains(hex) {
+        continue
+      }
+      seen[hex] = true
+      let subject = get_commit_subject(db, rfs, id)
+      print_line(format_log_oneline(fmt, id, subject))
+      emitted += 1
+    }
+    return
   }
   // Show subdir-clone info if applicable (only in full format)
   if not(oneline) {

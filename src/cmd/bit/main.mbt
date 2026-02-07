@@ -673,6 +673,10 @@ async fn main_async() -> Unit {
     eprint_line("bit: unsupported global option")
     @sys.exit(1)
   }
+  match opts.git_dir {
+    Some(dir) => @sys.set_env_var("GIT_DIR", dir)
+    None => ()
+  }
   // Store config overrides in environment variable for handlers to access
   if opts.config_overrides.length() > 0 {
     let encoded : Array[String] = []
@@ -723,9 +727,24 @@ struct GlobalOptions {
   subcmd : String?
   rest : Array[String]
   cwd : String?
+  git_dir : String?
   unsupported_global : Bool
   bare : Bool
   config_overrides : Array[(String, String)]
+}
+
+///|
+fn resolve_global_path(raw : String, cwd : String?) -> String {
+  if raw.has_prefix("/") {
+    return raw
+  }
+  match cwd {
+    Some(dir) => normalize_path(dir + "/" + raw)
+    None =>
+      @sys.get_env_var("GIT_SHIM_PWD")
+      .map(base => normalize_path(base + "/" + raw))
+      .unwrap_or(raw)
+  }
 }
 
 ///|
@@ -733,6 +752,7 @@ fn parse_global_options(args : Array[String]) -> GlobalOptions {
   let mut i = 1
   let mut in_opts = true
   let mut cwd : String? = None
+  let mut git_dir : String? = None
   let mut unsupported_global = false
   let mut bare = false
   let mut subcmd : String? = None
@@ -752,16 +772,19 @@ fn parse_global_options(args : Array[String]) -> GlobalOptions {
     }
     if in_opts && arg == "-C" && i + 1 < args.length() {
       let raw = args[i + 1]
-      cwd = Some(
-        if raw.has_prefix("/") {
-          raw
-        } else {
-          @sys.get_env_var("GIT_SHIM_PWD")
-          .map(base => base + "/" + raw)
-          .unwrap_or(raw)
-        },
-      )
+      cwd = Some(resolve_global_path(raw, cwd))
       i += 2
+      continue
+    }
+    if in_opts && arg == "--git-dir" && i + 1 < args.length() {
+      git_dir = Some(resolve_global_path(args[i + 1], cwd))
+      i += 2
+      continue
+    }
+    if in_opts && arg.has_prefix("--git-dir=") {
+      let raw = String::unsafe_substring(arg, start=10, end=arg.length())
+      git_dir = Some(resolve_global_path(raw, cwd))
+      i += 1
       continue
     }
     if in_opts && arg == "-c" && i + 1 < args.length() {
@@ -801,17 +824,15 @@ fn parse_global_options(args : Array[String]) -> GlobalOptions {
     rest = collect_args(args, i + 1)
     break
   }
-  { subcmd, rest, cwd, unsupported_global, bare, config_overrides }
+  { subcmd, rest, cwd, git_dir, unsupported_global, bare, config_overrides }
 }
 
 ///|
 fn is_unsupported_global_flag(arg : String) -> Bool {
-  arg == "--git-dir" ||
   arg == "--work-tree" ||
   arg == "--namespace" ||
   arg == "--super-prefix" ||
   arg == "--git-path" ||
-  arg.has_prefix("--git-dir=") ||
   arg.has_prefix("--work-tree=") ||
   arg.has_prefix("--namespace=") ||
   arg.has_prefix("--super-prefix=") ||

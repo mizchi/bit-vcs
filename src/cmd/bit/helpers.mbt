@@ -302,6 +302,41 @@ fn normalize_repo_root(path : String) -> String {
 }
 
 ///|
+fn resolve_git_dir(fs : &@git.RepoFileSystem, root : String) -> String {
+  let default_git_dir = root + "/.git"
+  match @sys.get_env_var("GIT_DIR") {
+    Some(dir) => {
+      let resolved = if dir.has_prefix("/") {
+        dir
+      } else {
+        match @sys.get_env_var("GIT_SHIM_CWD") {
+          Some(base) => normalize_path(base + "/" + dir)
+          None =>
+            @sys.get_env_var("GIT_SHIM_PWD")
+            .map(base => normalize_path(base + "/" + dir))
+            .unwrap_or(dir)
+        }
+      }
+      if fs.is_file(resolved) {
+        @gitlib.resolve_gitdir(fs, resolved)
+      } else {
+        resolved
+      }
+    }
+    None =>
+      if fs.is_file(default_git_dir) {
+        @gitlib.resolve_gitdir(fs, default_git_dir)
+      } else if fs.is_dir(default_git_dir) {
+        default_git_dir
+      } else if is_bare_repo_dir(root) {
+        root
+      } else {
+        default_git_dir
+      }
+  }
+}
+
+///|
 fn get_author_string() -> String {
   match @sys.get_env_var("GIT_AUTHOR_NAME") {
     Some(name) => {

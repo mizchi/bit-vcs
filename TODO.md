@@ -36,7 +36,7 @@ allowlist で残っている 5 テスト:
 
 ### 優先修正（次に着手）
 
-- [ ] t5528-push-default.sh
+- [x] t5528-push-default.sh
 - [ ] t0411-clone-from-partial.sh
 - [ ] t1006-cat-file.sh
 
@@ -65,7 +65,7 @@ allowlist で残っている 5 テスト:
 
 ## Tier 3: Enhancements (Medium)
 
-- [ ] push default matching semantics (t5528)
+- [x] push default matching semantics (t5528)
 - [ ] clone-from-partial promisor edge case (t0411)
 - [ ] cat-file batch/all/unordered (t1006)
 - [ ] Protocol v2 edge cases (t5510, t5616)
@@ -79,6 +79,19 @@ allowlist で残っている 5 テスト:
 - [ ] scalar/git-shell 未実装 (t9210/t9211, t9850)
 
 ## 完了した項目
+
+### ✅ push.default 互換実装 + t5528 大幅改善 (2026-02-07)
+
+- `src/cmd/bit/handlers_remote.mbt`: `push.default` (`upstream/current/matching/simple/nothing`) 判定を pure 関数化し、remote/refspec 解決を実装
+- `src/cmd/bit/handlers_remote.mbt`: triangular workflow (`remote.pushdefault`) と `push.autoSetupRemote` の反映
+- `src/cmd/bit/main.mbt` + `src/cmd/bit/helpers.mbt`: `--git-dir` のグローバル解決と git-dir 解決ロジックを追加
+- `src/cmd/bit/handlers_core.mbt`: `log -1/--format/--no-walk` の最小互換対応（t5528 の比較処理向け）
+- `src/lib/remote_config.mbt`: `parse_config_blocks` の block aliasing バグ修正（`remote remove` 誤判定を解消）
+- `src/cmd/bit/handlers_remote_push_wbtest.mbt`: push.default 判定の whitebox テストを追加（10件）
+- 検証:
+  - `just check` / `just test` green
+  - `just git-t-one t5528-push-default.sh` => `success 31 / broken 1`
+  - `just git-t-full t5528-push-default.sh` では known breakage が解消されるため upstream TODO 警告で終了コード 1
 
 ### ✅ pack/midx/repack 整合性修正（real git 委譲）(2026-02-07)
 

@@ -2938,24 +2938,279 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
+enum PushDefaultMode {
+  Upstream
+  Current
+  Matching
+  Simple
+  Nothing
+}
+
+///|
+struct PushTargetPlan {
+  remote_name : String
+  source_ref : String
+  dest_ref : String
+  auto_set_upstream : Bool
+}
+
+///|
+fn parse_push_default_mode(value : String?) -> PushDefaultMode {
+  match value {
+    Some(v) =>
+      match v.to_lower() {
+        "upstream" => PushDefaultMode::Upstream
+        "current" => PushDefaultMode::Current
+        "matching" => PushDefaultMode::Matching
+        "nothing" => PushDefaultMode::Nothing
+        _ => PushDefaultMode::Simple
+      }
+    None => PushDefaultMode::Simple
+  }
+}
+
+///|
+fn parse_config_bool_string(value : String?) -> Bool {
+  match value {
+    Some(v) => {
+      let lower = v.to_lower()
+      lower == "true" || lower == "1" || lower == "yes"
+    }
+    None => false
+  }
+}
+
+///|
+fn normalize_push_ref_token(
+  token : String,
+  current_branch : String,
+  for_destination : Bool,
+) -> String {
+  if token == "HEAD" {
+    if for_destination {
+      "refs/heads/" + current_branch
+    } else {
+      "HEAD"
+    }
+  } else if token.has_prefix("refs/") {
+    token
+  } else {
+    "refs/heads/" + token
+  }
+}
+
+///|
+fn select_current_like_remote(
+  remotes : Array[String],
+  branch_remote : String?,
+  remote_pushdefault : String?,
+) -> String raise @git.GitError {
+  match remote_pushdefault {
+    Some(name) => name
+    None =>
+      match branch_remote {
+        Some(name) => name
+        None =>
+          if remotes.length() == 1 {
+            remotes[0]
+          } else if remotes.contains("origin") {
+            "origin"
+          } else {
+            raise @git.GitError::InvalidObject("No such remote: origin")
+          }
+      }
+  }
+}
+
+///|
+fn resolve_push_target_plan(
+  explicit_remote : String?,
+  explicit_refspec : String?,
+  current_branch : String,
+  remotes : Array[String],
+  branch_remote : String?,
+  branch_merge : String?,
+  push_default : String?,
+  remote_pushdefault : String?,
+  auto_setup_remote : Bool,
+) -> PushTargetPlan raise @git.GitError {
+  let mode = parse_push_default_mode(push_default)
+  let mode_is_upstream = match mode {
+    PushDefaultMode::Upstream => true
+    _ => false
+  }
+  let mode_is_nothing = match mode {
+    PushDefaultMode::Nothing => true
+    _ => false
+  }
+  let current_ref = "refs/heads/" + current_branch
+  let triangular = match (remote_pushdefault, branch_remote) {
+    (Some(pushdefault), Some(upstream_remote)) => pushdefault != upstream_remote
+    _ => false
+  }
+  if explicit_refspec is Some(spec) {
+    if spec == ":" {
+      raise @git.GitError::InvalidObject("Perhaps you should specify a branch.")
+    }
+    let remote_name = match explicit_remote {
+      Some(name) => name
+      None =>
+        match mode {
+          PushDefaultMode::Upstream =>
+            match branch_remote {
+              Some(name) => name
+              None =>
+                raise @git.GitError::InvalidObject(
+                  "No upstream configured for current branch",
+                )
+            }
+          PushDefaultMode::Simple if not(triangular) =>
+            match branch_remote {
+              Some(name) => name
+              None =>
+                raise @git.GitError::InvalidObject(
+                  "No upstream configured for current branch",
+                )
+            }
+          PushDefaultMode::Nothing =>
+            raise @git.GitError::InvalidObject(
+              "push.default is set to nothing; specify a refspec",
+            )
+          _ =>
+            select_current_like_remote(
+              remotes, branch_remote, remote_pushdefault,
+            )
+        }
+    }
+    if mode_is_upstream &&
+      explicit_remote is Some(requested) &&
+      branch_remote is Some(upstream_remote) &&
+      requested != upstream_remote {
+      raise @git.GitError::InvalidObject(
+        "Cannot push to remote '\{requested}' because branch tracks '\{upstream_remote}'",
+      )
+    }
+    let (raw_src, raw_dst) = @gitlib.parse_refspec_pair(spec)
+    guard raw_src.length() > 0 else {
+      raise @git.GitError::InvalidObject("Perhaps you should specify a branch.")
+    }
+    let source_ref = normalize_push_ref_token(raw_src, current_branch, false)
+    let dest_ref = if raw_dst.length() == 0 {
+      normalize_push_ref_token(raw_src, current_branch, true)
+    } else {
+      normalize_push_ref_token(raw_dst, current_branch, true)
+    }
+    return { remote_name, source_ref, dest_ref, auto_set_upstream: false }
+  }
+  if mode_is_nothing {
+    raise @git.GitError::InvalidObject(
+      "push.default is set to nothing; specify a refspec",
+    )
+  }
+  if mode_is_upstream && explicit_remote is None && triangular {
+    raise @git.GitError::InvalidObject(
+      "Cannot use upstream push.default in triangular workflow",
+    )
+  }
+  let remote_name = match explicit_remote {
+    Some(name) => name
+    None =>
+      match mode {
+        PushDefaultMode::Upstream =>
+          match branch_remote {
+            Some(name) => name
+            None =>
+              raise @git.GitError::InvalidObject(
+                "No upstream configured for current branch",
+              )
+          }
+        PushDefaultMode::Simple if not(triangular) =>
+          match branch_remote {
+            Some(name) => name
+            None =>
+              raise @git.GitError::InvalidObject(
+                "No upstream configured for current branch",
+              )
+          }
+        _ =>
+          select_current_like_remote(remotes, branch_remote, remote_pushdefault)
+      }
+  }
+  if mode_is_upstream &&
+    explicit_remote is Some(requested) &&
+    branch_remote is Some(upstream_remote) &&
+    requested != upstream_remote {
+    raise @git.GitError::InvalidObject(
+      "Cannot push to remote '\{requested}' because branch tracks '\{upstream_remote}'",
+    )
+  }
+  let mut dest_ref = current_ref
+  let mut auto_set_upstream_needed = false
+  match mode {
+    PushDefaultMode::Upstream =>
+      match branch_merge {
+        Some(merge_ref) => dest_ref = merge_ref
+        None =>
+          if auto_setup_remote && branch_remote is Some(_) {
+            auto_set_upstream_needed = true
+          } else {
+            raise @git.GitError::InvalidObject(
+              "No upstream configured for current branch",
+            )
+          }
+      }
+    PushDefaultMode::Simple =>
+      if triangular && explicit_remote is None {
+        dest_ref = current_ref
+      } else {
+        match branch_merge {
+          Some(merge_ref) =>
+            if merge_ref != current_ref {
+              raise @git.GitError::InvalidObject(
+                "Simple push requires upstream branch name to match current branch",
+              )
+            } else {
+              dest_ref = merge_ref
+            }
+          None =>
+            if auto_setup_remote && branch_remote is Some(_) {
+              auto_set_upstream_needed = true
+            } else {
+              raise @git.GitError::InvalidObject(
+                "No upstream configured for current branch",
+              )
+            }
+        }
+      }
+    PushDefaultMode::Matching =>
+      if branch_merge is None {
+        raise @git.GitError::InvalidObject(
+          "Perhaps you should specify a branch.",
+        )
+      }
+    _ => ()
+  }
+  {
+    remote_name,
+    source_ref: current_ref,
+    dest_ref,
+    auto_set_upstream: auto_set_upstream_needed,
+  }
+}
+
+///|
 async fn handle_push(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
-  let git_dir = root + "/.git"
   let fs = OsFs::new()
-  let rfs : &@git.RepoFileSystem = fs
-  let git_dir = if rfs.is_file(git_dir) {
-    @gitlib.resolve_gitdir(rfs, git_dir)
-  } else {
-    git_dir
-  }
+  let git_dir = resolve_git_dir(fs, root)
   // Check if this is a subdir-clone
   let subdir_remote = match get_subdir_info(fs, git_dir) {
     Some((remote, _, _)) => Some(remote)
     None => None
   }
   // Parse arguments
-  let mut remote_name = "origin"
-  let mut refspec : String? = None
+  let mut explicit_remote : String? = None
+  let mut explicit_refspec : String? = None
   let mut force = false
   let mut set_upstream = false
   for arg in args {
@@ -2964,43 +3219,82 @@ async fn handle_push(args : Array[String]) -> Unit raise Error {
       "-u" | "--set-upstream" => set_upstream = true
       _ if arg.has_prefix("-") => warn_unimplemented_arg("push", arg)
       _ =>
-        if refspec is None {
+        if explicit_remote is None && explicit_refspec is None {
           // First non-option is either remote or refspec
           // Check if it's a known remote
           let url = @gitlib.get_remote_url(fs, git_dir, arg)
           if url is Some(_) {
-            remote_name = arg
+            explicit_remote = Some(arg)
           } else {
-            refspec = Some(arg)
+            explicit_refspec = Some(arg)
           }
+        } else if explicit_remote is Some(_) && explicit_refspec is None {
+          explicit_refspec = Some(arg)
         } else {
-          // Second non-option is refspec
-          refspec = Some(arg)
+          explicit_refspec = Some(arg)
         }
     }
   }
+  let head_ref = @gitlib.read_head_ref(fs, git_dir)
+  let current_branch = match head_ref {
+    @gitlib.HeadRef::Branch(branch) => branch
+    @gitlib.HeadRef::Detached(_) =>
+      raise @git.GitError::InvalidObject(
+        "Cannot push from detached HEAD without refspec",
+      )
+  }
+  let (_, branches) = @gitlib.read_repo_config(fs, git_dir)
+  let (branch_remote, branch_merge) = match branches.get(current_branch) {
+    Some(cfg) => {
+      let merge = if cfg.merges.length() > 0 {
+        Some(cfg.merges[0])
+      } else {
+        None
+      }
+      (cfg.remote, merge)
+    }
+    None => (None, None)
+  }
+  let remotes = @gitlib.list_remotes(fs, git_dir)
+  let config_path = git_dir + "/config"
+  let overrides = @gitlib.parse_config_overrides()
+  let push_default = match overrides.get("push.default") {
+    Some(v) => Some(v)
+    None => @gitlib.read_config_value(fs, config_path, "push", "default")
+  }
+  let remote_pushdefault = match overrides.get("remote.pushdefault") {
+    Some(v) => Some(v)
+    None => @gitlib.read_config_value(fs, config_path, "remote", "pushdefault")
+  }
+  let auto_setup_remote = match overrides.get("push.autosetupremote") {
+    Some(v) => parse_config_bool_string(Some(v))
+    None =>
+      @gitlib.read_config_bool(fs, config_path, "push", "autosetupremote").unwrap_or(
+        false,
+      )
+  }
+  let plan = resolve_push_target_plan(
+    explicit_remote, explicit_refspec, current_branch, remotes, branch_remote, branch_merge,
+    push_default, remote_pushdefault, auto_setup_remote,
+  )
+  let remote_name = plan.remote_name
+  let source_ref = plan.source_ref
+  let refname = plan.dest_ref
   // Get remote URL - prefer subdir-clone remote
   let remote_url = match subdir_remote {
     Some(url) => Some(url)
-    None => @gitlib.get_remote_url(fs, git_dir, remote_name)
+    None =>
+      match @gitlib.get_remote_url(fs, git_dir, remote_name) {
+        Some(url) => Some(url)
+        None =>
+          match @gitlib.resolve_local_repo_path(fs, root, remote_name) {
+            Some(path) => Some(path)
+            None => None
+          }
+      }
   }
   guard remote_url is Some(url) else {
     raise @git.GitError::InvalidObject("No such remote: \{remote_name}")
-  }
-  // Determine refspec
-  let refname = match refspec {
-    Some(r) => if r.has_prefix("refs/") { r } else { "refs/heads/" + r }
-    None => {
-      // Use current branch
-      let head_ref = @gitlib.read_head_ref(fs, git_dir)
-      match head_ref {
-        @gitlib.HeadRef::Branch(branch) => "refs/heads/" + branch
-        @gitlib.HeadRef::Detached(_) =>
-          raise @git.GitError::InvalidObject(
-            "Cannot push from detached HEAD without refspec",
-          )
-      }
-    }
   }
   // Check if this is a subdir-clone - if so, transform commits before push
   match get_subdir_info(fs, git_dir) {
@@ -3027,12 +3321,19 @@ async fn handle_push(args : Array[String]) -> Unit raise Error {
               "Not a git repository: " + remote_path,
             )
           }
-          let local_id = match @gitlib.resolve_ref(fs, git_dir, refname) {
-            Some(id) => id
-            None =>
+          let local_id = match source_ref {
+            "HEAD" =>
               match @gitlib.resolve_head_commit(fs, git_dir) {
                 Some(id) => id
                 None => raise @git.GitError::InvalidObject("HEAD not found")
+              }
+            _ =>
+              match @gitlib.resolve_ref(fs, git_dir, source_ref) {
+                Some(id) => id
+                None =>
+                  raise @git.GitError::InvalidObject(
+                    "Cannot resolve source ref: " + source_ref,
+                  )
               }
           }
           @gitlib.copy_tree(fs, fs, git_dir + "/objects", rgd + "/objects")
@@ -3046,20 +3347,21 @@ async fn handle_push(args : Array[String]) -> Unit raise Error {
       }
     }
   }
-  if set_upstream {
-    let branch_name = if refname.has_prefix("refs/heads/") {
-      (try! refname[11:]).to_string()
-    } else {
-      refname
-    }
+  if set_upstream || plan.auto_set_upstream {
+    let branch_name = current_branch
     @gitlib.set_config_key(
       fs, fs, git_dir, "branch", branch_name, "remote", remote_name,
     )
     @gitlib.set_config_key(
       fs, fs, git_dir, "branch", branch_name, "merge", refname,
     )
+    let remote_branch_name = if refname.has_prefix("refs/heads/") {
+      (try! refname[11:]).to_string()
+    } else {
+      refname
+    }
     print_line(
-      "Branch '\{branch_name}' set up to track remote branch '\{branch_name}' from '\{remote_name}'.",
+      "Branch '\{branch_name}' set up to track remote branch '\{remote_branch_name}' from '\{remote_name}'.",
     )
   }
 }

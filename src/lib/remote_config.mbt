@@ -139,7 +139,16 @@ pub fn parse_config_blocks(content : String) -> Array[ConfigBlock] {
     let trimmed = trim_string_internal(line)
     if trimmed.has_prefix("[") && trimmed.has_suffix("]") {
       if current.header is Some(_) || current.lines.length() > 0 {
-        blocks.push(current)
+        let copied_lines : Array[String] = []
+        for item in current.lines {
+          copied_lines.push(item)
+        }
+        blocks.push({
+          header: current.header,
+          section: current.section,
+          name: current.name,
+          lines: copied_lines,
+        })
       }
       let (section, name) = parse_section_header(trimmed)
       current.header = Some(trimmed)
@@ -151,7 +160,16 @@ pub fn parse_config_blocks(content : String) -> Array[ConfigBlock] {
     current.lines.push(line)
   }
   if current.header is Some(_) || current.lines.length() > 0 {
-    blocks.push(current)
+    let copied_lines : Array[String] = []
+    for item in current.lines {
+      copied_lines.push(item)
+    }
+    blocks.push({
+      header: current.header,
+      section: current.section,
+      name: current.name,
+      lines: copied_lines,
+    })
   }
   blocks
 }
