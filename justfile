@@ -38,6 +38,9 @@ clean:
 # Build native binary
 build:
     moon build --target native
+    @mkdir -p tools/git-shim
+    @cp _build/native/release/build/cmd/bit/bit.exe tools/git-shim/moon
+    @chmod +x tools/git-shim/moon
 
 # Install bit to ~/.local/bin
 install: build
@@ -63,44 +66,44 @@ test-subdir:
 release-check: fmt info check test e2e
 
 # Run Git's upstream test suite (submodule at third_party/git)
-git-t:
+git-t: build
     @tools/apply-git-test-patches.sh
     tools/run-git-test.sh
 
 # Run pack-related Git tests (useful as an oracle for pack behavior)
-git-t-pack:
+git-t-pack: build
     @tools/apply-git-test-patches.sh
     tools/run-git-test.sh T='t5300-pack-object.sh t5302-pack-index.sh t5303-pack-corruption-resilience.sh t5315-pack-objects-compression.sh t5316-pack-delta-depth.sh t5351-unpack-large-objects.sh'
 
 # Run a broader pack/idx/bitmap test set
-git-t-pack-more:
+git-t-pack-more: build
     @tools/apply-git-test-patches.sh
     tools/run-git-test.sh T='t5300-pack-object.sh t5302-pack-index.sh t5303-pack-corruption-resilience.sh t5306-pack-nobase.sh t5307-pack-missing-commit.sh t5308-pack-detect-duplicates.sh t5309-pack-delta-cycles.sh t5310-pack-bitmaps.sh t5311-pack-bitmaps-shallow.sh t5313-pack-bounds-checks.sh t5314-pack-cycle-detection.sh t5315-pack-objects-compression.sh t5316-pack-delta-depth.sh t5319-multi-pack-index.sh t5321-pack-large-objects.sh t5326-multi-pack-bitmaps.sh t5327-multi-pack-bitmaps-rev.sh t5329-pack-objects-cruft.sh t5331-pack-objects-stdin.sh t5332-multi-pack-reuse.sh t5334-incremental-multi-pack-index.sh t5351-unpack-large-objects.sh'
 
 # Run protocol/fetch/push logic-heavy tests (no network dependencies)
-git-t-hard:
+git-t-hard: build
     @tools/apply-git-test-patches.sh
     tools/run-git-test.sh T='t5500-fetch-pack.sh t5504-fetch-receive-strict.sh t5512-ls-remote.sh t5515-fetch-merge-logic.sh t5516-fetch-push.sh t5528-push-default.sh t5529-push-errors.sh t5533-push-cas.sh t5535-fetch-push-symref.sh t5537-fetch-shallow.sh t5538-push-shallow.sh t5700-protocol-v1.sh t5702-protocol-v2.sh t5703-upload-pack-ref-in-want.sh t5704-protocol-violations.sh t5705-session-id-in-capabilities.sh'
 
 # Run additional fetch/push edge cases (includes refspec, multi-remote, and http shallow)
-git-t-hard-more:
+git-t-hard-more: build
     @tools/apply-git-test-patches.sh
     tools/run-git-test.sh T='t5510-fetch.sh t5511-refspec.sh t5513-fetch-track.sh t5514-fetch-multiple.sh t5518-fetch-exit-status.sh t5525-fetch-tagopt.sh t5527-fetch-odd-refs.sh t5530-upload-pack-error.sh t5536-fetch-conflicts.sh t5539-fetch-http-shallow.sh'
 
 # Run remaining protocol v2 bundle-uri and serve tests
-git-t-proto-more:
+git-t-proto-more: build
     @tools/apply-git-test-patches.sh
     tools/run-git-test.sh T='t5701-git-serve.sh t5710-promisor-remote-capability.sh t5730-protocol-v2-bundle-uri-file.sh t5731-protocol-v2-bundle-uri-git.sh t5732-protocol-v2-bundle-uri-http.sh t5750-bundle-uri-parse.sh'
 
 # Run tests from allowlist file (tools/git-test-allowlist.txt)
-git-t-allowlist:
+git-t-allowlist: build
     @tools/apply-git-test-patches.sh
     @prefix=$(brew --prefix gettext); \
     CPATH="$prefix/include" LDFLAGS="-L$prefix/lib" LIBRARY_PATH="$prefix/lib" \
     tools/run-git-test.sh T="$(rg -v '^[[:space:]]*#' tools/git-test-allowlist.txt | rg -v '^[[:space:]]*$' | tr '\n' ' ')"
 
 # Run allowlist using git-shim (defaults to system git fallback)
-git-t-allowlist-shim:
+git-t-allowlist-shim: build
     @tools/apply-git-test-patches.sh
     @prefix=$(brew --prefix gettext); \
     real_git="$(pwd)/third_party/git/git"; \
@@ -120,7 +123,7 @@ git-t-allowlist-shim:
     tools/run-git-test.sh T="$(rg -v '^[[:space:]]*#' tools/git-test-allowlist.txt | rg -v '^[[:space:]]*$' | tr '\n' ' ')"
 
 # Run allowlist and force shim to error on specified subcommands
-git-t-allowlist-shim-strict:
+git-t-allowlist-shim-strict: build
     @tools/apply-git-test-patches.sh
     @prefix=$(brew --prefix gettext); \
     real_git="$(pwd)/third_party/git/git"; \
@@ -145,7 +148,7 @@ compat-table:
     @bash tools/generate-compat-table.sh
 
 # Run a single test file in strict shim mode (e.g., just git-t-one t3200-branch.sh)
-git-t-one test_file:
+git-t-one test_file: build
     @tools/apply-git-test-patches.sh
     @prefix=$(brew --prefix gettext); \
     real_git="$(pwd)/third_party/git/git"; \
@@ -166,7 +169,7 @@ git-t-one test_file:
     tools/run-git-test.sh T="{{test_file}}"
 
 # Run a single test file with strict shim + no real-git delegation
-git-t-one-no-real-git test_file:
+git-t-one-no-real-git test_file: build
     @tools/apply-git-test-patches.sh
     @prefix=$(brew --prefix gettext); \
     real_git="$(pwd)/third_party/git/git"; \
@@ -187,7 +190,7 @@ git-t-one-no-real-git test_file:
     tools/run-git-test.sh T="{{test_file}}"
 
 # Run a single test file in strict shim mode with remote intercepted
-git-t-one-remote test_file:
+git-t-one-remote test_file: build
     @tools/apply-git-test-patches.sh
     @prefix=$(brew --prefix gettext); \
     real_git="$(pwd)/third_party/git/git"; \
@@ -216,7 +219,7 @@ compare-real-git-repo repo_url:
     REPO_URL="{{repo_url}}" bash tools/compare-real-git.sh
 
 # Run a single test with ALL moongit commands (no fallback)
-git-t-full test_file:
+git-t-full test_file: build
     @tools/apply-git-test-patches.sh
     @prefix=$(brew --prefix gettext); \
     real_git="$(pwd)/third_party/git/git"; \
