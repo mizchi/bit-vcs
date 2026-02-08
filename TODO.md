@@ -50,7 +50,7 @@ allowlist で残っている 5 テスト:
 - [x] t5572-pull-submodule.sh
 - [x] t5610-clone-detached.sh
 - [x] t5801-remote-helpers.sh
-- [ ] t9210-scalar.sh
+- [x] t9210-scalar.sh
 - [ ] t9211-scalar-clone.sh
 - [ ] t9350-fast-export.sh
 - [ ] t9850-shell.sh
@@ -100,6 +100,21 @@ allowlist で残っている 5 テスト:
   - `moon test --target native -p mizchi/bit/cmd/bit`
   - `just git-t-one t5801-remote-helpers.sh` => `failed 0 / broken 1`（strict互換）
   - `SHIM_CMDS="receive-pack upload-pack pack-objects index-pack push" ... tools/run-git-test.sh T=t5801-remote-helpers.sh` => `failed 0 / broken 0`
+
+### ✅ t9210 scalar 互換実装 (2026-02-08)
+
+- `src/cmd/bit/handlers_scalar.mbt` 追加:
+  - `scalar register/list/unregister/delete/reconfigure/clone/run/diagnose` を実装
+  - register/reconfigure で `maintenance.repo` 管理、`core.fsmonitor` 設定、`maintenance start/unregister` 切替を実装
+  - clone で `--no-src` / `--no-tags` / partial clone + sparse-checkout を実装
+- `tools/git-shim/bin/scalar` 追加:
+  - `scalar` エントリポイントを追加し、`SHIM_MOON` 優先で bit 実装を起動
+- `src/cmd/bit/main.mbt`:
+  - `scalar` コマンドのディスパッチを追加
+- 検証:
+  - `moon test --target native -p mizchi/bit/cmd/bit -f handlers_scalar_wbtest.mbt`
+  - `just git-t-one t9210-scalar.sh` => `failed 0 / broken 0`
+  - `just check`
 
 ### ✅ t5572 pull-submodule known-breakage 解消 (2026-02-08)
 

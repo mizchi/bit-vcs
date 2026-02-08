@@ -1,0 +1,43 @@
+#!/bin/sh
+set -eu
+
+script_path="$0"
+case "$script_path" in
+  */*) ;;
+  *)
+    script_path="$(command -v "$0" 2>/dev/null || true)"
+    ;;
+esac
+script_dir="$(cd "$(dirname "$script_path")" && pwd)"
+
+moon="${GIT_SHIM_MOON:-${SHIM_MOON:-}}"
+if [ -z "$moon" ]; then
+  candidate="$script_dir/../moon"
+  if [ -x "$candidate" ]; then
+    moon="$candidate"
+  fi
+fi
+
+if [ -n "$moon" ] && [ -x "$moon" ]; then
+  exec "$moon" scalar "$@"
+fi
+
+real_git="${GIT_SHIM_REAL_GIT:-${SHIM_REAL_GIT:-}}"
+if [ -z "$real_git" ]; then
+  real_git_file="$script_dir/../real-git-path"
+  if [ -f "$real_git_file" ]; then
+    real_git="$(cat "$real_git_file" 2>/dev/null || true)"
+  fi
+fi
+
+real_scalar="${GIT_SHIM_REAL_SCALAR:-${SHIM_REAL_SCALAR:-}}"
+if [ -z "$real_scalar" ] && [ -n "$real_git" ]; then
+  real_scalar="$(dirname "$real_git")/scalar"
+fi
+
+if [ -n "$real_scalar" ] && [ -x "$real_scalar" ]; then
+  exec "$real_scalar" "$@"
+fi
+
+echo "scalar shim: no implementation found (set SHIM_MOON or SHIM_REAL_SCALAR)" >&2
+exit 2

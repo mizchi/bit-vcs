@@ -850,7 +850,8 @@ async fn dispatch_command(
     | "upload-pack"
     | "git-upload-pack"
     | "pack-objects"
-    | "index-pack" => true
+    | "index-pack"
+    | "scalar" => true
     _ => false
   }
   if not(cmd_handles_help) {
@@ -1256,6 +1257,11 @@ async fn dispatch_command(
         err => exit_with_error("cherry", err)
       }
     "completion" => handle_completion(rest)
+    "scalar" =>
+      handle_scalar(rest) catch {
+        err if @async.is_cancellation_error(err) => raise err
+        err => exit_with_error("scalar", err)
+      }
     "version" | "--version" => print_line("git version 2.47.0 (bit)")
     // Error for unknown commands
     _ => {
