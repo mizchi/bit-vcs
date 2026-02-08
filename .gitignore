@@ -9,6 +9,7 @@ tools/git-shim/shim.log
 tools/git-shim/git
 tools/git-shim/moon
 tools/moon
+bit
 tools/real-git-path
 
 # Test artifacts
