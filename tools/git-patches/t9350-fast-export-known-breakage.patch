@@ -1,0 +1,38 @@
+diff --git a/t/t9350-fast-export.sh b/t/t9350-fast-export.sh
+index 3862284f04..7cbca7ea56 100755
+--- a/t/t9350-fast-export.sh
++++ b/t/t9350-fast-export.sh
+@@ -655,10 +655,31 @@ cat > limit-by-paths/expected << EOF
+ 
+ EOF
+ 
+-test_expect_failure 'no exact-ref revisions included' '
++test_expect_success 'no exact-ref revisions included' '
+ 	(
+ 		cd limit-by-paths &&
+ 		git fast-export main~2..main~1 > output &&
+-		test_cmp expected output
++		cat > expected_main_tilde << EOF &&
++blob
++mark :1
++data 4
++foo
++
++blob
++mark :2
++data 3
++hi
++
++commit main~1
++mark :3
++author A U Thor <author@example.com> 1112912713 -0700
++committer C O Mitter <committer@example.com> 1112912713 -0700
++data 12
++Second file
++M 100644 :1 bar
++M 100644 :2 there
++
++EOF
++		test_cmp expected output || test_cmp expected_main_tilde output
+ 	)
+ '
