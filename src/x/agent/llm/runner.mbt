@@ -232,14 +232,26 @@ pub fn run_llm_agent(
     log("[agent] task=" + config.task)
     log("")
   }
+  if should_cancel() {
+    if has_coord {
+      guard coord is Some(c) else { () }
+      c.write_status(config.coord_dir, config.agent_id, Cancelled)
+      c.append_event(
+        config.coord_dir,
+        config.agent_id,
+        Finished(summary="cancelled before start"),
+      )
+    }
+    log("[cancelled]")
+    return
+  }
   let text_buf = StringBuilder::new()
   let mut tools_in_step = 0
-  @llmlib.run_agent_cancellable(
+  @llmlib.run_agent(
     provider,
     registry,
     messages,
     @llmlib.StopCondition::MaxSteps(config.max_steps),
-    should_cancel,
     fn(event) {
       match event {
         Stream(stream_event) =>

@@ -1,12 +1,12 @@
 {
   "name": "mizchi/bit",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "deps": {
     "moonbitlang/async": "0.16.2",
     "mizchi/zlib": "0.3.0",
     "moonbitlang/x": "0.4.38",
     "mizchi/tempfile": "0.1.0",
-    "mizchi/llm": { "path": "../llm" }
+    "mizchi/llm": { "path": "third_party/llm" }
   },
   "readme": "README.mbt.md",
   "repository": "https://github.com/mizchi/bit",

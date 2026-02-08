@@ -1,4 +1,43 @@
-///| E2E tests for run_llm_agent with MockProvider
+///| E2E tests for run_llm_agent
+
+///|
+priv struct TestMockProvider {
+  responses : Array[Array[@llmlib.StreamEvent]]
+  mut call_count : Int
+}
+
+///|
+fn TestMockProvider::new(
+  responses : Array[Array[@llmlib.StreamEvent]],
+) -> TestMockProvider {
+  { responses, call_count: 0 }
+}
+
+///|
+impl @llmlib.Provider for TestMockProvider with stream(
+  self,
+  _messages,
+  _tools,
+  handler,
+) {
+  if self.call_count < self.responses.length() {
+    let events = self.responses[self.call_count]
+    self.call_count += 1
+    for event in events {
+      (handler.on_event)(event)
+    }
+  }
+}
+
+///|
+impl @llmlib.Provider for TestMockProvider with name(_self) -> String {
+  "mock"
+}
+
+///|
+fn TestMockProvider::boxed(self : TestMockProvider) -> @llmlib.BoxedProvider {
+  @llmlib.BoxedProvider::new(self)
+}
 
 ///|
 fn make_e2e_config(
@@ -33,7 +72,7 @@ fn make_e2e_config(
 test "e2e agent reads and writes file" {
   let env = TestToolEnvironment::new()
   env.files["src/main.mbt"] = "old content"
-  let provider = @llmlib.MockProvider::new([
+  let provider = TestMockProvider::new([
     // Step 1: read_file
     [
       @llmlib.MessageStart,
@@ -82,11 +121,7 @@ test "e2e agent hits max steps" {
       @llmlib.MessageEnd(finish_reason=@llmlib.ToolUse, usage=None),
     ]
   }
-  let provider = @llmlib.MockProvider::new([
-    make_read(),
-    make_read(),
-    make_read(),
-  ])
+  let provider = TestMockProvider::new([make_read(), make_read(), make_read()])
   let done_reason = Ref::new("")
   run_llm_agent(make_e2e_config(env, provider.boxed(), max_steps=2), on_output=fn(
     s,
@@ -113,7 +148,7 @@ test "e2e agent loop detection nudge" {
       @llmlib.MessageEnd(finish_reason=@llmlib.ToolUse, usage=None),
     ]
   }
-  let provider = @llmlib.MockProvider::new([
+  let provider = TestMockProvider::new([
     make_same_read(),
     make_same_read(),
     make_same_read(),
@@ -136,7 +171,7 @@ test "e2e agent loop detection nudge" {
 test "e2e agent with coordination" {
   let env = TestToolEnvironment::new()
   env.files["src/main.mbt"] = "old"
-  let provider = @llmlib.MockProvider::new([
+  let provider = TestMockProvider::new([
     // Step 1: write_file
     [
       @llmlib.MessageStart,
@@ -182,7 +217,7 @@ test "e2e agent with coordination" {
 ///|
 test "e2e agent no tool calls" {
   let env = TestToolEnvironment::new()
-  let provider = @llmlib.MockProvider::new([
+  let provider = TestMockProvider::new([
     [
       @llmlib.MessageStart,
       @llmlib.TextDelta("I have completed the task."),
