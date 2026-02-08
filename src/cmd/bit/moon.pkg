@@ -53,6 +53,8 @@ options(
     "handlers_remote_push_wbtest.mbt": [ "native" ],
     "handlers_scalar.mbt": [ "native" ],
     "handlers_scalar_wbtest.mbt": [ "native" ],
+    "handlers_shell.mbt": [ "native" ],
+    "handlers_shell_wbtest.mbt": [ "native" ],
     "handlers_subdir.mbt": [ "native" ],
     "handlers_subdir_wbtest.mbt": [ "native" ],
     "handlers_tree.mbt": [ "native" ],

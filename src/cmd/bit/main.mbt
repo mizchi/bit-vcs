@@ -1262,6 +1262,11 @@ async fn dispatch_command(
         err if @async.is_cancellation_error(err) => raise err
         err => exit_with_error("scalar", err)
       }
+    "shell" =>
+      handle_shell(rest) catch {
+        err if @async.is_cancellation_error(err) => raise err
+        err => exit_with_error("shell", err)
+      }
     "version" | "--version" => print_line("git version 2.47.0 (bit)")
     // Error for unknown commands
     _ => {

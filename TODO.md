@@ -53,7 +53,7 @@ allowlist で残っている 5 テスト:
 - [x] t9210-scalar.sh
 - [x] t9211-scalar-clone.sh
 - [x] t9350-fast-export.sh
-- [ ] t9850-shell.sh
+- [x] t9850-shell.sh
 - [ ] t9902-completion.sh
 
 ## Tier 2: Agent Features (High)
@@ -79,9 +79,25 @@ allowlist で残っている 5 テスト:
 - [ ] **Moonix integration**: ToolEnvironment <-> AgentRuntime (moonix release 待ち)
 - [ ] **Git-Native PR System**: src/x/collab の persistence 実装 (後述)
 - [ ] bit mount / bit jj / .bitignore / BIT~ 環境変数
-- [ ] git-shell 未実装 (t9850)
 
 ## 完了した項目
+
+### ✅ t9850 git-shell 互換実装 (2026-02-08)
+
+- `src/cmd/bit/handlers_shell.mbt` 追加:
+  - `git shell -c` の許可コマンドを実装（`git-upload-pack`, `git-receive-pack`, `git-upload-archive`）
+  - interactive モードで `git-shell-commands/<command>` 実行を実装
+  - stdin コマンド長の上限制御を実装し、過長入力で `too long` を返すよう修正
+- `src/cmd/bit/main.mbt`:
+  - `shell` コマンドの dispatch を追加
+- `src/cmd/bit/handlers_shell_wbtest.mbt` 追加:
+  - service command parser / interactive parser の whitebox テストを追加
+- `justfile`:
+  - strict/full の `SHIM_CMDS` に `shell` を追加し、git/t で bit 実装を検証可能に
+- 検証:
+  - `moon test --target native -p mizchi/bit/cmd/bit -f handlers_shell_wbtest.mbt`
+  - `just git-t-one t9850-shell.sh` => `failed 0 / broken 0`
+  - `just check`
 
 ### ✅ t9350 fast-export known-breakage 解消 (2026-02-08)
 
