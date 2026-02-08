@@ -110,13 +110,103 @@ test "helpers: resolve_git_dir keeps explicit GIT_DIR even if .bit exists" {
 }
 
 ///|
-async test "helpers: run_git_command handles --version via internal dispatch" {
-  let code = run_git_command(["--version"])
-  assert_eq(code, 0)
+test "helpers: parse_run_git_invocation maps --version to internal version command" {
+  let parsed = parse_run_git_invocation(["--version"], None)
+  match parsed {
+    Some(invocation) => {
+      assert_eq(invocation.cmd, "version")
+      assert_eq(invocation.rest.length(), 0)
+    }
+    None => fail("expected parsed invocation")
+  }
 }
 
 ///|
-async test "helpers: run_git_command returns error for unknown command" {
-  let code = run_git_command(["unknown-bit-dispatch"])
-  assert_eq(code, 1)
+test "helpers: parse_run_git_invocation keeps unknown command token for dispatch" {
+  let parsed = parse_run_git_invocation(["unknown-bit-dispatch"], None)
+  match parsed {
+    Some(invocation) => {
+      assert_eq(invocation.cmd, "unknown-bit-dispatch")
+      assert_eq(invocation.rest.length(), 0)
+    }
+    None => fail("expected parsed invocation")
+  }
+}
+
+///|
+test "helpers: parse_git_env_timestamp supports timezone suffix" {
+  assert_eq(parse_git_env_timestamp("1234567890 -0700"), Some(1234567890L))
+  assert_eq(parse_git_env_timestamp("@1234567890 +0900"), Some(1234567890L))
+}
+
+///|
+test "helpers: parse_git_env_timezone extracts timezone token" {
+  assert_eq(parse_git_env_timezone("1234567890 -0700"), Some("-0700"))
+  assert_eq(parse_git_env_timezone("@1234567890 +0900"), Some("+0900"))
+}
+
+///|
+test "helpers: get_commit_timestamp parses git-style committer date" {
+  let prev = @sys.get_env_var("GIT_COMMITTER_DATE")
+  @sys.set_env_var("GIT_COMMITTER_DATE", "1234567890 -0700")
+  assert_eq(get_commit_timestamp(), 1234567890L)
+  match prev {
+    Some(value) => @sys.set_env_var("GIT_COMMITTER_DATE", value)
+    None => @sys.unset_env_var("GIT_COMMITTER_DATE")
+  }
+}
+
+///|
+test "helpers: get_commit_timezone parses git-style committer date" {
+  let prev = @sys.get_env_var("GIT_COMMITTER_DATE")
+  @sys.set_env_var("GIT_COMMITTER_DATE", "1234567890 -0700")
+  assert_eq(get_commit_timezone(), "-0700")
+  match prev {
+    Some(value) => @sys.set_env_var("GIT_COMMITTER_DATE", value)
+    None => @sys.unset_env_var("GIT_COMMITTER_DATE")
+  }
+}
+
+///|
+test "main: resolve_global_path uses GIT_SHIM_PWD when available" {
+  let prev = @sys.get_env_var("GIT_SHIM_PWD")
+  @sys.set_env_var("GIT_SHIM_PWD", "/tmp/bit-main-wbtest")
+  let resolved = resolve_global_path("dest", None)
+  assert_eq(resolved, "/tmp/bit-main-wbtest/dest")
+  match prev {
+    Some(value) => @sys.set_env_var("GIT_SHIM_PWD", value)
+    None => @sys.unset_env_var("GIT_SHIM_PWD")
+  }
+}
+
+///|
+test "main: resolve_global_path resolves relative path without GIT_SHIM_PWD" {
+  let prev = @sys.get_env_var("GIT_SHIM_PWD")
+  @sys.unset_env_var("GIT_SHIM_PWD")
+  let resolved = resolve_global_path("dest", None)
+  assert_true(resolved.has_prefix("/"))
+  assert_true(resolved.has_suffix("/dest"))
+  match prev {
+    Some(value) => @sys.set_env_var("GIT_SHIM_PWD", value)
+    None => @sys.unset_env_var("GIT_SHIM_PWD")
+  }
+}
+
+///|
+test "main: parse_global_options resolves -C relative path without GIT_SHIM_PWD" {
+  let prev = @sys.get_env_var("GIT_SHIM_PWD")
+  @sys.unset_env_var("GIT_SHIM_PWD")
+  let opts = parse_global_options(["bit", "-C", "dest", "status"])
+  assert_eq(opts.subcmd, Some("status"))
+  match opts.cwd {
+    Some(path) => {
+      assert_true(path.has_prefix("/"))
+      assert_true(path.has_suffix("/dest"))
+    }
+    None => fail("expected cwd to be resolved")
+  }
+  match prev {
+    Some(value) => @sys.set_env_var("GIT_SHIM_PWD", value)
+    None => @sys.unset_env_var("GIT_SHIM_PWD")
+  }
 }

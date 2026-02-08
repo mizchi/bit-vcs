@@ -2,31 +2,23 @@
 /// Subdir-clone command handler - clone subdirectory as independent repository
 
 ///|
+fn subdir_clone_usage_lines() -> Array[String] {
+  [
+    "Usage: bit subdir-clone <url> <path> [<dest>]", "", "Clone a subdirectory from a remote repository as an independent git repo.",
+    "", "Arguments:", "  <url>         Remote repository URL", "  <path>        Path within the remote repo (e.g., src/lib)",
+    "  <dest>        Local directory name (default: last component of path)", "",
+    "Examples:", "  bit subdir-clone https://github.com/user/repo src", "    → Creates src/ with contents of repo's src/",
+    "", "  bit subdir-clone https://github.com/user/repo src/lib mylib", "    → Creates mylib/ with contents of repo's src/lib/",
+    "", "After cloning, standard git/bit commands work from the directory:", "  cd mylib",
+    "  bit status     # detects subdir-clone automatically", "  bit rebase origin/main  # rebases only subdir changes",
+  ]
+}
+
+///|
 fn print_subdir_clone_usage() -> Unit {
-  println("Usage: bit subdir-clone <url> <path> [<dest>]")
-  println("")
-  println(
-    "Clone a subdirectory from a remote repository as an independent git repo.",
-  )
-  println("")
-  println("Arguments:")
-  println("  <url>         Remote repository URL")
-  println("  <path>        Path within the remote repo (e.g., src/lib)")
-  println(
-    "  <dest>        Local directory name (default: last component of path)",
-  )
-  println("")
-  println("Examples:")
-  println("  bit subdir-clone https://github.com/user/repo src")
-  println("    → Creates src/ with contents of repo's src/")
-  println("")
-  println("  bit subdir-clone https://github.com/user/repo src/lib mylib")
-  println("    → Creates mylib/ with contents of repo's src/lib/")
-  println("")
-  println("After cloning, standard git/bit commands work from the directory:")
-  println("  cd mylib")
-  println("  bit status     # detects subdir-clone automatically")
-  println("  bit rebase origin/main  # rebases only subdir changes")
+  for line in subdir_clone_usage_lines() {
+    println(line)
+  }
 }
 
 ///|

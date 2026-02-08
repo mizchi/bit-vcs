@@ -393,8 +393,20 @@ test "subdir: resolve_ref_for_subdir with remote ref" {
 }
 
 ///|
-test "subdir: print_subdir_clone_usage outputs help" {
-  // Just verify it doesn't crash
-  // In real test we'd capture stdout
-  print_subdir_clone_usage()
+test "subdir: usage text contains key sections" {
+  let lines = subdir_clone_usage_lines()
+  assert_true(lines.length() > 0)
+  assert_eq(lines[0], "Usage: bit subdir-clone <url> <path> [<dest>]")
+  let mut has_arguments = false
+  let mut has_examples = false
+  for line in lines {
+    if line == "Arguments:" {
+      has_arguments = true
+    }
+    if line == "Examples:" {
+      has_examples = true
+    }
+  }
+  assert_true(has_arguments)
+  assert_true(has_examples)
 }

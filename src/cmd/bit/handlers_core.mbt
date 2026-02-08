@@ -305,6 +305,8 @@ async fn handle_commit(args : Array[String]) -> Unit raise Error {
   let mut message : String? = None
   let mut all_modified = false
   let mut amend = false
+  let mut allow_empty = false
+  let mut quiet = false
   let mut author_override : String? = None
   let mut date_override : String? = None
   let mut i = 0
@@ -312,6 +314,12 @@ async fn handle_commit(args : Array[String]) -> Unit raise Error {
     let arg = args[i]
     match arg {
       "-m" if i + 1 < args.length() => {
+        message = Some(args[i + 1])
+        i += 2
+        continue
+      }
+      "-am" | "-ma" if i + 1 < args.length() => {
+        all_modified = true
         message = Some(args[i + 1])
         i += 2
         continue
@@ -328,6 +336,12 @@ async fn handle_commit(args : Array[String]) -> Unit raise Error {
       }
       _ if arg.has_prefix("-m") => {
         message = Some((try! arg[2:]).to_string())
+        i += 1
+        continue
+      }
+      _ if arg.has_prefix("-am") || arg.has_prefix("-ma") => {
+        all_modified = true
+        message = Some((try! arg[3:]).to_string())
         i += 1
         continue
       }
@@ -348,6 +362,8 @@ async fn handle_commit(args : Array[String]) -> Unit raise Error {
       }
       "-a" | "--all" => all_modified = true
       "--amend" => amend = true
+      "--allow-empty" => allow_empty = true
+      "-q" | "--quiet" => quiet = true
       _ if arg.has_prefix("-") => warn_unimplemented_arg("commit", arg)
       _ => ()
     }
@@ -415,6 +431,7 @@ async fn handle_commit(args : Array[String]) -> Unit raise Error {
       author_timestamp,
       committer~,
       committer_timestamp~,
+      allow_empty~,
     )
   }
   let short_id = (try! commit_id.to_hex()[:7]).to_string()
@@ -424,10 +441,12 @@ async fn handle_commit(args : Array[String]) -> Unit raise Error {
   }
   let git_dir = resolve_git_dir(fs, root)
   // Show subdir-clone context if applicable
-  match get_subdir_info(fs, git_dir) {
-    Some((_, path, _)) =>
-      print_line("[" + short_id + " (subdir: " + path + ")] " + first_line)
-    None => print_line("[" + short_id + "] " + first_line)
+  if not(quiet) {
+    match get_subdir_info(fs, git_dir) {
+      Some((_, path, _)) =>
+        print_line("[" + short_id + " (subdir: " + path + ")] " + first_line)
+      None => print_line("[" + short_id + "] " + first_line)
+    }
   }
 }
 
@@ -494,6 +513,63 @@ fn format_log_oneline(
 }
 
 ///|
+fn resolve_log_reflog_refname(
+  rfs : &@git.RepoFileSystem,
+  git_dir : String,
+  rev : String,
+) -> String? {
+  if rev == "HEAD" {
+    return Some("HEAD")
+  }
+  if rev.has_prefix("refs/") {
+    return Some(rev)
+  }
+  let heads_ref = "refs/heads/" + rev
+  if (@gitlib.resolve_ref(rfs, git_dir, heads_ref) catch { _ => None })
+    is Some(_) {
+    return Some(heads_ref)
+  }
+  let tags_ref = "refs/tags/" + rev
+  if (@gitlib.resolve_ref(rfs, git_dir, tags_ref) catch { _ => None })
+    is Some(_) {
+    return Some(tags_ref)
+  }
+  let remotes_ref = "refs/remotes/" + rev
+  if (@gitlib.resolve_ref(rfs, git_dir, remotes_ref) catch { _ => None })
+    is Some(_) {
+    return Some(remotes_ref)
+  }
+  if (@gitlib.resolve_ref(rfs, git_dir, rev) catch { _ => None }) is Some(_) {
+    return Some(rev)
+  }
+  None
+}
+
+///|
+fn shorten_reflog_refname(refname : String) -> String {
+  if refname.has_prefix("refs/heads/") {
+    String::unsafe_substring(refname, start=11, end=refname.length())
+  } else if refname.has_prefix("refs/tags/") {
+    String::unsafe_substring(refname, start=10, end=refname.length())
+  } else if refname.has_prefix("refs/remotes/") {
+    String::unsafe_substring(refname, start=13, end=refname.length())
+  } else {
+    refname
+  }
+}
+
+///|
+fn format_reflog_entry(fmt : String?, gd : String, message : String) -> String {
+  match fmt {
+    Some("%gd") => gd
+    Some("%gs") => message
+    Some("%gd %gs") => gd + " " + message
+    Some(_) => gd + " " + message
+    None => gd + " " + message
+  }
+}
+
+///|
 fn get_head_commit_message(fs : &@git.RepoFileSystem, root : String) -> String? {
   let git_dir = resolve_git_dir(fs, root)
   let head = @gitlib.resolve_head_commit(fs, git_dir) catch { _ => return None }
@@ -538,6 +614,7 @@ async fn handle_log(args : Array[String]) -> Unit raise Error {
   let mut since_ts = 0L
   let mut until_ts = 9223372036854775807L
   let mut no_walk = false
+  let mut walk_reflogs = false
   let mut format : String? = None
   let revs : Array[String] = []
   let mut i = 0
@@ -548,6 +625,7 @@ async fn handle_log(args : Array[String]) -> Unit raise Error {
       "--graph" => graph = true
       "--all" => all_refs = true
       "--no-walk" => no_walk = true
+      "-g" | "--walk-reflogs" => walk_reflogs = true
       "--decorate" => decorate = true
       "--stat" => show_stat = true
       "-p" | "--patch" => show_patch = true
@@ -583,6 +661,40 @@ async fn handle_log(args : Array[String]) -> Unit raise Error {
       _ => revs.push(arg)
     }
     i += 1
+  }
+  if walk_reflogs {
+    let targets : Array[String] = if revs.length() > 0 {
+      revs
+    } else {
+      ["HEAD"]
+    }
+    let mut emitted = 0
+    for target in targets {
+      if emitted >= max_count {
+        break
+      }
+      let refname = resolve_log_reflog_refname(rfs, git_dir, target)
+      guard refname is Some(actual_refname) else {
+        raise @git.GitError::InvalidObject("Unknown revision: " + target)
+      }
+      let display_ref = if target.has_prefix("refs/") {
+        shorten_reflog_refname(actual_refname)
+      } else {
+        target
+      }
+      let entries = @gitlib.read_reflog(rfs, git_dir, actual_refname)
+      let mut idx = 0
+      let mut entry_i = entries.length()
+      while entry_i > 0 && emitted < max_count {
+        entry_i -= 1
+        let entry = entries[entry_i]
+        let gd = display_ref + "@{" + idx.to_string() + "}"
+        print_line(format_reflog_entry(format, gd, entry.message))
+        emitted += 1
+        idx += 1
+      }
+    }
+    return
   }
   if format is Some(fmt) {
     let db = @gitlib.ObjectDb::load(rfs, git_dir)

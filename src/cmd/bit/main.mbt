@@ -738,12 +738,21 @@ fn resolve_global_path(raw : String, cwd : String?) -> String {
   if raw.has_prefix("/") {
     return raw
   }
-  match cwd {
-    Some(dir) => normalize_path(dir + "/" + raw)
+  let base_dir = match cwd {
+    Some(dir) => Some(dir)
     None =>
-      @sys.get_env_var("GIT_SHIM_PWD")
-      .map(base => normalize_path(base + "/" + raw))
-      .unwrap_or(raw)
+      match @sys.get_env_var("GIT_SHIM_PWD") {
+        Some(dir) => Some(dir)
+        None =>
+          match @env.current_dir() {
+            Some(dir) => Some(dir)
+            None => @sys.get_env_var("PWD")
+          }
+      }
+  }
+  match base_dir {
+    Some(base) => normalize_path(base + "/" + raw)
+    None => raw
   }
 }
 
