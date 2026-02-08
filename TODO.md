@@ -46,7 +46,7 @@ allowlist で残っている 5 テスト:
 - [x] t0450-txt-doc-vs-help.sh
 - [x] t1517-outside-repo.sh
 - [x] t2405-worktree-submodule.sh
-- [ ] t5505-remote.sh
+- [x] t5505-remote.sh
 - [ ] t5572-pull-submodule.sh
 - [x] t5610-clone-detached.sh
 - [ ] t5801-remote-helpers.sh
@@ -68,6 +68,7 @@ allowlist で残っている 5 テスト:
 - [x] push default matching semantics (t5528)
 - [x] clone-from-partial promisor edge case (t0411)
 - [x] cat-file batch/all/unordered (t1006)
+- [x] remote show known-breakage resolution (t5505)
 - [ ] Protocol v2 edge cases (t5510, t5616)
 - [x] help/doc formatting (t0450)
 
@@ -79,6 +80,14 @@ allowlist で残っている 5 テスト:
 - [ ] scalar/git-shell 未実装 (t9210/t9211, t9850)
 
 ## 完了した項目
+
+### ✅ t5505 remote known-breakage 解消 (2026-02-08)
+
+- `tools/git-patches/t5505-remote-known-breakage.patch` を更新
+  - `show stale with negative refspecs` を `SHIM_CMDS` / `GIT_SHIM_CMDS` に `remote` が含まれる場合のみ `test_expect_success` 扱いに切り替え
+  - `remote` 未intercept（real git 実行）時は upstream 既知不具合に合わせて `test_expect_failure` を維持
+- 検証:
+  - `just git-t-one-remote t5505-remote.sh` => `failed 0 / broken 0`
 
 ### ✅ t5610 clone-detached 互換修正 (2026-02-08)
 
