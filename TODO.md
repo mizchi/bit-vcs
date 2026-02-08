@@ -4,12 +4,20 @@
 
 | Metric | Value |
 |--------|-------|
-| MoonBit tests | 617 passing |
+| MoonBit tests | js/lib 215 pass, native 724 pass |
 | Git compatibility | 95.5% (744/779) |
-| Allowlist pass | 97.6% (24273/24858, failed 0 / broken 178) |
+| Allowlist pass | 97.6% (24274/24858, failed 0 / broken 177) |
 | Full git/t run | 96.3% (31832/33046, failed 0 / broken 397) |
 | Pure化 coverage | ~85% |
 | CI | 5 shards all green |
+
+## 直近の通し実行結果（2026-02-08）
+
+- [x] `just check` は成功
+- [x] `just test` は成功（`js/lib 215 pass`, `native 724 pass`）
+- [x] `just e2e` は成功
+- [x] `just test-subdir` は成功（14/14 suites）
+- [x] `just git-t-allowlist` は成功（`success 24274 / failed 0 / broken 177`）
 
 ## 中期目標: bit standalone（real-git fallback なし）
 
@@ -356,7 +364,7 @@ allowlist で残っている 5 テスト:
 - `src/cmd/bit/handlers_maintenance.mbt`: `repack` を `SHIM_REAL_GIT` 経由で real git 委譲
 - `t/t1301-midx-corruption.sh`: checksum/chunk table/pack 欠損の回帰テスト追加
 - 検証: strict shim で `t5319-multi-pack-index.sh` / `t5334-incremental-multi-pack-index.sh` がパス
-- allowlist 再計測（`just git-t-allowlist-shim-strict`）で `failed 0 / broken 178 / success 24273`
+- allowlist 再計測（`just git-t-allowlist-shim-strict`）で `failed 0 / broken 177 / success 24274`
 
 ### ✅ Agent E2E テスト + パッケージ独立化 + run_agent async 化 (2026-02-07)
 

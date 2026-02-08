@@ -73,12 +73,12 @@ Allowlist run (`just git-t-allowlist-shim-strict`) on macOS:
 
 | | Count |
 |---|---|
-| success | 24,273 |
+| success | 24,274 |
 | failed | 0 |
-| broken (prereq skip) | 178 |
+| broken (prereq skip) | 177 |
 | total | 24,858 |
 
-178 broken tests are skipped due to missing prerequisites, not failures:
+177 broken tests are skipped due to missing prerequisites, not failures:
 
 | Category | Prereqs | Skips | Notes |
 |---|---|---|---|
@@ -99,6 +99,14 @@ Full upstream run (`just git-t`) summary on macOS (2026-02-07):
 | failed | 0 |
 | broken (known breakage / prereq skip) | 397 |
 | total | 33,046 |
+
+### Local test snapshot (2026-02-08)
+
+- `just check`: pass
+- `just test`: pass (`js/lib 215 pass`, `native 724 pass`)
+- `just e2e`: pass
+- `just test-subdir`: pass
+- `just git-t-allowlist`: pass (`success 24,274 / failed 0 / broken 177`)
 
 ## Environment Variables
 
