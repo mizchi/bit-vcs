@@ -87,7 +87,13 @@ pub fn WorktreeProbeProvider::new(async (&@types.RepoFileSystem, String) -> Work
 pub fn WorktreeProbeProvider::none() -> Self
 
 // Type aliases
+pub using @types {type HttpResponse}
+
+pub using @types {type MockHttpClient}
+
 pub using @types {trait FileSystem}
+
+pub using @types {trait HttpClient}
 
 pub using @types {trait RepoFileSystem}
 

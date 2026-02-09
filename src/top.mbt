@@ -11,7 +11,10 @@ pub using @types {
   type PackDeltaMode,
   type PackCompression,
   type Sha1State,
+  type HttpResponse,
+  type MockHttpClient,
   trait FileSystem,
+  trait HttpClient,
   trait RepoFileSystem,
 }
 
