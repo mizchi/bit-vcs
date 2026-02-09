@@ -5,12 +5,8 @@ pub fn init_worktree_probe() -> Unit {
       fs : &@git.RepoFileSystem,
       abs_path : String,
     ) -> @gitlib.WorktreeEntryMeta? noraise {
-      let kind_result : Result[@afs.FileKind, Error] = try? @afs.kind(
-        abs_path,
-        follow_symlink=false,
-      )
-      match kind_result {
-        Ok(@afs.FileKind::SymLink) => {
+      match native_read_symlink_target_path(abs_path) {
+        Some(_) => {
           let mut mtime_sec : Int? = None
           let mut mtime_nsec : Int? = None
           let mtime_result : Result[(Int64, Int), Error] = try? @afs.mtime(
@@ -34,11 +30,9 @@ pub fn init_worktree_probe() -> Unit {
             ),
           )
         }
-        Ok(@afs.FileKind::Regular) => Some(native_regular_meta(abs_path, true))
-        Ok(_) => None
-        Err(_) =>
+        None =>
           if fs.is_file(abs_path) {
-            Some(native_regular_meta(abs_path, false))
+            Some(native_regular_meta(abs_path, true))
           } else {
             None
           }

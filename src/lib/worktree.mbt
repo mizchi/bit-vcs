@@ -153,26 +153,16 @@ pub async fn status(
     }
   }
   t0 = profile_lap(profile, "status scan_deleted", t0)
-  let head_entries = read_head_tree_entries(fs, actual_git_dir)
-  t0 = profile_lap(profile, "status read_head_entries", t0)
   let staged_added : Array[String] = []
   let staged_modified : Array[String] = []
   let staged_deleted : Array[String] = []
+  collect_staged_changes_from_head(
+    fs, actual_git_dir, index_map, staged_modified, staged_deleted,
+  )
+  t0 = profile_lap(profile, "status read_head_entries", t0)
   for item in index_map.to_array() {
-    let (path, entry) = item
-    match head_entries.get(path) {
-      None => staged_added.push(path)
-      Some(h) =>
-        if h.id != entry.id || h.mode != entry.mode {
-          staged_modified.push(path)
-        }
-    }
-  }
-  for item in head_entries.to_array() {
     let (path, _) = item
-    if not(index_map.contains(path)) {
-      staged_deleted.push(path)
-    }
+    staged_added.push(path)
   }
   staged_added.sort()
   staged_modified.sort()
@@ -203,6 +193,14 @@ pub async fn status_porcelain(
 
 ///|
 pub fn status_porcelain_from(s : Status) -> Array[String] {
+  if s.staged_added.length() == 0 &&
+    s.staged_modified.length() == 0 &&
+    s.staged_deleted.length() == 0 &&
+    s.unstaged_modified.length() == 0 &&
+    s.unstaged_deleted.length() == 0 &&
+    s.untracked.length() == 0 {
+    return []
+  }
   let xmap : Map[String, Char] = {}
   let ymap : Map[String, Char] = {}
   for p in s.staged_added {
@@ -977,46 +975,51 @@ fn resolve_worktree_common_git_dir(
 }
 
 ///|
-fn read_head_tree_entries(
+fn collect_staged_changes_from_head(
   fs : &@git.RepoFileSystem,
   git_dir : String,
-) -> Map[String, HeadEntry] raise @git.GitError {
-  let result : Map[String, HeadEntry] = {}
+  index_map : Map[String, IndexEntry],
+  staged_modified : Array[String],
+  staged_deleted : Array[String],
+) -> Unit raise @git.GitError {
   let head = resolve_head_commit(fs, git_dir)
   match head {
-    None => return result
+    None => return
     Some(commit_id) => {
       let common_git_dir = resolve_worktree_common_git_dir(fs, git_dir)
       let db = ObjectDb::load_lazy(fs, common_git_dir)
       let commit_obj = db.get(fs, commit_id)
       match commit_obj {
-        None => return result
+        None => return
         Some(obj) => {
           if obj.obj_type != @git.ObjectType::Commit {
             raise @git.GitError::InvalidObject("Object is not a commit")
           }
           let info = @git.parse_commit(obj.data)
-          collect_tree_entries_db(db, fs, info.tree, "", result)
+          collect_staged_changes_db(
+            db,
+            fs,
+            info.tree,
+            "",
+            index_map,
+            staged_modified,
+            staged_deleted,
+          )
         }
       }
     }
   }
-  result
 }
 
 ///|
-priv struct HeadEntry {
-  id : @git.ObjectId
-  mode : Int
-}
-
-///|
-fn collect_tree_entries_db(
+fn collect_staged_changes_db(
   db : ObjectDb,
   fs : &@git.RepoFileSystem,
   tree_id : @git.ObjectId,
   prefix : String,
-  out : Map[String, HeadEntry],
+  index_map : Map[String, IndexEntry],
+  staged_modified : Array[String],
+  staged_deleted : Array[String],
 ) -> Unit raise @git.GitError {
   let tree_obj = db.get(fs, tree_id)
   match tree_obj {
@@ -1033,10 +1036,26 @@ fn collect_tree_entries_db(
           prefix + "/" + entry.name
         }
         if is_tree_mode(entry.mode) {
-          collect_tree_entries_db(db, fs, entry.id, path, out)
+          collect_staged_changes_db(
+            db,
+            fs,
+            entry.id,
+            path,
+            index_map,
+            staged_modified,
+            staged_deleted,
+          )
         } else {
           let mode = worktree_parse_octal(entry.mode)
-          out[path] = { id: entry.id, mode }
+          match index_map.get(path) {
+            Some(index_entry) => {
+              if index_entry.id != entry.id || index_entry.mode != mode {
+                staged_modified.push(path)
+              }
+              index_map.remove(path)
+            }
+            None => staged_deleted.push(path)
+          }
         }
       }
     }

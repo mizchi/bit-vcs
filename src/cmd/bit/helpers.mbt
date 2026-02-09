@@ -491,19 +491,6 @@ fn find_repo_root(start : String) -> String? {
 
 ///|
 fn get_work_root() -> String {
-  if @env.current_dir() is Some(dir) {
-    if is_bare_repo_dir(dir) {
-      return dir
-    }
-  }
-  if is_bare_repo_dir(".") {
-    return "."
-  }
-  if @sys.get_env_var("PWD") is Some(pwd) {
-    if is_bare_repo_dir(pwd) {
-      return pwd
-    }
-  }
   match @sys.get_env_var("GIT_SHIM_CWD") {
     Some(dir) => dir
     None =>
@@ -520,7 +507,22 @@ fn get_work_root() -> String {
                   } else {
                     find_repo_root(pwd).unwrap_or(".")
                   }
-                None => "."
+                None => {
+                  if @env.current_dir() is Some(dir) {
+                    if is_bare_repo_dir(dir) {
+                      return dir
+                    }
+                  }
+                  if is_bare_repo_dir(".") {
+                    return "."
+                  }
+                  if @sys.get_env_var("PWD") is Some(pwd) {
+                    if is_bare_repo_dir(pwd) {
+                      return pwd
+                    }
+                  }
+                  "."
+                }
               }
           }
       }

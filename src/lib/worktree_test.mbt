@@ -42,6 +42,36 @@ async test "worktree: modified after commit" {
 }
 
 ///|
+async test "worktree: staged modified after add" {
+  let fs = setup_repo()
+  fs.write_string("/repo/a.txt", "hello\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  ignore(
+    commit(fs, fs, "/repo", "msg\n", "Test <test@example.com>", 1700000000L),
+  )
+  fs.write_string("/repo/a.txt", "changed\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let st = status(fs, "/repo")
+  assert_true(st.staged_modified.contains("a.txt"))
+  assert_true(st.unstaged_modified.length() == 0)
+}
+
+///|
+async test "worktree: staged deleted after remove and add" {
+  let fs = setup_repo()
+  fs.write_string("/repo/a.txt", "hello\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  ignore(
+    commit(fs, fs, "/repo", "msg\n", "Test <test@example.com>", 1700000000L),
+  )
+  fs.remove_file("/repo/a.txt")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let st = status(fs, "/repo")
+  assert_true(st.staged_deleted.contains("a.txt"))
+  assert_true(st.unstaged_deleted.length() == 0)
+}
+
+///|
 async test "worktree: status text" {
   let fs = setup_repo()
   let text1 = status_text(fs, "/repo")

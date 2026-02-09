@@ -68,8 +68,11 @@ async fn walk_dir_async(
     }
     let child_rel = if rel == "" { name } else { rel + "/" + name }
     let child_path = join_path(root, child_rel)
-    let is_symlink = read_symlink_target_path(child_path) is Some(_)
-    let is_dir = if is_symlink { false } else { fs.is_dir(child_path) }
+    let is_dir = if fs.is_dir(child_path) {
+      not(read_symlink_target_path(child_path) is Some(_))
+    } else {
+      false
+    }
     if matcher.is_ignored(child_rel, is_dir) {
       if is_dir && matcher.has_negation() {
         walk_dir_async(fs, root, child_rel, matcher, out)

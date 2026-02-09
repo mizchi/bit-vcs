@@ -643,6 +643,11 @@ async fn handle_help(args : Array[String]) -> Unit {
 ///|
 async fn main_async() -> Unit {
   let args = @sys.get_cli_args()
+  run_main_for_args(args)
+}
+
+///|
+async fn run_main_for_args(args : Array[String]) -> Unit {
   if args.length() < 2 {
     show_help()
     return ()
