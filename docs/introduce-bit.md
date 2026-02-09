@@ -120,17 +120,24 @@ db.sync_with_peer(fs, fs, peer_url)  // Gossip protocol
 
 Use case: when many AI agents parallelize work from the same base state, they can synchronize that state quickly.
 
-## Idea stage: bit/x/collab
+## Experimental: bit/x/collab
 
-Git-native collaboration without GitHub/GitLab. PRs and Issues are stored as Git objects on a `_collab` branch and synced via fetch/push.
+Git-native collaboration without GitHub/GitLab. PRs and issues are stored under `refs/notes/bit-collab` and can be synchronized via `bit collab sync push/fetch`.
 
 ```moonbit
 let collab = Collab::init(fs, fs, git_dir)
-let pr = collab.create_pr(fs, fs, "Fix bug", "...",
-  source_branch, target_branch, author, ts)
+let pr = collab.create_pr(
+  fs,
+  fs,
+  "Fix bug",
+  "...",
+  "refs/heads/feature",
+  "refs/heads/main",
+  "agent-a",
+)
 ```
 
-Mostly unimplemented; just an idea.
+The CLI already supports `bit collab pr/issue/note/sync`, and `bit agent` builds on this layer for PR creation/review/merge workflows. It is still experimental, with ongoing work on provider abstraction for import and broader CLI test coverage.
 
 ## Limitations
 

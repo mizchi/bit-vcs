@@ -85,15 +85,11 @@ pub fn Collab::merge_pr(
       message: "PR is not open: \{pr_id}",
     }
   }
-  // Resolve current commits
-  let source_commit = refs.resolve(existing.source_branch)
-  guard source_commit is Some(source_id) else {
-    return {
-      success: false,
-      commit_id: None,
-      conflicts: [],
-      message: "Source branch not found: \{existing.source_branch}",
-    }
+  // Resolve source commit from source_ref/source_branch, then fallback to stored source_commit
+  let source_id = match resolve_pr_source_commit(objects, refs, existing) {
+    Ok(id) => id
+    Err(message) =>
+      return { success: false, commit_id: None, conflicts: [], message }
   }
   let target_commit = refs.resolve(existing.target_branch)
   guard target_commit is Some(target_id) else {
@@ -529,6 +525,75 @@ fn get_base_name(path : String) -> String {
 }
 
 ///|
+fn normalize_head_ref(ref_name : String) -> String {
+  if ref_name.has_prefix("refs/") {
+    ref_name
+  } else {
+    "refs/heads/" + ref_name
+  }
+}
+
+///|
+fn resolve_ref_with_head_fallback(
+  refs : &@lib.RefStore,
+  ref_name : String,
+) -> @git.ObjectId? raise @git.GitError {
+  let direct = refs.resolve(ref_name)
+  match direct {
+    Some(id) => Some(id)
+    None =>
+      if ref_name.has_prefix("refs/") {
+        None
+      } else {
+        refs.resolve("refs/heads/" + ref_name)
+      }
+  }
+}
+
+///|
+fn source_missing_hint(pr : PullRequest) -> String {
+  let source_ref = match pr.source_ref {
+    Some(ref_name) => normalize_head_ref(ref_name)
+    None => normalize_head_ref(pr.source_branch)
+  }
+  let commit_hex = pr.source_commit.to_hex()
+  match pr.source_repo {
+    Some(repo) =>
+      "Source commit \{commit_hex} is not available locally. Fetch \{repo} \{source_ref} and retry."
+    None =>
+      "Source commit \{commit_hex} is not available locally. Fetch \{source_ref} and retry."
+  }
+}
+
+///|
+fn resolve_pr_source_commit(
+  objects : &@lib.ObjectStore,
+  refs : &@lib.RefStore,
+  pr : PullRequest,
+) -> Result[@git.ObjectId, String] raise @git.GitError {
+  match pr.source_ref {
+    Some(ref_name) => {
+      let from_source_ref = resolve_ref_with_head_fallback(refs, ref_name)
+      if from_source_ref is Some(id) {
+        return Ok(id)
+      }
+    }
+    None => ()
+  }
+  let from_source_branch = resolve_ref_with_head_fallback(
+    refs,
+    pr.source_branch,
+  )
+  if from_source_branch is Some(id) {
+    return Ok(id)
+  }
+  if objects.has(pr.source_commit) {
+    return Ok(pr.source_commit)
+  }
+  Err(source_missing_hint(pr))
+}
+
+///|
 fn update_branch_ref(
   refs : &@lib.RefStore,
   branch : String,
@@ -566,6 +631,8 @@ fn mark_pr_merged(
     PrState::Merged,
     existing.labels,
     merge_commit=Some(merge_commit_id),
+    source_repo=existing.source_repo,
+    source_ref=existing.source_ref,
   )
   ignore(
     prs.store.put_record(

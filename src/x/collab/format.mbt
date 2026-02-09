@@ -13,6 +13,22 @@ pub fn PullRequest::serialize(self : PullRequest) -> String {
   sb.write_string("source ")
   sb.write_string(self.source_branch)
   sb.write_char('\n')
+  match self.source_repo {
+    Some(repo) => {
+      sb.write_string("source-repo ")
+      sb.write_string(repo)
+      sb.write_char('\n')
+    }
+    None => ()
+  }
+  match self.source_ref {
+    Some(source_ref) => {
+      sb.write_string("source-ref ")
+      sb.write_string(source_ref)
+      sb.write_char('\n')
+    }
+    None => ()
+  }
   sb.write_string("source-commit ")
   sb.write_string(self.source_commit.to_hex())
   sb.write_char('\n')
@@ -63,6 +79,8 @@ pub fn parse_pull_request(text : String) -> PullRequest raise PrError {
   let mut id = ""
   let mut title = ""
   let mut source_branch = ""
+  let mut source_repo : String? = None
+  let mut source_ref : String? = None
   let mut source_commit_hex = ""
   let mut target_branch = ""
   let mut target_commit_hex = ""
@@ -99,6 +117,8 @@ pub fn parse_pull_request(text : String) -> PullRequest raise PrError {
           "pr" => id = value
           "title" => title = value
           "source" => source_branch = value
+          "source-repo" => source_repo = Some(value)
+          "source-ref" => source_ref = Some(value)
           "source-commit" => source_commit_hex = value
           "target" => target_branch = value
           "target-commit" => target_commit_hex = value
@@ -143,6 +163,8 @@ pub fn parse_pull_request(text : String) -> PullRequest raise PrError {
     labels,
     closes_issues~,
     merge_commit~,
+    source_repo~,
+    source_ref~,
   )
 }
 

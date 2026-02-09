@@ -49,6 +49,8 @@ pub struct PullRequest {
   title : String
   body : String
   source_branch : String // refs/heads/feature-x
+  source_repo : String? // owner/repo of source branch
+  source_ref : String? // refs/heads/feature-x in source repo
   source_commit : @git.ObjectId
   target_branch : String // refs/heads/main
   target_commit : @git.ObjectId
@@ -77,12 +79,16 @@ pub fn PullRequest::new(
   labels : Array[String],
   closes_issues? : Array[String] = [],
   merge_commit? : @git.ObjectId? = None,
+  source_repo? : String? = None,
+  source_ref? : String? = None,
 ) -> PullRequest {
   {
     id,
     title,
     body,
     source_branch,
+    source_repo,
+    source_ref,
     source_commit,
     target_branch,
     target_commit,
@@ -114,6 +120,16 @@ pub fn PullRequest::body(self : PullRequest) -> String {
 ///|
 pub fn PullRequest::source_branch(self : PullRequest) -> String {
   self.source_branch
+}
+
+///|
+pub fn PullRequest::source_repo(self : PullRequest) -> String? {
+  self.source_repo
+}
+
+///|
+pub fn PullRequest::source_ref(self : PullRequest) -> String? {
+  self.source_ref
 }
 
 ///|

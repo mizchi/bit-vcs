@@ -40,6 +40,7 @@ options(
     "handlers_agent.mbt": [ "native" ],
     "handlers_branch.mbt": [ "native" ],
     "handlers_collab.mbt": [ "native" ],
+    "handlers_collab_wbtest.mbt": [ "native" ],
     "handlers_core.mbt": [ "native" ],
     "handlers_core_wbtest.mbt": [ "native" ],
     "handlers_hq.mbt": [ "native" ],

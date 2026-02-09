@@ -168,7 +168,7 @@ allowlist で残っている 5 テスト:
 ## Tier 4: Future (Low)
 
 - [ ] **Moonix integration**: ToolEnvironment <-> AgentRuntime (moonix release 待ち)
-- [ ] **Git-Native PR System**: src/x/collab の persistence 実装 (後述)
+- [x] **Git-Native PR System**: `src/x/collab` の persistence 実装（`refs/notes/bit-collab`）
 - [ ] bit mount / bit jj / .bitignore / BIT~ 環境変数
 
 ## 完了した項目
@@ -465,33 +465,41 @@ allowlist で残っている 5 テスト:
 **計画ファイル:** `~/.claude/plans/lexical-beaming-valley.md`
 
 GitHub/GitLab に依存しない、Git ネイティブな Pull Request システム。
-専用ブランチ `_prs` に全 PR データを Git オブジェクト（blob/tree）として保存し、標準の fetch/push で同期。
+現在は `refs/notes/bit-collab` に collab record (`collab/pr/*`, `collab/issue/*`) を保存し、`collab sync push/fetch` で同期。
 
 ### 実装ステップ
 
-- [ ] **Step 1: 基盤 (types.mbt, format.mbt)**
+- [x] **Step 1: 基盤 (types.mbt, format.mbt)**
   - 型定義 (PullRequest, PrComment, PrReview, PrState, ReviewVerdict)
   - Git スタイルテキストのシリアライズ/パース
 
-- [ ] **Step 2: PR 操作 (pr.mbt)**
-  - PrSystem 構造体
+- [x] **Step 2: PR 操作**
+  - Collab 構造体
   - create, get, list, close
 
-- [ ] **Step 3: コメント・レビュー (comment.mbt, review.mbt)**
+- [x] **Step 3: コメント・レビュー (comment.mbt, review.mbt)**
   - add_comment, list_comments
   - submit_review, is_approved
 
-- [ ] **Step 4: マージ (merge.mbt)**
+- [x] **Step 4: マージ (merge.mbt)**
   - can_merge, merge_pr
   - 既存の src/lib/merge.mbt を活用
 
-- [ ] **Step 5: 同期 (sync.mbt)**
+- [x] **Step 5: 同期 (sync.mbt + native/sync_native.mbt)**
   - push, fetch
   - conflict resolution
+
+### 現在の残課題
+
+- [ ] `handlers_collab` の CLI テストをさらに拡充（`create/update/review/sync` の境界値）
+- [ ] GitHub import の provider 抽象化（`gh` コマンド依存の低減）
+- [ ] 競合解決ポリシー（record 単位の LWW 以外）の検討
 
 ### 検証方法
 
 ```bash
 moon check
-moon test --target native -p mizchi/git/x/collab
+moon test --target native -p mizchi/bit/x/collab
+moon test --target native -p mizchi/bit/cmd/bit -f handlers_collab_wbtest.mbt
+bash e2e/run-tests.sh t0012-collab-sync
 ```
