@@ -1,11 +1,9 @@
 #!/bin/bash
 # Integration test script that verifies our packfile implementation with real git
-# Usage: ./test_with_git.sh
+# Usage: ./src/tests/scripts/test_with_git.sh
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_DIR="/tmp/moonbit-git-integration-test"
 
 echo "=== MoonBit Git Integration Test ==="
