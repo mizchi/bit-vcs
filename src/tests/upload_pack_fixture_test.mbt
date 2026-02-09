@@ -84,14 +84,14 @@ test "upload-pack v2: fetch response packfile" {
   let resp = hex_to_bytes(fetch_hex)
   let pack = @protocol.extract_pack_from_v2_response(resp)
   let objects = @pack.parse_packfile(pack)
-  let store = ObjectStore::from_pack(objects)
-  let commit_id = ObjectId::from_hex(fixture_commit)
-  let tree_id = ObjectId::from_hex(fixture_tree)
-  let blob_id = ObjectId::from_hex(fixture_blob)
+  let store = @git.ObjectStore::from_pack(objects)
+  let commit_id = @git.ObjectId::from_hex(fixture_commit)
+  let tree_id = @git.ObjectId::from_hex(fixture_tree)
+  let blob_id = @git.ObjectId::from_hex(fixture_blob)
   assert_true(store.contains(commit_id))
   assert_true(store.contains(tree_id))
   assert_true(store.contains(blob_id))
-  let files = checkout_commit(store, commit_id)
+  let files = @git.checkout_commit(store, commit_id)
   match files.get("hello.txt") {
     Some(data) => {
       let text = @utf8.decode_lossy(data[:])
@@ -106,10 +106,10 @@ test "upload-pack v2: materialize clone to fs" {
   let resp = hex_to_bytes(fetch_hex)
   let pack = @protocol.extract_pack_from_v2_response(resp)
   let objects = @pack.parse_packfile(pack)
-  let store = ObjectStore::from_pack(objects)
-  let commit_id = ObjectId::from_hex(fixture_commit)
-  let fs = TestFs::new()
-  materialize_clone_to_fs(
+  let store = @git.ObjectStore::from_pack(objects)
+  let commit_id = @git.ObjectId::from_hex(fixture_commit)
+  let fs = @git.TestFs::new()
+  @git.materialize_clone_to_fs(
     store, commit_id, "refs/heads/main", "https://example.com/repo.git", fs, "/repo",
   )
   let data = fs.read_file("/repo/hello.txt")

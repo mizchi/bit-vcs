@@ -179,7 +179,7 @@ node -e 'const fs=require("fs"); const crypto=require("crypto"); const {execSync
 
 ## upload-pack v2 fixtures (advertise/ls-refs/fetch)
 
-These are embedded as hex strings in `src/git/upload_pack_fixture_test.mbt`.
+These are embedded as hex strings in `src/tests/upload_pack_fixture_test.mbt`.
 
 ```sh
 TMP_DIR=$(mktemp -d)

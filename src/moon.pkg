@@ -4,16 +4,3 @@ import {
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/strconv" as @strconv,
 }
-
-import "test" {
-  "moonbitlang/async" as @async,
-  "moonbitlang/async/process" as @process,
-  "moonbitlang/x/fs",
-  "mizchi/tempfile",
-  "mizchi/bit/pack" as @pack,
-  "mizchi/bit/protocol" as @protocol,
-}
-
-options(
-  targets: { "integration_test.mbt": [ "wasm-gc", "wasm" ] },
-)
