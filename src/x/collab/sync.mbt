@@ -91,7 +91,13 @@ pub fn merge_notes_commits(
   // Fast-forward if possible
   if is_commit_ancestor_store(objects, local_id, remote_id) {
     refs.update(collab_notes_ref_name(), Some(remote_id))
-    prs.store = CollabStore::load(objects, refs, node_id=prs.store.node_id())
+    prs.store = CollabStore::load(
+      objects,
+      refs,
+      node_id=prs.store.node_id(),
+      signing_key=prs.store.signing_key(),
+      require_signed=prs.store.require_signed(),
+    )
     return {
       success: true,
       message: "Fast-forward to remote",
@@ -132,7 +138,13 @@ pub fn merge_notes_commits(
   let (commit_id, commit_compressed) = @git.create_commit(commit)
   write_object_bytes(fs, git_dir, commit_id, commit_compressed)
   refs.update(collab_notes_ref_name(), Some(commit_id))
-  prs.store = CollabStore::load(objects, refs, node_id=prs.store.node_id())
+  prs.store = CollabStore::load(
+    objects,
+    refs,
+    node_id=prs.store.node_id(),
+    signing_key=prs.store.signing_key(),
+    require_signed=prs.store.require_signed(),
+  )
   {
     success: true,
     message: "Merged remote collab notes",

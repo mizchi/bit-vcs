@@ -596,6 +596,25 @@ fn get_author_string() -> String {
 }
 
 ///|
+fn get_collab_signing_key() -> String? {
+  match @sys.get_env_var("BIT_COLLAB_SIGN_KEY") {
+    Some(value) => if value.length() > 0 { Some(value) } else { None }
+    None => None
+  }
+}
+
+///|
+fn get_collab_require_signed() -> Bool {
+  match @sys.get_env_var("BIT_COLLAB_REQUIRE_SIGNED") {
+    Some(value) => {
+      let normalized = value.to_lower()
+      normalized == "1" || normalized == "true" || normalized == "yes"
+    }
+    None => false
+  }
+}
+
+///|
 fn get_commit_timestamp() -> Int64 {
   match @sys.get_env_var("GIT_COMMITTER_DATE") {
     Some(s) =>

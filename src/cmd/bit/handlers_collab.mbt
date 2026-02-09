@@ -93,6 +93,32 @@ fn make_collab_stores(
 }
 
 ///|
+fn load_collab_store(
+  objects : &@gitlib.ObjectStore,
+  refs : &@gitlib.RefStore,
+) -> @collab.Collab raise @git.GitError {
+  @collab.Collab::load(
+    objects,
+    refs,
+    signing_key=get_collab_signing_key(),
+    require_signed=get_collab_require_signed(),
+  )
+}
+
+///|
+fn init_collab_store(
+  objects : &@gitlib.ObjectStore,
+  refs : &@gitlib.RefStore,
+) -> @collab.Collab raise @git.GitError {
+  @collab.Collab::init(
+    objects,
+    refs,
+    signing_key=get_collab_signing_key(),
+    require_signed=get_collab_require_signed(),
+  )
+}
+
+///|
 fn print_collab_usage() -> Unit {
   println("Usage: bit collab <subcommand> [<args>]")
   println("")
@@ -102,6 +128,7 @@ fn print_collab_usage() -> Unit {
   println("  issue         Manage issues")
   println("  note          Manage notes")
   println("  sync          Sync collab refs with remotes")
+  println("  dump          Dump raw collab records from notes")
   println("  help          Show this help")
   println("")
   println("Run 'bit collab <subcommand> -h' for details.")
@@ -118,7 +145,7 @@ fn print_collab_pr_usage() -> Unit {
   )
   println("  get <id>")
   println(
-    "  create --title <title> [--body <body>] --source <branch> --target <branch>",
+    "  create --title <title> [--body <body>] --source <branch> --target <branch> [--source-repo <owner/repo>] [--source-ref <ref>]",
   )
   println(
     "  update <id> [--title <title>] [--body <body>] [--label <label>...]",
@@ -178,6 +205,17 @@ fn print_collab_sync_usage() -> Unit {
 }
 
 ///|
+fn print_collab_dump_usage() -> Unit {
+  println("Usage: bit collab dump [<prefix>] [<options>]")
+  println("")
+  println("Options:")
+  println("  --prefix <prefix>       Filter by key prefix (default: collab/)")
+  println("  --raw                   Print full serialized CollabRecord bodies")
+  println("  --include-deleted       Include tombstoned records")
+  println("  -h, --help              Show this help")
+}
+
+///|
 async fn handle_collab(args : Array[String]) -> Unit raise Error {
   if args.length() == 0 {
     print_collab_usage()
@@ -192,6 +230,7 @@ async fn handle_collab(args : Array[String]) -> Unit raise Error {
     "issue" => handle_collab_issue(rest)
     "note" => handle_collab_note(rest)
     "sync" => handle_collab_sync(rest)
+    "dump" => handle_collab_dump(rest)
     _ => {
       eprint_line("bit collab: unknown subcommand '\{subcmd}'")
       print_collab_usage()
@@ -210,7 +249,7 @@ async fn handle_collab_init(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let _ = @collab.Collab::init(objects, refs)
+  let _ = init_collab_store(objects, refs)
   print_line("Initialized collab metadata")
 }
 
@@ -258,6 +297,10 @@ async fn handle_collab_pr_list(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
+      "--state" =>
+        raise @git.GitError::InvalidObject(
+          "collab pr list: --state requires a value",
+        )
       _ if arg.has_prefix("--state=") => {
         let value = String::unsafe_substring(arg, start=8, end=arg.length())
         if parse_pr_state(value) is Some(s) {
@@ -276,7 +319,7 @@ async fn handle_collab_pr_list(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let prs = collab.list_prs(objects, state~)
   if prs.length() == 0 {
     print_line("No pull requests")
@@ -305,6 +348,10 @@ async fn handle_collab_pr_import(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
+      "--repo" =>
+        raise @git.GitError::InvalidObject(
+          "collab pr import: --repo requires a value",
+        )
       _ if arg.has_prefix("--repo=") => {
         repo = Some(String::unsafe_substring(arg, start=7, end=arg.length()))
         i += 1
@@ -315,6 +362,10 @@ async fn handle_collab_pr_import(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
+      "--state" =>
+        raise @git.GitError::InvalidObject(
+          "collab pr import: --state requires a value",
+        )
       _ if arg.has_prefix("--state=") => {
         state = String::unsafe_substring(arg, start=8, end=arg.length())
         i += 1
@@ -328,6 +379,10 @@ async fn handle_collab_pr_import(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
+      "--limit" =>
+        raise @git.GitError::InvalidObject(
+          "collab pr import: --limit requires a value",
+        )
       _ if arg.has_prefix("--limit=") => {
         let value = String::unsafe_substring(arg, start=8, end=arg.length())
         limit = @strconv.parse_int(value) catch {
@@ -361,7 +416,7 @@ async fn handle_collab_pr_import(args : Array[String]) -> Unit raise Error {
     return ()
   }
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   let stats = collab.import_prs(objects, refs, clock, prs)
   print_line(
     "Imported PRs: created \{stats.created()}, updated \{stats.updated()}",
@@ -397,7 +452,7 @@ async fn handle_collab_pr_get(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let pr = collab.get_pr(objects, id)
   guard pr is Some(val) else {
     raise @git.GitError::InvalidObject("PR not found: \{id}")
@@ -406,11 +461,39 @@ async fn handle_collab_pr_get(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
+fn normalize_branch_ref(ref_name : String) -> String {
+  if ref_name.has_prefix("refs/") {
+    ref_name
+  } else {
+    "refs/heads/" + ref_name
+  }
+}
+
+///|
+fn infer_source_repo_name(fs : OsFs, git_dir : String) -> String? {
+  let remote_url = get_effective_remote_url(fs, git_dir)
+  guard remote_url is Some(url) else { return None }
+  match @hq.parse_repo_url(url) {
+    Some(parsed) => {
+      let full_name = parsed.full_name()
+      if full_name.length() == 0 {
+        None
+      } else {
+        Some(full_name)
+      }
+    }
+    None => None
+  }
+}
+
+///|
 async fn handle_collab_pr_create(args : Array[String]) -> Unit raise Error {
   let mut title : String? = None
   let mut body : String? = None
   let mut source_branch : String? = None
   let mut target_branch : String? = None
+  let mut source_repo : String? = None
+  let mut source_ref : String? = None
   let positionals : Array[String] = []
   let mut i = 0
   while i < args.length() {
@@ -433,6 +516,16 @@ async fn handle_collab_pr_create(args : Array[String]) -> Unit raise Error {
       }
       "--target" if i + 1 < args.length() => {
         target_branch = Some(args[i + 1])
+        i += 2
+        continue
+      }
+      "--source-repo" if i + 1 < args.length() => {
+        source_repo = Some(args[i + 1])
+        i += 2
+        continue
+      }
+      "--source-ref" if i + 1 < args.length() => {
+        source_ref = Some(args[i + 1])
         i += 2
         continue
       }
@@ -461,6 +554,20 @@ async fn handle_collab_pr_create(args : Array[String]) -> Unit raise Error {
       _ if arg.has_prefix("--target=") => {
         target_branch = Some(
           String::unsafe_substring(arg, start=9, end=arg.length()),
+        )
+        i += 1
+        continue
+      }
+      _ if arg.has_prefix("--source-repo=") => {
+        source_repo = Some(
+          String::unsafe_substring(arg, start=14, end=arg.length()),
+        )
+        i += 1
+        continue
+      }
+      _ if arg.has_prefix("--source-ref=") => {
+        source_ref = Some(
+          String::unsafe_substring(arg, start=13, end=arg.length()),
         )
         i += 1
         continue
@@ -496,7 +603,21 @@ async fn handle_collab_pr_create(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let fs = OsFs::new()
+  let source_repo_value = match source_repo {
+    Some(repo) => if repo.length() == 0 { None } else { Some(repo) }
+    None => infer_source_repo_name(fs, git_dir)
+  }
+  let source_ref_value = match source_ref {
+    Some(ref_name) =>
+      if ref_name.length() == 0 {
+        Some(normalize_branch_ref(src))
+      } else {
+        Some(normalize_branch_ref(ref_name))
+      }
+    None => Some(normalize_branch_ref(src))
+  }
+  let collab = init_collab_store(objects, refs)
   let pr = collab.create_pr(
     objects,
     refs,
@@ -506,6 +627,8 @@ async fn handle_collab_pr_create(args : Array[String]) -> Unit raise Error {
     src,
     tgt,
     get_author_string(),
+    source_repo=source_repo_value,
+    source_ref=source_ref_value,
   )
   print_line(pr.serialize())
 }
@@ -582,7 +705,7 @@ async fn handle_collab_pr_update(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   let pr = collab.update_pr(
     objects,
     refs,
@@ -619,7 +742,7 @@ async fn handle_collab_pr_close(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   collab.close_pr(objects, refs, clock, id)
   print_line("Closed PR #\{id}")
 }
@@ -682,7 +805,7 @@ async fn handle_collab_pr_merge(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   let result = match strategy {
     Some(s) =>
       collab.merge_pr(objects, refs, clock, id, get_author_string(), strategy=s)
@@ -821,7 +944,7 @@ async fn handle_collab_pr_comment_add(args : Array[String]) -> Unit raise Error 
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   let comment = collab.add_comment(
     objects,
     refs,
@@ -863,7 +986,7 @@ async fn handle_collab_pr_comment_list(
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let comments = collab.list_comments(objects, id)
   if comments.length() == 0 {
     print_line("No comments")
@@ -985,7 +1108,7 @@ async fn handle_collab_pr_review_submit(
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   let review = collab.submit_review(
     objects,
     refs,
@@ -1023,7 +1146,7 @@ async fn handle_collab_pr_review_list(args : Array[String]) -> Unit raise Error 
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let reviews = collab.list_reviews(objects, id)
   if reviews.length() == 0 {
     print_line("No reviews")
@@ -1077,6 +1200,10 @@ async fn handle_collab_issue_list(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
+      "--state" =>
+        raise @git.GitError::InvalidObject(
+          "collab issue list: --state requires a value",
+        )
       _ if arg.has_prefix("--state=") => {
         let value = String::unsafe_substring(arg, start=8, end=arg.length())
         if parse_issue_state(value) is Some(s) {
@@ -1096,7 +1223,7 @@ async fn handle_collab_issue_list(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let issues = collab.list_issues(objects, state~)
   if issues.length() == 0 {
     print_line("No issues")
@@ -1125,6 +1252,10 @@ async fn handle_collab_issue_import(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
+      "--repo" =>
+        raise @git.GitError::InvalidObject(
+          "collab issue import: --repo requires a value",
+        )
       _ if arg.has_prefix("--repo=") => {
         repo = Some(String::unsafe_substring(arg, start=7, end=arg.length()))
         i += 1
@@ -1135,6 +1266,10 @@ async fn handle_collab_issue_import(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
+      "--state" =>
+        raise @git.GitError::InvalidObject(
+          "collab issue import: --state requires a value",
+        )
       _ if arg.has_prefix("--state=") => {
         state = String::unsafe_substring(arg, start=8, end=arg.length())
         i += 1
@@ -1148,6 +1283,10 @@ async fn handle_collab_issue_import(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
+      "--limit" =>
+        raise @git.GitError::InvalidObject(
+          "collab issue import: --limit requires a value",
+        )
       _ if arg.has_prefix("--limit=") => {
         let value = String::unsafe_substring(arg, start=8, end=arg.length())
         limit = @strconv.parse_int(value) catch {
@@ -1181,7 +1320,7 @@ async fn handle_collab_issue_import(args : Array[String]) -> Unit raise Error {
     return ()
   }
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   let stats = collab.import_issues(objects, refs, clock, issues)
   print_line(
     "Imported issues: created \{stats.created()}, updated \{stats.updated()}",
@@ -1212,7 +1351,7 @@ async fn handle_collab_issue_get(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let issue = collab.get_issue(objects, id)
   guard issue is Some(val) else {
     raise @git.GitError::InvalidObject("Issue not found: \{id}")
@@ -1296,7 +1435,7 @@ async fn handle_collab_issue_create(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   let issue = collab.create_issue(
     objects,
     refs,
@@ -1400,7 +1539,7 @@ async fn handle_collab_issue_update(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   let issue = collab.update_issue(
     objects,
     refs,
@@ -1438,7 +1577,7 @@ async fn handle_collab_issue_close(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   collab.close_issue(objects, refs, clock, id)
   print_line("Closed issue #\{id}")
 }
@@ -1526,7 +1665,7 @@ async fn handle_collab_issue_comment_add(
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   let comment = collab.add_issue_comment(
     objects,
     refs,
@@ -1565,7 +1704,7 @@ async fn handle_collab_issue_comment_list(
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let comments = collab.list_issue_comments(objects, id)
   if comments.length() == 0 {
     print_line("No comments")
@@ -1587,7 +1726,7 @@ async fn handle_collab_issue_link(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   collab.link_pr_to_issue(objects, refs, clock, issue_id, pr_id)
   print_line("Linked PR #\{pr_id} to issue #\{issue_id}")
 }
@@ -1685,7 +1824,7 @@ async fn handle_collab_note_add(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   let note = collab.add_note(
     objects,
     refs,
@@ -1743,7 +1882,7 @@ async fn handle_collab_note_get(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let note = collab.get_note(
     objects,
     refs,
@@ -1788,7 +1927,7 @@ async fn handle_collab_note_list(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let notes = collab.list_notes(objects, refs, ns=note_ns(ns))
   if notes.length() == 0 {
     print_line("No notes")
@@ -1843,7 +1982,7 @@ async fn handle_collab_note_remove(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let (objects, refs, clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::init(objects, refs)
+  let collab = init_collab_store(objects, refs)
   collab.remove_note(
     objects,
     refs,
@@ -1891,7 +2030,7 @@ async fn handle_collab_sync_push(args : Array[String]) -> Unit raise Error {
     raise @git.GitError::InvalidObject("No remote configured")
   }
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let result = @collab_native.collab_push(collab, fs, git_dir, url)
   if result.success() {
     print_line(result.message())
@@ -1918,13 +2057,132 @@ async fn handle_collab_sync_fetch(args : Array[String]) -> Unit raise Error {
     raise @git.GitError::InvalidObject("No remote configured")
   }
   let (objects, refs, _clock) = make_collab_stores(git_dir)
-  let collab = @collab.Collab::load(objects, refs)
+  let collab = load_collab_store(objects, refs)
   let result = @collab_native.collab_fetch(collab, fs, fs, git_dir, url)
   if result.success() {
     print_line(result.message())
   } else {
     eprint_line(result.message())
     @sys.exit(1)
+  }
+}
+
+///|
+struct CollabDumpOptions {
+  prefix : String
+  raw : Bool
+  include_deleted : Bool
+}
+
+///|
+fn parse_collab_dump_options(
+  args : Array[String],
+) -> CollabDumpOptions raise @git.GitError {
+  let mut prefix = "collab/"
+  let mut raw = false
+  let mut include_deleted = false
+  let mut i = 0
+  let mut used_positional_prefix = false
+  while i < args.length() {
+    let arg = args[i]
+    match arg {
+      "--prefix" if i + 1 < args.length() => {
+        prefix = args[i + 1]
+        i += 2
+        continue
+      }
+      "--prefix" =>
+        raise @git.GitError::InvalidObject(
+          "collab dump: --prefix requires a value",
+        )
+      _ if arg.has_prefix("--prefix=") => {
+        prefix = String::unsafe_substring(arg, start=9, end=arg.length())
+        i += 1
+        continue
+      }
+      "--raw" => {
+        raw = true
+        i += 1
+        continue
+      }
+      "--include-deleted" => {
+        include_deleted = true
+        i += 1
+        continue
+      }
+      "-h" | "--help" | "help" => {
+        i += 1
+        continue
+      }
+      _ if arg.has_prefix("-") =>
+        raise @git.GitError::InvalidObject("Unknown collab dump option: \{arg}")
+      _ => {
+        if used_positional_prefix {
+          raise @git.GitError::InvalidObject(
+            "collab dump: unexpected positional argument: \{arg}",
+          )
+        }
+        prefix = arg
+        used_positional_prefix = true
+        i += 1
+        continue
+      }
+    }
+  }
+  { prefix, raw, include_deleted }
+}
+
+///|
+fn format_collab_record_summary(record : @collab.CollabRecord) -> String {
+  let deleted_text = if record.deleted { "1" } else { "0" }
+  "kind=\{record.kind} key=\{record.key} node=\{record.node} ts=\{record.timestamp} deleted=\{deleted_text}"
+}
+
+///|
+async fn handle_collab_dump(args : Array[String]) -> Unit raise Error {
+  if args.length() > 0 {
+    let first = args[0]
+    if first == "help" || first == "-h" || first == "--help" {
+      print_collab_dump_usage()
+      return ()
+    }
+  }
+  let options = parse_collab_dump_options(args)
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let (objects, refs, _clock) = make_collab_stores(git_dir)
+  let store = @collab.CollabStore::load(
+    objects,
+    refs,
+    signing_key=get_collab_signing_key(),
+    require_signed=get_collab_require_signed(),
+  )
+  let records = store.list_records(
+    objects,
+    options.prefix,
+    include_deleted=options.include_deleted,
+  )
+  if records.length() == 0 {
+    print_line("No collab records for prefix: \{options.prefix}")
+    return ()
+  }
+  records.sort_by(fn(a, b) {
+    if a.key < b.key {
+      -1
+    } else if a.key > b.key {
+      1
+    } else {
+      0
+    }
+  })
+  for rec in records {
+    if options.raw {
+      print_line("---")
+      print_line(format_collab_record_summary(rec))
+      print_line(rec.serialize())
+    } else {
+      print_line(format_collab_record_summary(rec))
+    }
   }
 }
 
@@ -1964,8 +2222,8 @@ async fn gh_pr_list(
   state : String,
   limit : Int,
 ) -> (String, String) raise @git.GitError {
-  let fields = "number,title,body,headRefName,headRefOid,baseRefName,baseRefOid,author,createdAt,updatedAt,state,labels"
-  let jq = "[.[] | {id:(.number|tostring), title:.title, body:(.body // \"\"), source_branch:.headRefName, source_commit:.headRefOid, target_branch:.baseRefName, target_commit:.baseRefOid, author:(.author.login // \"unknown\"), created_at:(.createdAt|fromdateiso8601), updated_at:(.updatedAt|fromdateiso8601), state:(.state|ascii_downcase), labels:(.labels|map(.name))}]"
+  let fields = "number,title,body,headRefName,headRefOid,headRepository,baseRefName,baseRefOid,author,createdAt,updatedAt,state,labels"
+  let jq = "[.[] | {id:(.number|tostring), title:.title, body:(.body // \"\"), source_branch:.headRefName, source_ref:(if (.headRefName // \"\") == \"\" then \"\" else (\"refs/heads/\" + .headRefName) end), source_repo:((.headRepository // {}) | .nameWithOwner // \"\"), source_commit:.headRefOid, target_branch:.baseRefName, target_commit:.baseRefOid, author:(.author.login // \"unknown\"), created_at:(.createdAt|fromdateiso8601), updated_at:(.updatedAt|fromdateiso8601), state:(.state|ascii_downcase), labels:(.labels|map(.name))}]"
   let args = [
     "pr",
     "list",
@@ -2117,6 +2375,8 @@ fn parse_gh_prs(
         let title = json_get_string(obj, "title", "")
         let body = json_get_string(obj, "body", "")
         let source_branch = json_get_string(obj, "source_branch", "")
+        let source_ref_raw = json_get_string(obj, "source_ref", "")
+        let source_repo_raw = json_get_string(obj, "source_repo", "")
         let target_branch = json_get_string(obj, "target_branch", "")
         let source_hex = json_get_string(obj, "source_commit", "")
         let target_hex = json_get_string(obj, "target_commit", "")
@@ -2144,9 +2404,31 @@ fn parse_gh_prs(
           Some(s) => s
           None => @collab.PrState::Open
         }
+        let source_repo = if source_repo_raw.length() == 0 {
+          None
+        } else {
+          Some(source_repo_raw)
+        }
+        let source_ref = if source_ref_raw.length() == 0 {
+          None
+        } else {
+          Some(source_ref_raw)
+        }
         let pr = @collab.PullRequest::new(
-          id, title, body, source_branch, source_commit, target_branch, target_commit,
-          author, created_at, updated_at, state, labels,
+          id,
+          title,
+          body,
+          source_branch,
+          source_commit,
+          target_branch,
+          target_commit,
+          author,
+          created_at,
+          updated_at,
+          state,
+          labels,
+          source_repo~,
+          source_ref~,
         )
         out.push(pr)
       }

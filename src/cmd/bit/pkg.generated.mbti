@@ -50,6 +50,8 @@ type BlameOptions
 
 type CherryPickResult
 
+type CollabDumpOptions
+
 type DenyCurrentBranchDecision
 
 type GlobalOptions

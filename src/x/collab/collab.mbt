@@ -12,8 +12,16 @@ pub fn Collab::load(
   objects : &@lib.ObjectStore,
   refs : &@lib.RefStore,
   node_id? : String = "local",
+  signing_key? : String? = None,
+  require_signed? : Bool = false,
 ) -> Collab raise @git.GitError {
-  let store = CollabStore::load(objects, refs, node_id~)
+  let store = CollabStore::load(
+    objects,
+    refs,
+    node_id~,
+    signing_key~,
+    require_signed~,
+  )
   { store, }
 }
 
@@ -24,7 +32,13 @@ pub fn Collab::reload_store(
   objects : &@lib.ObjectStore,
   refs : &@lib.RefStore,
 ) -> Unit raise @git.GitError {
-  self.store = CollabStore::load(objects, refs, node_id=self.store.node_id())
+  self.store = CollabStore::load(
+    objects,
+    refs,
+    node_id=self.store.node_id(),
+    signing_key=self.store.signing_key(),
+    require_signed=self.store.require_signed(),
+  )
 }
 
 ///|
@@ -33,8 +47,10 @@ pub fn Collab::init(
   objects : &@lib.ObjectStore,
   refs : &@lib.RefStore,
   node_id? : String = "local",
+  signing_key? : String? = None,
+  require_signed? : Bool = false,
 ) -> Collab raise @git.GitError {
-  Collab::load(objects, refs, node_id~)
+  Collab::load(objects, refs, node_id~, signing_key~, require_signed~)
 }
 
 ///|
@@ -49,6 +65,8 @@ pub fn Collab::create_pr(
   source_branch : String,
   target_branch : String,
   author : String,
+  source_repo? : String? = None,
+  source_ref? : String? = None,
 ) -> PullRequest raise @git.GitError {
   let timestamp = clock.now()
   // Resolve source and target commits
@@ -95,6 +113,8 @@ pub fn Collab::create_pr(
     timestamp,
     PrState::Open,
     [],
+    source_repo~,
+    source_ref~,
   )
   ignore(
     self.store.put_record(
@@ -204,6 +224,8 @@ pub fn Collab::update_pr(
     clock.now(),
     existing.state,
     new_labels,
+    source_repo=existing.source_repo,
+    source_ref=existing.source_ref,
   )
   ignore(
     self.store.put_record(
@@ -249,6 +271,8 @@ pub fn Collab::close_pr(
     clock.now(),
     PrState::Closed,
     existing.labels,
+    source_repo=existing.source_repo,
+    source_ref=existing.source_ref,
   )
   ignore(
     self.store.put_record(

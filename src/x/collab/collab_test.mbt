@@ -483,6 +483,32 @@ test "format: serialize and parse PullRequest" {
 }
 
 ///|
+test "format: serialize and parse PullRequest with source metadata" {
+  let pr = PullRequest::new(
+    "44",
+    "Fork PR",
+    "Body",
+    "feature",
+    @git.ObjectId::zero(),
+    "main",
+    @git.ObjectId::zero(),
+    "alice@example.com",
+    1706745600L,
+    1706832000L,
+    PrState::Open,
+    [],
+    source_repo=Some("contrib/bit"),
+    source_ref=Some("refs/heads/feature"),
+  )
+  let serialized = pr.serialize()
+  let parsed = parse_pull_request(serialized)
+  guard parsed.source_repo() is Some(repo) else { panic() }
+  assert_eq(repo, "contrib/bit")
+  guard parsed.source_ref() is Some(source_ref) else { panic() }
+  assert_eq(source_ref, "refs/heads/feature")
+}
+
+///|
 test "format: serialize and parse PrComment" {
   let comment = PrComment::new(
     "abc123",
@@ -782,6 +808,21 @@ test "collab_record version round-trip" {
 }
 
 ///|
+test "collab_record signature round-trip" {
+  let record = @collab.CollabRecord::new(
+    "collab/pr/1/meta",
+    "pr",
+    "some payload",
+    "node-a",
+    1706745600L,
+    signature=Some("deadbeef"),
+  )
+  let serialized = record.serialize()
+  let parsed = @collab.parse_collab_record(serialized)
+  assert_eq(parsed.signature, Some("deadbeef"))
+}
+
+///|
 test "collab_record version=0 backward compat" {
   // Manually construct text without version line
   let text =
@@ -846,6 +887,108 @@ test "pr merge_commit none round-trip" {
   let serialized = pr.serialize()
   let parsed = parse_pull_request(serialized) catch { _ => panic() }
   assert_true(parsed.merge_commit() is None)
+}
+
+///|
+test "pr: merge uses source_commit when source branch is missing" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let collab = Collab::init(objects, refs)
+  let source_id = refs.resolve("refs/heads/feature")
+  guard source_id is Some(sid) else { panic() }
+  let target_id = refs.resolve("refs/heads/main")
+  guard target_id is Some(tid) else { panic() }
+  let pr = PullRequest::new(
+    "9000",
+    "Forked branch PR",
+    "Body",
+    "missing-fork-branch",
+    sid,
+    "refs/heads/main",
+    tid,
+    "contrib@example.com",
+    1706745600L,
+    1706832000L,
+    PrState::Open,
+    [],
+    source_repo=Some("contrib/bit"),
+    source_ref=Some("refs/heads/missing-fork-branch"),
+  )
+  let _ = collab.import_prs(objects, refs, clock, [pr])
+  let result = collab.merge_pr(
+    objects,
+    refs,
+    clock,
+    "9000",
+    "maintainer@example.com",
+    strategy=PrMergeStrategy::Merge,
+  )
+  assert_true(result.success())
+}
+
+///|
+test "signature: require_signed hides unsigned records" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let unsigned_collab = Collab::init(objects, refs)
+  let strict_collab = Collab::init(
+    objects,
+    refs,
+    signing_key=Some("k1"),
+    require_signed=true,
+  )
+  let unsigned_pr = unsigned_collab.create_pr(
+    objects, refs, clock, "Unsigned", "Body", "refs/heads/feature", "refs/heads/main",
+    "alice@example.com",
+  )
+  let strict_view = strict_collab.get_pr(objects, unsigned_pr.id())
+  assert_true(strict_view is None)
+  let signed_pr = strict_collab.create_pr(
+    objects, refs, clock, "Signed", "Body", "refs/heads/feature", "refs/heads/main",
+    "alice@example.com",
+  )
+  let strict_signed = strict_collab.get_pr(objects, signed_pr.id())
+  assert_true(strict_signed is Some(_))
+}
+
+///|
+test "signature: wrong key hides signed records" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let writer = Collab::init(
+    objects,
+    refs,
+    signing_key=Some("writer-key"),
+    require_signed=true,
+  )
+  let reader = Collab::init(
+    objects,
+    refs,
+    signing_key=Some("reader-key"),
+    require_signed=true,
+  )
+  let pr = writer.create_pr(
+    objects, refs, clock, "Signed", "Body", "refs/heads/feature", "refs/heads/main",
+    "alice@example.com",
+  )
+  let seen = reader.get_pr(objects, pr.id())
+  assert_true(seen is None)
+}
+
+///|
+test "signature: require_signed without key rejects writes" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let strict = Collab::init(objects, refs, require_signed=true)
+  ignore(
+    strict.create_pr(
+      objects, refs, clock, "Signed", "Body", "refs/heads/feature", "refs/heads/main",
+      "alice@example.com",
+    ) catch {
+      @git.GitError::InvalidObject(message) => {
+        assert_true(message.contains("signing key"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
 }
 
 ///|

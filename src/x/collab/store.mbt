@@ -71,6 +71,7 @@ pub struct CollabRecord {
   timestamp : Int64
   node : String
   deleted : Bool
+  signature : String?
   payload : String
 }
 
@@ -84,37 +85,59 @@ pub fn CollabRecord::new(
   clock? : Map[String, Int64] = {},
   deleted? : Bool = false,
   version? : Int = 1,
+  signature? : String? = None,
 ) -> CollabRecord {
-  { version, key, kind, clock, timestamp, node, deleted, payload }
+  { version, key, kind, clock, timestamp, node, deleted, signature, payload }
+}
+
+///|
+fn serialize_collab_record(
+  record : CollabRecord,
+  signature : String?,
+) -> String {
+  let sb = StringBuilder::new()
+  sb.write_string("version ")
+  sb.write_string(record.version.to_string())
+  sb.write_char('\n')
+  sb.write_string("key ")
+  sb.write_string(record.key)
+  sb.write_char('\n')
+  sb.write_string("kind ")
+  sb.write_string(record.kind)
+  sb.write_char('\n')
+  sb.write_string("clock ")
+  sb.write_string(clock_to_string(record.clock))
+  sb.write_char('\n')
+  sb.write_string("timestamp ")
+  sb.write_string(record.timestamp.to_string())
+  sb.write_char('\n')
+  sb.write_string("node ")
+  sb.write_string(record.node)
+  sb.write_char('\n')
+  sb.write_string("deleted ")
+  sb.write_string(if record.deleted { "1" } else { "0" })
+  sb.write_char('\n')
+  match signature {
+    Some(sig) => {
+      sb.write_string("signature ")
+      sb.write_string(sig)
+      sb.write_char('\n')
+    }
+    None => ()
+  }
+  sb.write_char('\n')
+  sb.write_string(record.payload)
+  sb.to_string()
+}
+
+///|
+fn serialize_collab_record_unsigned(record : CollabRecord) -> String {
+  serialize_collab_record(record, None)
 }
 
 ///|
 pub fn CollabRecord::serialize(self : CollabRecord) -> String {
-  let sb = StringBuilder::new()
-  sb.write_string("version ")
-  sb.write_string(self.version.to_string())
-  sb.write_char('\n')
-  sb.write_string("key ")
-  sb.write_string(self.key)
-  sb.write_char('\n')
-  sb.write_string("kind ")
-  sb.write_string(self.kind)
-  sb.write_char('\n')
-  sb.write_string("clock ")
-  sb.write_string(clock_to_string(self.clock))
-  sb.write_char('\n')
-  sb.write_string("timestamp ")
-  sb.write_string(self.timestamp.to_string())
-  sb.write_char('\n')
-  sb.write_string("node ")
-  sb.write_string(self.node)
-  sb.write_char('\n')
-  sb.write_string("deleted ")
-  sb.write_string(if self.deleted { "1" } else { "0" })
-  sb.write_char('\n')
-  sb.write_char('\n')
-  sb.write_string(self.payload)
-  sb.to_string()
+  serialize_collab_record(self, self.signature)
 }
 
 ///|
@@ -126,6 +149,7 @@ pub fn parse_collab_record(text : String) -> CollabRecord {
   let mut timestamp : Int64 = 0
   let mut node = ""
   let mut deleted = false
+  let mut signature : String? = None
   let payload_lines : Array[String] = []
   let mut in_body = false
   for line_view in text.split("\n") {
@@ -152,6 +176,7 @@ pub fn parse_collab_record(text : String) -> CollabRecord {
           "timestamp" => timestamp = parse_int64(v)
           "node" => node = v
           "deleted" => deleted = v == "1" || v == "true" || v == "yes"
+          "signature" => signature = Some(v)
           _ => ()
         }
       }
@@ -166,6 +191,7 @@ pub fn parse_collab_record(text : String) -> CollabRecord {
     clock~,
     deleted~,
     version~,
+    signature~,
   )
 }
 
@@ -266,6 +292,42 @@ fn is_valid_record(record : CollabRecord) -> Bool {
 }
 
 ///|
+fn compute_record_signature(
+  record : CollabRecord,
+  signing_key : String,
+) -> String {
+  let state = @git.Sha1State::new()
+  state.update_string(serialize_collab_record_unsigned(record))
+  state.update_string("\n--signing-key--\n")
+  state.update_string(signing_key)
+  state.finish().to_hex()
+}
+
+///|
+fn verify_record_signature(record : CollabRecord, signing_key : String) -> Bool {
+  match record.signature {
+    Some(sig) => sig == compute_record_signature(record, signing_key)
+    None => false
+  }
+}
+
+///|
+fn sign_record(record : CollabRecord, signing_key : String) -> CollabRecord {
+  let signature = compute_record_signature(record, signing_key)
+  CollabRecord::new(
+    record.key,
+    record.kind,
+    record.payload,
+    record.node,
+    record.timestamp,
+    clock=record.clock,
+    deleted=record.deleted,
+    version=record.version,
+    signature=Some(signature),
+  )
+}
+
+///|
 pub fn merge_record_bytes(ours : Bytes, theirs : Bytes) -> Bytes {
   let ours_text = @utf8.decode_lossy(ours[:])
   let theirs_text = @utf8.decode_lossy(theirs[:])
@@ -288,6 +350,8 @@ pub fn merge_record_bytes(ours : Bytes, theirs : Bytes) -> Bytes {
 ///|
 pub struct CollabStore {
   node_id : String
+  signing_key : String?
+  require_signed : Bool
   entries : Map[String, @git.ObjectId] // entry_name -> blob_id
   mut head : @git.ObjectId? // current notes commit
 }
@@ -297,8 +361,12 @@ pub fn CollabStore::load(
   objects : &@lib.ObjectStore,
   refs : &@lib.RefStore,
   node_id? : String = "local",
+  signing_key? : String? = None,
+  require_signed? : Bool = false,
 ) -> CollabStore raise @git.GitError {
   let node = node_id
+  let key = signing_key
+  let require_signed_val = require_signed
   let commit = refs.resolve(collab_notes_ref)
   let entries : Map[String, @git.ObjectId] = {}
   let head = match commit {
@@ -316,12 +384,51 @@ pub fn CollabStore::load(
     }
     None => None
   }
-  { node_id: node, entries, head }
+  {
+    node_id: node,
+    signing_key: key,
+    require_signed: require_signed_val,
+    entries,
+    head,
+  }
 }
 
 ///|
 pub fn CollabStore::node_id(self : CollabStore) -> String {
   self.node_id
+}
+
+///|
+pub fn CollabStore::signing_key(self : CollabStore) -> String? {
+  self.signing_key
+}
+
+///|
+pub fn CollabStore::require_signed(self : CollabStore) -> Bool {
+  self.require_signed
+}
+
+///|
+fn verify_record_by_policy(store : CollabStore, record : CollabRecord) -> Bool {
+  match store.signing_key {
+    Some(key) =>
+      match record.signature {
+        Some(_) => verify_record_signature(record, key)
+        None => not(store.require_signed)
+      }
+    None => not(store.require_signed)
+  }
+}
+
+///|
+fn ensure_signature_ready_for_write(
+  store : CollabStore,
+) -> Unit raise @git.GitError {
+  if store.require_signed && store.signing_key is None {
+    raise @git.GitError::InvalidObject(
+      "Collab signing is required but signing key is not configured",
+    )
+  }
 }
 
 ///|
@@ -342,7 +449,9 @@ pub fn CollabStore::get_record(
         Some(blob_obj) => {
           let text = @utf8.decode_lossy(blob_obj.data[:])
           let record = parse_collab_record(text)
-          if record.deleted {
+          if not(verify_record_by_policy(self, record)) {
+            None
+          } else if record.deleted {
             None
           } else {
             Some(record)
@@ -364,6 +473,7 @@ pub fn CollabStore::put_record(
   payload : String,
   node : String,
 ) -> CollabRecord raise @git.GitError {
+  ensure_signature_ready_for_write(self)
   let timestamp = clock.now()
   let existing = self.get_record(objects, key)
   let base_clock = match existing {
@@ -371,7 +481,7 @@ pub fn CollabStore::put_record(
     None => {}
   }
   let next_clock = increment_clock(base_clock, node)
-  let record = CollabRecord::new(
+  let unsigned_record = CollabRecord::new(
     key,
     kind,
     payload,
@@ -380,6 +490,10 @@ pub fn CollabStore::put_record(
     clock=next_clock,
     deleted=false,
   )
+  let record = match self.signing_key {
+    Some(sign_key) => sign_record(unsigned_record, sign_key)
+    None => unsigned_record
+  }
   let target_id = key_to_target_id(key)
   // Store the key blob
   let key_bytes = @utf8.encode(key)
@@ -403,6 +517,7 @@ pub fn CollabStore::delete_record(
   kind : String,
   node : String,
 ) -> CollabRecord raise @git.GitError {
+  ensure_signature_ready_for_write(self)
   let timestamp = clock.now()
   let existing = self.get_record(objects, key)
   let base_clock = match existing {
@@ -410,7 +525,7 @@ pub fn CollabStore::delete_record(
     None => {}
   }
   let next_clock = increment_clock(base_clock, node)
-  let record = CollabRecord::new(
+  let unsigned_record = CollabRecord::new(
     key,
     kind,
     "",
@@ -419,6 +534,10 @@ pub fn CollabStore::delete_record(
     clock=next_clock,
     deleted=true,
   )
+  let record = match self.signing_key {
+    Some(sign_key) => sign_record(unsigned_record, sign_key)
+    None => unsigned_record
+  }
   let target_id = key_to_target_id(key)
   // Store the key blob
   let key_bytes = @utf8.encode(key)
@@ -449,6 +568,9 @@ pub fn CollabStore::list_records(
       Some(blob_obj) => {
         let text = @utf8.decode_lossy(blob_obj.data[:])
         let record = parse_collab_record(text)
+        if not(verify_record_by_policy(self, record)) {
+          continue
+        }
         if not(record.key.has_prefix(prefix)) {
           continue
         }

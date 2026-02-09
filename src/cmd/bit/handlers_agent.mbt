@@ -247,8 +247,8 @@ async fn handle_agent_status(args : Array[String]) -> Unit raise Error {
     let osfs = OsFs::new()
     let fs : &@git.FileSystem = osfs
     let rfs : &@git.RepoFileSystem = osfs
-    let collab = @collab.Collab::load(objects, refs) catch {
-      _ => @collab.Collab::init(objects, refs)
+    let collab = load_collab_store(objects, refs) catch {
+      _ => init_collab_store(objects, refs)
     }
     ignore(
       @collab_native.collab_fetch(collab, fs, rfs, git_dir, config.remote_url),
@@ -256,7 +256,7 @@ async fn handle_agent_status(args : Array[String]) -> Unit raise Error {
       _ => ()
     }
   }
-  let collab = @collab.Collab::load(objects, refs) catch {
+  let collab = load_collab_store(objects, refs) catch {
     _ => {
       println("No collab metadata found. Run 'bit collab init' first.")
       return
