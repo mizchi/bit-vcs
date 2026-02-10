@@ -1,15 +1,17 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/pack" as @pack,
-  "mizchi/bit/protocol" as @protocol,
-  "mizchi/bit/native" as @gitnative,
-  "mizchi/bit/lib" as @lib,
-  "mizchi/bit/x/hub" as @hub,
-  "moonbitlang/async" as @async,
-  "moonbitlang/core/encoding/utf8" as @utf8,
-  "moonbitlang/core/json" as @json,
-  "moonbitlang/core/strconv" as @strconv,
+  "mizchi/bit" @git,
+  "mizchi/bit/pack" @pack,
+  "mizchi/bit/protocol" @protocol,
+  "mizchi/bit/native" @gitnative,
+  "mizchi/bit/lib" @lib,
+  "mizchi/bit/x/hub" @hub,
+  "moonbitlang/async" @async,
+  "moonbitlang/core/encoding/utf8" @utf8,
+  "moonbitlang/core/json" @json,
+  "moonbitlang/core/strconv" @strconv,
 }
+
+warnings = "-29"
 
 options(
   targets: {

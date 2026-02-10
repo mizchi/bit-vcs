@@ -1,8 +1,10 @@
 import {
-  "mizchi/bit/repo" as @repo,
-  "mizchi/bit/types" as @types,
-  "mizchi/bit/lib" as @gitlib,
-  "mizchi/bit/hash" as @githash,
-  "mizchi/bit/object" as @object,
-  "moonbitlang/core/encoding/utf8" as @utf8,
+  "mizchi/bit/repo" @repo,
+  "mizchi/bit/types" @types,
+  "mizchi/bit/lib" @gitlib,
+  "mizchi/bit/hash" @githash,
+  "mizchi/bit/object" @object,
+  "moonbitlang/core/encoding/utf8" @utf8,
 }
+
+warnings = "-29"

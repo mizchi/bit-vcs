@@ -1,13 +1,15 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/lib" as @lib,
-  "moonbitlang/core/buffer" as @buffer,
+  "mizchi/bit" @git,
+  "mizchi/bit/lib" @lib,
+  "moonbitlang/core/buffer" @buffer,
 }
 
-import "test" {
-  "moonbitlang/core/bench" as @bench,
-  "mizchi/bit/x/fs" as @fs,
-}
+import {
+  "moonbitlang/core/bench" @bench,
+  "mizchi/bit/x/fs" @fs,
+} for "test"
+
+warnings = "-29"
 
 options(
   targets: {
@@ -15,5 +17,4 @@ options(
     "kv_test.mbt": [ "native" ],
     "sync_test.mbt": [ "native" ],
   },
-  "warn-list": "-29",
 )

@@ -66,7 +66,7 @@ pub fn WorktreeProbeProvider::new(
 ///|
 pub fn WorktreeProbeProvider::none() -> WorktreeProbeProvider {
   {
-    entry_meta: async fn(
+    entry_meta: fn(
       fs : &@types.RepoFileSystem,
       path : String,
     ) -> WorktreeEntryMeta? noraise {

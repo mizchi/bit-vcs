@@ -1,6 +1,8 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/pack" as @pack,
-  "mizchi/bit/protocol" as @protocol,
-  "mizchi/bit/ignore" as @ignore,
+  "mizchi/bit" @git,
+  "mizchi/bit/pack" @pack,
+  "mizchi/bit/protocol" @protocol,
+  "mizchi/bit/ignore" @ignore,
 }
+
+warnings = "-29"

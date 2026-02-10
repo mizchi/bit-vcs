@@ -1,14 +1,16 @@
 import {
-  "mizchi/bit/x/agent/llm" as @agent,
-  "mizchi/bit/x/kv" as @kv,
-  "mizchi/bit" as @git,
-  "mizchi/bit/lib" as @lib,
-  "moonbitlang/core/encoding/utf8" as @utf8,
+  "mizchi/bit/x/agent/llm" @agent,
+  "mizchi/bit/x/kv" @kv,
+  "mizchi/bit" @git,
+  "mizchi/bit/lib" @lib,
+  "moonbitlang/core/encoding/utf8" @utf8,
 }
 
-import "wbtest" {
-  "mizchi/bit/x/fs" as @fs,
-}
+import {
+  "mizchi/bit/x/fs" @fs,
+} for "wbtest"
+
+warnings = "-29"
 
 options(
   targets: {

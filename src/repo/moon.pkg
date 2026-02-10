@@ -1,5 +1,7 @@
 import {
-  "mizchi/bit/types" as @types,
-  "mizchi/bit/object" as @object,
-  "moonbitlang/core/encoding/utf8" as @utf8,
+  "mizchi/bit/types" @types,
+  "mizchi/bit/object" @object,
+  "moonbitlang/core/encoding/utf8" @utf8,
 }
+
+warnings = "-29"

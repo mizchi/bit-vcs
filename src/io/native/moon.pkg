@@ -1,15 +1,17 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/io" as @gitio,
-  "moonbitlang/async" as @async,
-  "moonbitlang/async/fs" as @afs,
-  "moonbitlang/async/http" as @http,
-  "moonbitlang/async/process" as @process,
-  "moonbitlang/core/encoding/utf8" as @utf8,
-  "moonbitlang/core/env" as @env,
-  "moonbitlang/x/codec/base64" as @base64,
-  "moonbitlang/x/sys" as @sys,
+  "mizchi/bit" @git,
+  "mizchi/bit/io" @gitio,
+  "moonbitlang/async" @async,
+  "moonbitlang/async/fs" @afs,
+  "moonbitlang/async/http" @http,
+  "moonbitlang/async/process" @process,
+  "moonbitlang/core/encoding/utf8" @utf8,
+  "moonbitlang/core/env" @env,
+  "moonbitlang/x/codec/base64" @base64,
+  "moonbitlang/x/sys" @sys,
 }
+
+warnings = "-29"
 
 options(
   targets: {

@@ -1,4 +1,6 @@
 import {
-  "mizchi/bit" as @git,
-  "moonbitlang/core/encoding/utf8" as @utf8,
+  "mizchi/bit" @git,
+  "moonbitlang/core/encoding/utf8" @utf8,
 }
+
+warnings = "-29"

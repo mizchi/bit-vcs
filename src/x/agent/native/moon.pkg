@@ -1,17 +1,19 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/lib" as @lib,
-  "mizchi/bit/native" as @gitnative,
-  "mizchi/bit/osfs" as @osfs,
-  "mizchi/bit/x/hub" as @hub,
-  "mizchi/bit/x/hub/native" as @hub_native,
-  "mizchi/bit/x/agent" as @agent,
-  "mizchi/bit/x/fs" as @bitfs,
-  "mizchi/bit/protocol" as @protocol,
-  "mizchi/bit/pack" as @pack,
-  "moonbitlang/async" as @async,
-  "moonbitlang/async/process" as @process,
+  "mizchi/bit" @git,
+  "mizchi/bit/lib" @lib,
+  "mizchi/bit/native" @gitnative,
+  "mizchi/bit/osfs" @osfs,
+  "mizchi/bit/x/hub" @hub,
+  "mizchi/bit/x/hub/native" @hub_native,
+  "mizchi/bit/x/agent" @agent,
+  "mizchi/bit/x/fs" @bitfs,
+  "mizchi/bit/protocol" @protocol,
+  "mizchi/bit/pack" @pack,
+  "moonbitlang/async" @async,
+  "moonbitlang/async/process" @process,
 }
+
+warnings = "-29"
 
 options(
   targets: {

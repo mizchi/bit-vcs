@@ -1,14 +1,15 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/lib" as @lib,
-  "moonbitlang/core/encoding/utf8" as @utf8,
+  "mizchi/bit" @git,
+  "mizchi/bit/lib" @lib,
+  "moonbitlang/core/encoding/utf8" @utf8,
 }
 
-import "test" {
-  "mizchi/bit/lib" as @lib,
-}
+import {
+  "mizchi/bit/lib" @lib,
+} for "test"
+
+warnings = "-29"
 
 options(
   targets: { "sync_wbtest.mbt": [ "native" ] },
-  "warn-list": "-29",
 )

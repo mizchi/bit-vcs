@@ -1,13 +1,15 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/pack" as @pack,
-  "moonbitlang/async" as @async,
+  "mizchi/bit" @git,
+  "mizchi/bit/pack" @pack,
+  "moonbitlang/async" @async,
 }
 
-import "test" {
-  "mizchi/bit" as @git,
-  "mizchi/bit/pack" as @pack,
-}
+import {
+  "mizchi/bit" @git,
+  "mizchi/bit/pack" @pack,
+} for "test"
+
+warnings = "-29"
 
 options(
   targets: {

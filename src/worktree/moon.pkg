@@ -1,8 +1,10 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/lib" as @gitlib,
+  "mizchi/bit" @git,
+  "mizchi/bit/lib" @gitlib,
 }
 
-import "test" {
-  "moonbitlang/async" as @async,
-}
+import {
+  "moonbitlang/async" @async,
+} for "test"
+
+warnings = "-29"

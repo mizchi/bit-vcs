@@ -1,8 +1,10 @@
 import {
-  "moonbitlang/core/json" as @json,
-  "mizchi/bit/x/agent/llm" as @agent_llm,
-  "mizchi/llm/ffi" as @llm_ffi,
+  "moonbitlang/core/json" @json,
+  "mizchi/bit/x/agent/llm" @agent_llm,
+  "mizchi/llm/ffi" @llm_ffi,
 }
+
+warnings = "-29"
 
 options(
   is_main: true,

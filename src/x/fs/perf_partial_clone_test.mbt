@@ -16,6 +16,10 @@ test "perf: partial clone access pattern verification" {
     )
     return
   }
+  if not(@lib.is_partial_clone(osfs, git_dir)) {
+    println("Skipping: repo is not a partial clone")
+    return
+  }
   println("\n=== Partial Clone Access Pattern Test ===\n")
 
   // Get commit ID
@@ -118,6 +122,10 @@ test "perf: verify lazy vs eager difference" {
   let git_dir = "/tmp/partial-clone-test/tree-sitter-nickel/.git"
   if not(osfs.is_dir(git_dir)) {
     println("Skipping: partial clone test repo not found")
+    return
+  }
+  if not(@lib.is_partial_clone(osfs, git_dir)) {
+    println("Skipping: repo is not a partial clone")
     return
   }
   println("\n=== Lazy vs Eager Mode Comparison ===\n")

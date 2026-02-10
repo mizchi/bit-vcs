@@ -1,10 +1,8 @@
 import {
-  "mizchi/bit" as @git,
+  "mizchi/bit" @git,
   "mizchi/bit/lib",
   "mizchi/bit/x/fs",
   "mizchi/zlib",
 }
 
-options(
-  "warn-list": "-unused_constructor-29",
-)
+warnings = "-unused_constructor-29"

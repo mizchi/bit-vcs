@@ -3,8 +3,8 @@
 ///|
 async fn capture_cancel_error() -> Error {
   let err_ref : Ref[Error?] = Ref::new(None)
-  @async.with_task_group(fn(root) {
-    let task = root.spawn(allow_failure=true, fn() {
+  @async.with_task_group(async fn(root) {
+    let task = root.spawn(allow_failure=true, async fn() {
       @async.sleep(10000) catch {
         err => {
           err_ref.val = Some(err)

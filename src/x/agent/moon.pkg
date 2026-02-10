@@ -1,12 +1,14 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/lib" as @lib,
-  "mizchi/bit/x/hub" as @hub,
+  "mizchi/bit" @git,
+  "mizchi/bit/lib" @lib,
+  "mizchi/bit/x/hub" @hub,
 }
 
-import "test" {
-  "mizchi/bit/lib" as @lib,
-}
+import {
+  "mizchi/bit/lib" @lib,
+} for "test"
+
+warnings = "-29"
 
 options(
   targets: { "agent_test.mbt": [ "native" ] },

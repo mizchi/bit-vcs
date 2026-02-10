@@ -1,8 +1,10 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/ignore" as @ignore,
-  "mizchi/bit/io" as @gitio,
-  "mizchi/bit/lib" as @gitlib,
-  "moonbitlang/core/bench" as @bench,
-  "moonbitlang/core/encoding/utf8" as @utf8,
+  "mizchi/bit" @git,
+  "mizchi/bit/ignore" @ignore,
+  "mizchi/bit/io" @gitio,
+  "mizchi/bit/lib" @gitlib,
+  "moonbitlang/core/bench" @bench,
+  "moonbitlang/core/encoding/utf8" @utf8,
 }
+
+warnings = "-29"

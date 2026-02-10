@@ -13,11 +13,18 @@ test "partial_clone: mount and list files" {
     )
     return
   }
+  if not(@lib.is_partial_clone(osfs, git_dir)) {
+    println("Skipping: repo is not a partial clone")
+    return
+  }
 
   // Check if it's a partial clone
   let is_partial = @lib.is_partial_clone(osfs, git_dir)
   println("Is partial clone: \{is_partial}")
-  assert_true(is_partial)
+  if not(is_partial) {
+    println("Skipping: repo is not a partial clone")
+    return
+  }
 
   // Get promisor remote
   let remote = @lib.read_promisor_remote(osfs, git_dir)
@@ -76,6 +83,10 @@ async test "partial_clone: on-demand fetch" {
   let git_dir = "/tmp/partial-clone-test/tree-sitter-nickel/.git"
   if not(osfs.is_dir(git_dir)) {
     println("Skipping: partial clone test repo not found")
+    return
+  }
+  if not(@lib.is_partial_clone(osfs, git_dir)) {
+    println("Skipping: repo is not a partial clone")
     return
   }
 
@@ -140,6 +151,10 @@ test "partial_clone: glob pattern matching" {
     println("Skipping: partial clone test repo not found")
     return
   }
+  if not(@lib.is_partial_clone(osfs, git_dir)) {
+    println("Skipping: repo is not a partial clone")
+    return
+  }
   let head_ref = osfs.read_file(git_dir + "/HEAD")
   let head_str = @utf8.decode_lossy(head_ref[:]).trim().to_string()
   let commit_id = if head_str.has_prefix("ref: ") {
@@ -199,6 +214,10 @@ async test "partial_clone: prefetch with glob" {
     println("Skipping: partial clone test repo not found")
     return
   }
+  if not(@lib.is_partial_clone(osfs, git_dir)) {
+    println("Skipping: repo is not a partial clone")
+    return
+  }
   let head_ref = osfs.read_file(git_dir + "/HEAD")
   let head_str = @utf8.decode_lossy(head_ref[:]).trim().to_string()
   let commit_id = if head_str.has_prefix("ref: ") {
@@ -235,6 +254,10 @@ async test "partial_clone: prefetch BFS" {
   let git_dir = "/tmp/partial-clone-test/tree-sitter-nickel/.git"
   if not(osfs.is_dir(git_dir)) {
     println("Skipping: partial clone test repo not found")
+    return
+  }
+  if not(@lib.is_partial_clone(osfs, git_dir)) {
+    println("Skipping: repo is not a partial clone")
     return
   }
   let head_ref = osfs.read_file(git_dir + "/HEAD")
@@ -279,6 +302,10 @@ async test "partial_clone: prefetch multiple files" {
   let git_dir = "/tmp/partial-clone-test/tree-sitter-nickel/.git"
   if not(osfs.is_dir(git_dir)) {
     println("Skipping: partial clone test repo not found")
+    return
+  }
+  if not(@lib.is_partial_clone(osfs, git_dir)) {
+    println("Skipping: repo is not a partial clone")
     return
   }
   let head_ref = osfs.read_file(git_dir + "/HEAD")

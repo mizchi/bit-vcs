@@ -1,13 +1,15 @@
 import {
-  "mizchi/llm" as @llmlib,
-  "mizchi/llm/ffi" as @ffi,
-  "mizchi/llm/anthropic" as @anthropic,
-  "mizchi/llm/openai" as @openai,
-  "mizchi/llm/claude_code" as @claude_code,
-  "moonbitlang/core/json" as @json,
-  "moonbitlang/core/strconv" as @strconv,
-  "moonbitlang/x/sys" as @sys,
+  "mizchi/llm" @llmlib,
+  "mizchi/llm/ffi" @ffi,
+  "mizchi/llm/anthropic" @anthropic,
+  "mizchi/llm/openai" @openai,
+  "mizchi/llm/claude_code" @claude_code,
+  "moonbitlang/core/json" @json,
+  "moonbitlang/core/strconv" @strconv,
+  "moonbitlang/x/sys" @sys,
 }
+
+warnings = "-29"
 
 options(
   targets: {

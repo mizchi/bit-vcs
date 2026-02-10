@@ -1,30 +1,32 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/pack" as @pack,
-  "mizchi/bit/protocol" as @protocol,
-  "mizchi/bit/native" as @gitnative,
-  "mizchi/bit/lib" as @gitlib,
-  "mizchi/bit/ignore" as @ignore,
-  "mizchi/bit/io" as @gitio,
-  "mizchi/bit/io/native" as @gitionative,
-  "moonbitlang/async" as @async,
-  "moonbitlang/async/fs" as @afs,
-  "moonbitlang/async/http" as @http,
-  "moonbitlang/async/process" as @process,
+  "mizchi/bit" @git,
+  "mizchi/bit/pack" @pack,
+  "mizchi/bit/protocol" @protocol,
+  "mizchi/bit/native" @gitnative,
+  "mizchi/bit/lib" @gitlib,
+  "mizchi/bit/ignore" @ignore,
+  "mizchi/bit/io" @gitio,
+  "mizchi/bit/io/native" @gitionative,
+  "moonbitlang/async" @async,
+  "moonbitlang/async/fs" @afs,
+  "moonbitlang/async/http" @http,
+  "moonbitlang/async/process" @process,
   "mizchi/zlib",
-  "moonbitlang/core/encoding/utf8" as @utf8,
+  "moonbitlang/core/encoding/utf8" @utf8,
   "moonbitlang/x/fs",
 }
 
-import "test" {
-  "moonbitlang/core/bench" as @bench,
-  "mizchi/bit/osfs" as @osfs,
-}
+import {
+  "moonbitlang/core/bench" @bench,
+  "mizchi/bit/osfs" @osfs,
+} for "test"
 
-import "wbtest" {
-  "moonbitlang/core/bench" as @bench,
-  "mizchi/bit/osfs" as @osfs,
-}
+import {
+  "moonbitlang/core/bench" @bench,
+  "mizchi/bit/osfs" @osfs,
+} for "wbtest"
+
+warnings = "-29"
 
 options(
   targets: {

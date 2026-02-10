@@ -1,17 +1,19 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/lib" as @lib,
-  "moonbitlang/core/encoding/utf8" as @utf8,
+  "mizchi/bit" @git,
+  "mizchi/bit/lib" @lib,
+  "moonbitlang/core/encoding/utf8" @utf8,
 }
 
-import "test" {
-  "mizchi/bit/lib" as @lib,
-  "mizchi/bit/osfs" as @osfs,
+import {
+  "mizchi/bit/lib" @lib,
+  "mizchi/bit/osfs" @osfs,
   "mizchi/zlib",
-  "moonbitlang/core/bench" as @bench,
+  "moonbitlang/core/bench" @bench,
   "moonbitlang/async",
-  "moonbitlang/x/sys" as @sys,
-}
+  "moonbitlang/x/sys" @sys,
+} for "test"
+
+warnings = "-unused_value-29"
 
 options(
   targets: {
@@ -25,5 +27,4 @@ options(
     "perf_partial_clone_test.mbt": [ "native" ],
     "verify_lazy_test.mbt": [ "native" ],
   },
-  "warn-list": "-unused_value-29",
 )

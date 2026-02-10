@@ -1,22 +1,24 @@
 import {
-  "mizchi/bit" as @git,
+  "mizchi/bit" @git,
   "mizchi/zlib",
 }
 
-import "test" {
-  "mizchi/bit" as @git,
-  "mizchi/bit/protocol" as @protocol,
-  "moonbitlang/async" as @async,
-  "moonbitlang/async/process" as @process,
+import {
+  "mizchi/bit" @git,
+  "mizchi/bit/protocol" @protocol,
+  "moonbitlang/async" @async,
+  "moonbitlang/async/process" @process,
   "moonbitlang/x/fs",
   "mizchi/tempfile",
   "moonbitlang/core/encoding/utf8",
-  "moonbitlang/core/strconv" as @strconv,
-}
+  "moonbitlang/core/strconv" @strconv,
+} for "test"
 
-import "wbtest" {
+import {
   "moonbitlang/core/encoding/utf8",
-}
+} for "wbtest"
+
+warnings = "-29"
 
 options(
   targets: {

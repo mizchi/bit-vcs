@@ -140,7 +140,7 @@ fn parse_commit_details(content : Bytes) -> (String, Int64, String) {
         None => author = rest
       }
     }
-  } else {
+  } nobreak {
     ()
   }
   (author, timestamp, message_buf.to_string().trim().to_string())

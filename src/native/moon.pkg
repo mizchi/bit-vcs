@@ -1,13 +1,15 @@
 import {
-  "mizchi/bit" as @git,
-  "mizchi/bit/io/native" as @gitionative,
-  "mizchi/bit/pack" as @pack,
-  "mizchi/bit/protocol" as @protocol,
-  "moonbitlang/async" as @async,
-  "moonbitlang/async/process" as @process,
+  "mizchi/bit" @git,
+  "mizchi/bit/io/native" @gitionative,
+  "mizchi/bit/pack" @pack,
+  "mizchi/bit/protocol" @protocol,
+  "moonbitlang/async" @async,
+  "moonbitlang/async/process" @process,
   "moonbitlang/x/fs",
   "moonbitlang/core/encoding/utf8",
 }
+
+warnings = "-29"
 
 options(
   targets: {

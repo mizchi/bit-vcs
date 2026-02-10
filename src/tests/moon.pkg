@@ -1,10 +1,12 @@
-import "test" {
-  "mizchi/bit" as @git,
-  "mizchi/bit/pack" as @pack,
-  "mizchi/bit/protocol" as @protocol,
+import {
+  "mizchi/bit" @git,
+  "mizchi/bit/pack" @pack,
+  "mizchi/bit/protocol" @protocol,
   "mizchi/zlib",
   "moonbitlang/core/encoding/utf8",
-}
+} for "test"
+
+warnings = "-29"
 
 options(
   targets: { "integration_test.mbt": [ "wasm-gc", "wasm" ] },

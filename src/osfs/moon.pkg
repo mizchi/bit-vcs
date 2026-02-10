@@ -1,9 +1,10 @@
 import {
-  "mizchi/bit" as @git,
+  "mizchi/bit" @git,
   "moonbitlang/x/fs",
 }
 
+warnings = "-29"
+
 options(
   targets: { "osfs.mbt": [ "native" ] },
-  "warn-list": "-29",
 )

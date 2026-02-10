@@ -1,4 +1,6 @@
 import {
   "mizchi/zlib",
-  "mizchi/bit/hash" as @hash,
+  "mizchi/bit/hash" @hash,
 }
+
+warnings = "-29"
