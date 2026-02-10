@@ -290,20 +290,26 @@ fn print_agent_llm_usage() -> Unit {
   println("  --task <text>          Task description (required)")
   println("  --orchestrate          Run as orchestrator (parallel subtasks)")
   println(
-    "  --exec-mode <mode>     process|in-process|cloudflare (default: process)",
+    "  --exec-mode <mode>     process|in-process|cloudflare (cloudflare-static, deno-remote aliases; default: process)",
   )
   println("  --in-process           Alias of --exec-mode in-process")
   println(
-    "  --orchestrator-url <url> Cloudflare orchestrator URL (cloudflare mode)",
+    "  --orchestrator-url <url> Cloudflare orchestrator URL (cloudflare static-check + deno execution mode)",
   )
   println("  --orchestrator-token <token> Bearer token for cloudflare mode")
   println("  --work-dir <path>      Working directory (default: cwd)")
   println("  --provider <name>      openrouter|anthropic|openai|claude_code")
   println("  --model <name>         Model name (default: provider default)")
   println("  --max-steps <n>        Max agent steps (default: 20)")
-  println("  --max-runtime-sec <n>  Max runtime seconds before forced stop (default: 900)")
-  println("  --max-tool-calls <n>   Max tool calls before forced stop (default: 60)")
-  println("  --stop-file <path>     Stop when this file appears (or BIT_AGENT_STOP_FILE)")
+  println(
+    "  --max-runtime-sec <n>  Max runtime seconds before forced stop (default: 900)",
+  )
+  println(
+    "  --max-tool-calls <n>   Max tool calls before forced stop (default: 60)",
+  )
+  println(
+    "  --stop-file <path>     Stop when this file appears (or BIT_AGENT_STOP_FILE)",
+  )
   println("  --max-workers <n>      Max parallel workers (default: 3)")
   println("  --branch <name>        Git branch (default: agent/<timestamp>)")
   println("  --target-branch <name> PR target branch (default: main)")

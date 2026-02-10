@@ -888,12 +888,7 @@ fn normalize_dispatch_command(cmd : String) -> String {
 fn command_handles_builtin_help(cmd : String) -> Bool {
   for
     name in [
-      "receive-pack",
-      "upload-pack",
-      "pack-objects",
-      "index-pack",
-      "scalar",
-      "agent",
+      "receive-pack", "upload-pack", "pack-objects", "index-pack", "scalar", "agent",
     ] {
     if cmd == name {
       return true

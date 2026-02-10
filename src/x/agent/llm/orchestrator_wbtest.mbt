@@ -79,6 +79,13 @@ test "parse_orchestrator_exec_mode parses known aliases" {
   assert_true(parse_orchestrator_exec_mode("in-process") == InProcessMode)
   assert_true(parse_orchestrator_exec_mode("self") == InProcessMode)
   assert_true(parse_orchestrator_exec_mode("cloudflare") == CloudflareMode)
+  assert_true(
+    parse_orchestrator_exec_mode("cloudflare-static") == CloudflareMode,
+  )
+  assert_true(
+    parse_orchestrator_exec_mode("cloudflare-static-deno") == CloudflareMode,
+  )
+  assert_true(parse_orchestrator_exec_mode("deno-remote") == CloudflareMode)
   assert_true(parse_orchestrator_exec_mode("remote") == CloudflareMode)
 }
 
@@ -116,9 +123,69 @@ test "normalize_orchestrator_submit_url rejects empty value" {
 test "cloudflare_job_status_url rewrites submit endpoint to job endpoint" {
   assert_eq(
     cloudflare_job_status_url(
-      "https://cluster.example.com/api/v1/jobs/submit",
-      "job-123",
+      "https://cluster.example.com/api/v1/jobs/submit", "job-123",
     ),
     "https://cluster.example.com/api/v1/jobs/job-123",
   )
+}
+
+///|
+test "subtask_task_for_agent appends file scope" {
+  let plain : SubtaskPlan = { task: "implement feature", files: [] }
+  assert_eq(subtask_task_for_agent(plain), "implement feature")
+  let scoped : SubtaskPlan = {
+    task: "refactor parser",
+    files: ["src/parser.mbt", "src/parser_test.mbt"],
+  }
+  assert_eq(
+    subtask_task_for_agent(scoped),
+    "refactor parser (files: src/parser.mbt, src/parser_test.mbt)",
+  )
+  assert_eq(
+    subtask_display(scoped),
+    "refactor parser [files: src/parser.mbt, src/parser_test.mbt]",
+  )
+}
+
+///|
+test "create_cloudflare_payload includes files and static-check policy" {
+  let config : OrchestratorConfig = {
+    work_dir: "/tmp/repo",
+    task: "top-level task",
+    provider_name: "openrouter",
+    model: "moonshot/kimi-k2.5",
+    max_workers: 4,
+    max_runtime_sec: 600,
+    max_tool_calls: 200,
+    stop_file: ".bit-stop",
+    target_branch: "main",
+    auto_pr: true,
+    verbose: false,
+    exec_mode: CloudflareMode,
+    orchestrator_url: "https://cluster.example.com",
+    orchestrator_token: "token",
+  }
+  let payload = create_cloudflare_payload(
+    config,
+    "session-1",
+    "agent-0",
+    "agent/session-1-0",
+    "update tests",
+    ["src/a.mbt", "src/a_test.mbt"],
+  )
+  match payload {
+    Object(obj) => {
+      assert_eq(obj.get("objective_id"), Some("session-1/agent-0".to_json()))
+      assert_eq(obj.get("task"), Some("update tests".to_json()))
+      assert_eq(
+        obj.get("files"),
+        Some(Json::array(["src/a.mbt".to_json(), "src/a_test.mbt".to_json()])),
+      )
+      assert_eq(obj.get("branch"), Some("agent/session-1-0".to_json()))
+      assert_eq(obj.get("static_check_only"), Some(Json::boolean(true)))
+      assert_eq(obj.get("execution_backend"), Some("deno-worker".to_json()))
+      assert_eq(obj.get("execution_runtime"), Some("deno".to_json()))
+    }
+    _ => assert_true(false)
+  }
 }

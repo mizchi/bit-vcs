@@ -179,6 +179,28 @@ fn[X] return_or_raise_cancellation(err : Error, fallback : X) -> X raise {
 }
 
 ///|
+fn collect_prefetch_paths(task : @agent.AgentTask) -> Array[String] {
+  let seen : Map[String, Bool] = {}
+  let paths : Array[String] = []
+  for edit in task.edits {
+    let raw_path = match edit {
+      @agent.FileEdit::Write(path, _) => path
+      @agent.FileEdit::Delete(path) => path
+    }
+    let path = raw_path.trim().to_string()
+    if path.is_empty() {
+      continue
+    }
+    if seen.contains(path) {
+      continue
+    }
+    seen[path] = true
+    paths.push(path)
+  }
+  paths
+}
+
+///|
 /// Run a task: create sandbox Fs, apply edits, snapshot, create PR, push.
 pub async fn run_task(
   task : @agent.AgentTask,
@@ -197,6 +219,19 @@ pub async fn run_task(
         @agent.TaskResult::Error(err.to_string()),
       )
     }
+  }
+  let prefetch_paths = collect_prefetch_paths(task)
+  if not(prefetch_paths.is_empty()) {
+    ignore(
+      sandbox.prefetch(rfs, fs, prefetch_paths) catch {
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          0
+        }
+      },
+    )
   }
   let tree : FsWorkingTree = { fs: sandbox, backing_fs: fs, rfs }
   let working_tree : &@lib.WorkingTree = tree

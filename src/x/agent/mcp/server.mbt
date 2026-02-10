@@ -215,11 +215,11 @@ fn build_tool_defs() -> Json {
   })
   o_props["exec_mode"] = Json::object({
     "type": "string".to_json(),
-    "description": "Execution mode: process|in-process|cloudflare".to_json(),
+    "description": "Execution mode: process|in-process|cloudflare (cloudflare-static, deno-remote aliases)".to_json(),
   })
   o_props["orchestrator_url"] = Json::object({
     "type": "string".to_json(),
-    "description": "Cloudflare orchestrator URL (base or /api/v1/jobs/submit)".to_json(),
+    "description": "Cloudflare orchestrator URL (base or /api/v1/jobs/submit, static-check on cloudflare + execution on deno-worker)".to_json(),
   })
   o_props["orchestrator_token"] = Json::object({
     "type": "string".to_json(),

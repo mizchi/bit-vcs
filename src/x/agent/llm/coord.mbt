@@ -236,7 +236,7 @@ impl CoordinationBackend for FileCoordinationBackend with append_event(
   let seq = strip_trailing_whitespace(
     exec("ls " + shell_escape(dir + "/events") + " 2>/dev/null | wc -l"),
   )
-  let seq_num = @strconv.parse_int(seq) catch { _ => 0 }
+  let seq_num = @strconv.parse_int(seq.trim().to_string()) catch { _ => 0 }
   let padded = pad_int(seq_num, 6)
   let filename = padded + "_" + agent_id + ".json"
   let path = dir + "/events/" + filename

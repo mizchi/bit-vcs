@@ -72,6 +72,16 @@ e2e:
 test-subdir:
     @bash t/run-tests.sh t900
 
+# Distributed agent/orchestration focused checks (excluding upstream git/t)
+test-distributed:
+    moon test --target native -p mizchi/bit/x/agent
+    moon test --target native -p mizchi/bit/x/agent/llm
+    moon test --target native -p mizchi/bit/x/agent/mcp
+    moon test --target native -p mizchi/bit/x/agent/native
+    moon test --target native -p mizchi/bit/x/hub
+    moon test --target native -p mizchi/bit/x/hub/native
+    moon test --target native -p mizchi/bit/x/kv
+
 # Pre-release check
 release-check: fmt info check test e2e
 

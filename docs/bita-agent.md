@@ -147,20 +147,21 @@ read-only ツール: `read_file`, `list_directory`, `list_files_recursive`, `sea
 
 1. Plan subtasks (LLM planner)
 2. Validate file overlap
-3. `exec_mode=cloudflare` の場合: Cloudflare orchestrator に subtask を submit して終了
-4. それ以外: worktrees + coordination directory を作成
-5. Spawn agents via AgentRunner (process or in-process)
-6. Monitor progress (stall detection, error pattern detection)
-7. Commit changes per worktree
-8. Merge branches
-9. Cleanup
-10. Optional: create PR
+3. `exec_mode=cloudflare` の場合: Cloudflare orchestrator に subtask を submit し、job status を polling
+4. Cloudflare payload には `static_check_only=true` / `execution_backend=deno-worker` を含め、静的検査は Cloudflare・実行は Deno Worker に委譲
+5. それ以外: worktrees + coordination directory を作成
+6. Spawn agents via AgentRunner (process or in-process)
+7. Monitor progress (stall detection, error pattern detection)
+8. Commit changes per worktree
+9. Merge branches
+10. Cleanup
+11. Optional: create PR
 
 `bit agent llm --orchestrate` の主なモード:
 
 - `--exec-mode process` (default): 既存の並列プロセス実行
 - `--exec-mode in-process`: bit プロセス内で逐次実行 (self-agent モード)
-- `--exec-mode cloudflare --orchestrator-url <url>`: Cloudflare worker orchestrator へ投入
+- `--exec-mode cloudflare --orchestrator-url <url>`: Cloudflare worker orchestrator へ投入（`cloudflare-static` / `cloudflare-static-deno` / `deno-remote` alias）
 
 ### Monitor Decisions
 
@@ -212,9 +213,10 @@ coord : &CoordinationBackend?  # None = FileCoordinationBackend
 
 ```
 work_dir, task, provider_name, model
-max_workers, target_branch
-auto_pr, verbose
-in_process : Bool   # true = sequential in-process, false = OS process spawn
+max_workers, max_runtime_sec, max_tool_calls, stop_file
+target_branch, auto_pr, verbose
+exec_mode : process | in-process | cloudflare
+orchestrator_url, orchestrator_token
 ```
 
 ## Future: moonix Integration

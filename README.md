@@ -108,6 +108,11 @@ Full upstream run (`just git-t`) summary on macOS (2026-02-07):
 - `just test-subdir` (`t/run-tests.sh t900`): pass
 - `just git-t-allowlist`: pass (`success 24,274 / failed 0 / broken 177`)
 
+### Distributed/Agent testing
+
+- `just test-distributed`: run focused checks for `x/agent`, `x/hub`, `x/kv`
+- testing strategy and invariants: `docs/distributed-testing.md`
+
 ## Environment Variables
 
 - `BIT_BENCH_GIT_DIR`: override .git path for bench_real (x/fs benchmarks).

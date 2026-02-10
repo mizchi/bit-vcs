@@ -164,11 +164,16 @@ fn is_exec_error(output : String) -> Bool {
 ///|
 fn now_unix_seconds(exec_cmd : (String) -> String) -> Int {
   let out = strip_trailing_whitespace(exec_cmd("date +%s"))
-  @strconv.parse_int(out) catch { _ => 0 }
+  @strconv.parse_int(out) catch {
+    _ => 0
+  }
 }
 
 ///|
-fn is_stop_file_triggered(stop_file : String, exec_cmd : (String) -> String) -> Bool {
+fn is_stop_file_triggered(
+  stop_file : String,
+  exec_cmd : (String) -> String,
+) -> Bool {
   let path = stop_file.trim().to_string()
   if path.is_empty() {
     return false
@@ -193,7 +198,9 @@ fn evaluate_agent_stop_reason(
   if stop_file_triggered {
     return Some("cancel:stop_file")
   }
-  if max_runtime_sec > 0 && start_sec > 0 && now_sec - start_sec >= max_runtime_sec {
+  if max_runtime_sec > 0 &&
+    start_sec > 0 &&
+    now_sec - start_sec >= max_runtime_sec {
     return Some("budget:max_runtime_sec")
   }
   if max_tool_calls > 0 && tool_calls >= max_tool_calls {
@@ -416,7 +423,11 @@ pub fn run_llm_agent(
             c.write_status(
               config.coord_dir,
               config.agent_id,
-              if was_cancelled.val { Cancelled } else { Done },
+              if was_cancelled.val {
+                Cancelled
+              } else {
+                Done
+              },
             )
             c.append_event(
               config.coord_dir,

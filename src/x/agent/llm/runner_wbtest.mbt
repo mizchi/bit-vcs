@@ -154,70 +154,30 @@ test "run_auto_commit_steps succeeds when all commands succeed" {
 
 ///|
 test "evaluate_agent_stop_reason handles external cancellation" {
-  let reason = evaluate_agent_stop_reason(
-    true,
-    100,
-    101,
-    900,
-    0,
-    60,
-    false,
-  )
+  let reason = evaluate_agent_stop_reason(true, 100, 101, 900, 0, 60, false)
   assert_eq(reason, Some("cancel:requested"))
 }
 
 ///|
 test "evaluate_agent_stop_reason stops on runtime budget exceeded" {
-  let reason = evaluate_agent_stop_reason(
-    false,
-    100,
-    201,
-    100,
-    0,
-    60,
-    false,
-  )
+  let reason = evaluate_agent_stop_reason(false, 100, 201, 100, 0, 60, false)
   assert_eq(reason, Some("budget:max_runtime_sec"))
 }
 
 ///|
 test "evaluate_agent_stop_reason stops on tool call budget exceeded" {
-  let reason = evaluate_agent_stop_reason(
-    false,
-    100,
-    120,
-    900,
-    61,
-    60,
-    false,
-  )
+  let reason = evaluate_agent_stop_reason(false, 100, 120, 900, 61, 60, false)
   assert_eq(reason, Some("budget:max_tool_calls"))
 }
 
 ///|
 test "evaluate_agent_stop_reason stops on stop file trigger" {
-  let reason = evaluate_agent_stop_reason(
-    false,
-    100,
-    120,
-    900,
-    10,
-    60,
-    true,
-  )
+  let reason = evaluate_agent_stop_reason(false, 100, 120, 900, 10, 60, true)
   assert_eq(reason, Some("cancel:stop_file"))
 }
 
 ///|
 test "evaluate_agent_stop_reason keeps running within budget" {
-  let reason = evaluate_agent_stop_reason(
-    false,
-    100,
-    120,
-    900,
-    10,
-    60,
-    false,
-  )
+  let reason = evaluate_agent_stop_reason(false, 100, 120, 900, 10, 60, false)
   assert_eq(reason, None)
 }

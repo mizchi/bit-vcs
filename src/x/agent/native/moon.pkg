@@ -17,6 +17,7 @@ options(
   targets: {
     "cancellation_wbtest.mbt": [ "native" ],
     "runner.mbt": [ "native" ],
+    "runner_wbtest.mbt": [ "native" ],
     "server.mbt": [ "native" ],
   },
 )

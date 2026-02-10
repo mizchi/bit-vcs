@@ -28,6 +28,29 @@ jobs:
       - name: Moon test (native)
         run: moon test --target native
 
+  distributed-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install MoonBit CLI
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - name: Moon update
+        run: moon update
+      - name: Distributed tests
+        run: |
+          moon test --target native -p mizchi/bit/x/agent
+          moon test --target native -p mizchi/bit/x/agent/llm
+          moon test --target native -p mizchi/bit/x/agent/mcp
+          moon test --target native -p mizchi/bit/x/agent/native
+          moon test --target native -p mizchi/bit/x/hub
+          moon test --target native -p mizchi/bit/x/hub/native
+          moon test --target native -p mizchi/bit/x/kv
+
   git-compat:
     runs-on: ubuntu-latest
     strategy:

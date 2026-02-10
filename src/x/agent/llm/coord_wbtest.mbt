@@ -72,6 +72,61 @@ test "evaluate_progress Continue" {
 }
 
 ///|
+test "evaluate_progress CancelAgent on consecutive errors" {
+  coord_cleanup("/tmp/bit-orch-wbtest-errors")
+  let session = coord_init("/tmp", "wbtest-errors")
+  coord_init_agent(session, "a-0")
+  coord_append_event(session, "a-0", Error(message="e1"))
+  coord_append_event(session, "a-0", Error(message="e2"))
+  coord_append_event(session, "a-0", Error(message="e3"))
+  let snapshots : Array[AgentSnapshot] = [
+    {
+      agent_id: "a-0",
+      status: Running,
+      pid: 100,
+      step: 0,
+      branch: "b0",
+      last_step_time: 0L,
+    },
+  ]
+  let decision = evaluate_progress(snapshots, session, 200L, fn(_s) {  })
+  match decision {
+    CancelAgent(id~, reason~) => {
+      assert_eq(id, "a-0")
+      assert_true(reason.contains("3+ consecutive errors"))
+    }
+    _ => assert_true(false)
+  }
+  coord_cleanup(session)
+}
+
+///|
+test "evaluate_progress CancelAgent on stalled runner" {
+  coord_cleanup("/tmp/bit-orch-wbtest-stalled")
+  let session = coord_init("/tmp", "wbtest-stalled")
+  coord_init_agent(session, "a-1")
+  let snapshots : Array[AgentSnapshot] = [
+    {
+      agent_id: "a-1",
+      status: Running,
+      pid: 101,
+      step: 2,
+      branch: "b1",
+      last_step_time: 100L,
+    },
+  ]
+  let decision = evaluate_progress(snapshots, session, 500L, fn(_s) {  })
+  match decision {
+    CancelAgent(id~, reason~) => {
+      assert_eq(id, "a-1")
+      assert_true(reason.contains("stalled"))
+    }
+    _ => assert_true(false)
+  }
+  coord_cleanup(session)
+}
+
+///|
 test "pad_int" {
   assert_eq(pad_int(5, 6), "000005")
   assert_eq(pad_int(123, 6), "000123")

@@ -1,6 +1,7 @@
 ///|
 priv struct WorkerTask {
   task : String
+  files : Array[String]
   work_dir : String
   branch : String
   agent_id : String
@@ -48,7 +49,12 @@ pub fn parse_orchestrator_exec_mode(raw : String) -> OrchestratorExecMode {
   let normalized = raw.trim().to_string_view().to_lower().to_string()
   match normalized {
     "in-process" | "inprocess" | "self" | "self-agent" => InProcessMode
-    "cloudflare" | "remote" | "remote-cloudflare" => CloudflareMode
+    "cloudflare"
+    | "remote"
+    | "remote-cloudflare"
+    | "cloudflare-static"
+    | "cloudflare-static-deno"
+    | "deno-remote" => CloudflareMode
     "process" | "local" => ProcessMode
     _ => ProcessMode
   }
@@ -74,7 +80,7 @@ fn cloudflare_job_status_url(submit_url : String, job_id : String) -> String {
   let suffix = "/submit"
   if submit_url.has_suffix(suffix) {
     let end = submit_url.length() - suffix.length()
-    String::unsafe_substring(submit_url, start=0, end=end) + "/" + job_id
+    String::unsafe_substring(submit_url, start=0, end~) + "/" + job_id
   } else {
     submit_url + "/" + job_id
   }
@@ -422,10 +428,28 @@ fn validate_file_overlap(plans : Array[SubtaskPlan]) -> Array[String] {
 }
 
 ///|
+fn subtask_task_for_agent(plan : SubtaskPlan) -> String {
+  if plan.files.is_empty() {
+    plan.task
+  } else {
+    plan.task + " (files: " + plan.files.join(", ") + ")"
+  }
+}
+
+///|
+fn subtask_display(plan : SubtaskPlan) -> String {
+  if plan.files.is_empty() {
+    plan.task
+  } else {
+    plan.task + " [files: " + plan.files.join(", ") + "]"
+  }
+}
+
+///|
 fn plan_subtasks(
   config : OrchestratorConfig,
   log : (String) -> Unit,
-) -> Array[String] {
+) -> Array[SubtaskPlan] {
   let file_listing = exec(
     "cd " +
     shell_escape(config.work_dir) +
@@ -467,7 +491,7 @@ fn plan_subtasks(
   }
   let plans = extract_subtask_plans(response)
   if plans.is_empty() {
-    return [config.task]
+    return [{ task: config.task, files: [] }]
   }
   let normalized_plans = normalize_subtask_plans(plans, config.work_dir, log)
   // Validate file overlap
@@ -479,18 +503,9 @@ fn plan_subtasks(
         conflicts.iter().map(fn(s) { s }).collect().join(", "),
       )
     }
-    return [config.task]
+    return [{ task: config.task, files: [] }]
   }
-  // Build task descriptions with file scope hints
-  let tasks : Array[String] = []
-  for plan in normalized_plans {
-    if plan.files.is_empty() {
-      tasks.push(plan.task)
-    } else {
-      tasks.push(plan.task + " (files: " + plan.files.join(", ") + ")")
-    }
-  }
-  tasks
+  normalized_plans
 }
 
 ///|
@@ -543,10 +558,16 @@ fn create_cloudflare_payload(
   agent_id : String,
   branch : String,
   task : String,
+  files : Array[String],
 ) -> Json {
   let payload : Map[String, Json] = {}
+  let files_json : Array[Json] = []
+  for file in files {
+    files_json.push(file.to_json())
+  }
   payload["objective_id"] = (session_id + "/" + agent_id).to_json()
   payload["task"] = task.to_json()
+  payload["files"] = Json::array(files_json)
   payload["agent_id"] = agent_id.to_json()
   payload["branch"] = branch.to_json()
   payload["target_branch"] = config.target_branch.to_json()
@@ -557,6 +578,9 @@ fn create_cloudflare_payload(
   payload["max_tool_calls"] = config.max_tool_calls.to_json()
   payload["stop_file"] = config.stop_file.to_json()
   payload["work_dir"] = config.work_dir.to_json()
+  payload["static_check_only"] = Json::boolean(true)
+  payload["execution_backend"] = "deno-worker".to_json()
+  payload["execution_runtime"] = "deno".to_json()
   payload["source"] = "bit-orchestrator".to_json()
   Json::object(payload)
 }
@@ -641,18 +665,25 @@ fn fetch_cloudflare_job_status(
   } else {
     " -H " + shell_escape("authorization: Bearer " + auth_token)
   }
-  let cmd = "curl -sS" +
-    auth_header +
-    " " +
-    shell_escape(status_url)
+  let cmd = "curl -sS" + auth_header + " " + shell_escape(status_url)
   let output = exec(cmd)
   if is_exec_error(output) {
-    log("[orchestrator] ERROR cloudflare status request failed for " + job_id + ": " + output)
+    log(
+      "[orchestrator] ERROR cloudflare status request failed for " +
+      job_id +
+      ": " +
+      output,
+    )
     return None
   }
   let parsed = @json.parse(output) catch {
     _ => {
-      log("[orchestrator] ERROR cloudflare status invalid response for " + job_id + ": " + output)
+      log(
+        "[orchestrator] ERROR cloudflare status invalid response for " +
+        job_id +
+        ": " +
+        output,
+      )
       return None
     }
   }
@@ -667,7 +698,9 @@ fn fetch_cloudflare_job_status(
           Some(String(s)) => s
           _ => "unknown error"
         }
-        log("[orchestrator] cloudflare status rejected for " + job_id + ": " + err)
+        log(
+          "[orchestrator] cloudflare status rejected for " + job_id + ": " + err,
+        )
         return None
       }
       match root.get("job") {
@@ -675,18 +708,25 @@ fn fetch_cloudflare_job_status(
           match job.get("status") {
             Some(String(status)) => Some(status)
             _ => {
-              log("[orchestrator] ERROR cloudflare status missing `job.status` for " + job_id)
+              log(
+                "[orchestrator] ERROR cloudflare status missing `job.status` for " +
+                job_id,
+              )
               None
             }
           }
         _ => {
-          log("[orchestrator] ERROR cloudflare status missing `job` for " + job_id)
+          log(
+            "[orchestrator] ERROR cloudflare status missing `job` for " + job_id,
+          )
           None
         }
       }
     }
     _ => {
-      log("[orchestrator] ERROR cloudflare status expected object for " + job_id)
+      log(
+        "[orchestrator] ERROR cloudflare status expected object for " + job_id,
+      )
       None
     }
   }
@@ -790,7 +830,7 @@ fn poll_cloudflare_jobs(
 ///|
 fn run_cloudflare_orchestration(
   config : OrchestratorConfig,
-  subtasks : Array[String],
+  subtasks : Array[SubtaskPlan],
   log : (String) -> Unit,
 ) -> Unit {
   let submit_url = match
@@ -811,13 +851,21 @@ fn run_cloudflare_orchestration(
     " subtasks to cloudflare orchestrator: " +
     submit_url,
   )
+  log(
+    "[orchestrator] Remote policy: cloudflare=static-check only, execution=deno-worker",
+  )
   let mut accepted = 0
   let jobs : Array[SubmittedRemoteJob] = []
-  for i, task in subtasks {
+  for i, subtask in subtasks {
     let agent_id = "agent-" + i.to_string()
     let branch = "agent/" + ts + "-" + i.to_string()
     let payload = create_cloudflare_payload(
-      config, session_id, agent_id, branch, task,
+      config,
+      session_id,
+      agent_id,
+      branch,
+      subtask.task,
+      subtask.files,
     )
     match
       submit_cloudflare_job(submit_url, config.orchestrator_token, payload, log) {
@@ -835,7 +883,11 @@ fn run_cloudflare_orchestration(
       }
       None =>
         log(
-          "[orchestrator] failed to queue " + agent_id + " (task: " + task + ")",
+          "[orchestrator] failed to queue " +
+          agent_id +
+          " (task: " +
+          subtask.task +
+          ")",
         )
     }
   }
@@ -968,8 +1020,8 @@ pub fn run_orchestrator(
     log(
       "[orchestrator] Planned " + subtasks.length().to_string() + " subtasks:",
     )
-    for i, task in subtasks {
-      log("  " + (i + 1).to_string() + ". " + task)
+    for i, subtask in subtasks {
+      log("  " + (i + 1).to_string() + ". " + subtask_display(subtask))
     }
   }
   if config.exec_mode == CloudflareMode {
@@ -983,7 +1035,7 @@ pub fn run_orchestrator(
     }
     let agent_config : LlmAgentConfig = {
       work_dir: wd,
-      task: subtasks[0],
+      task: subtask_task_for_agent(subtasks[0]),
       branch_name: "agent/" + strip_trailing_whitespace(exec("date +%s")),
       target_branch: config.target_branch,
       provider_name: config.provider_name,
@@ -1012,7 +1064,7 @@ pub fn run_orchestrator(
     log("[orchestrator] Coordination dir: " + session_dir)
   }
   let workers : Array[WorkerTask] = []
-  for i, task in subtasks {
+  for i, subtask in subtasks {
     let agent_id = "agent-" + i.to_string()
     let branch = "agent/" + ts + "-" + i.to_string()
     let wt_dir = "/tmp/bit-agent-" + ts + "-" + i.to_string()
@@ -1032,7 +1084,13 @@ pub fn run_orchestrator(
       coord_cleanup(session_dir)
       return
     }
-    workers.push({ task, work_dir: wt_dir, branch, agent_id })
+    workers.push({
+      task: subtask_task_for_agent(subtask),
+      files: subtask.files,
+      work_dir: wt_dir,
+      branch,
+      agent_id,
+    })
     if verbose {
       log("[orchestrator] Worktree: " + wt_dir + " -> " + branch)
     }
@@ -1098,7 +1156,12 @@ pub fn run_orchestrator(
       coord_write_pid(session_dir, w.agent_id, pid)
     }
     if verbose {
-      log("[orchestrator] Spawned " + w.agent_id + ": " + w.task)
+      let scoped_task = if w.files.is_empty() {
+        w.task
+      } else {
+        w.task + " [files: " + w.files.join(", ") + "]"
+      }
+      log("[orchestrator] Spawned " + w.agent_id + ": " + scoped_task)
     }
   }
   // Step 4: Wait for all agents
