@@ -80,3 +80,4 @@ test_done
 | `t9005-workspace-commit-push.sh` | Workspace commit/push transaction and resume behavior |
 | `t9006-workspace-run-export-doctor.sh` | Workspace run/export/doctor with multi-node manifests |
 | `t9007-workspace-nested-translation.sh` | Nested directory translation and fallback behavior |
+| `t9008-workspace-flow-cache.sh` | Workspace flow PoC: topological task execution with cache and dependency blocking |

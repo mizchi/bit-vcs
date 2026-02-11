@@ -41,7 +41,10 @@ test "workspace: format and parse roundtrip keeps node shape" {
   node.required = false
   node.depends_on = ["root"]
   node.tasks["lint"] = "just lint"
-  let manifest : WorkspaceManifest = { version: 1, nodes: [workspace_new_node(), node] }
+  let manifest : WorkspaceManifest = {
+    version: 1,
+    nodes: [workspace_new_node(), node],
+  }
   let text = format_workspace_manifest(manifest)
   let reparsed = parse_workspace_manifest(text)
   assert_eq(reparsed.nodes.length(), 2)
@@ -54,14 +57,49 @@ test "workspace: format and parse roundtrip keeps node shape" {
 }
 
 ///|
+test "workspace: expand affected uses ripple graph propagation" {
+  let root = workspace_new_node()
+  root.id = "root"
+  root.path = "."
+  root.depends_on = []
+  let dep = workspace_new_node()
+  dep.id = "dep"
+  dep.path = "dep"
+  dep.depends_on = ["root"]
+  let leaf = workspace_new_node()
+  leaf.id = "leaf"
+  leaf.path = "leaf"
+  leaf.depends_on = ["dep"]
+  let extra = workspace_new_node()
+  extra.id = "extra"
+  extra.path = "extra"
+  extra.depends_on = []
+  let manifest : WorkspaceManifest = {
+    version: 1,
+    nodes: [root, dep, leaf, extra],
+  }
+  let initial : Map[String, Bool] = { "dep": true }
+  let affected = expand_affected_node_ids(manifest, initial)
+  assert_eq(affected.get("root") is Some(_), true)
+  assert_eq(affected.get("dep") is Some(_), true)
+  assert_eq(affected.get("leaf") is Some(_), true)
+  assert_eq(affected.get("extra") is Some(_), false)
+}
+
+///|
 test "workspace: implicit translation activates inside workspace root tree" {
   let fs = @osfs.OsFs::new()
-  let root = "/tmp/bit-test-workspace-translate-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-workspace-translate-" +
+    get_current_timestamp().to_string()
   let nested = root + "/nested/leaf"
   fs.mkdir_p(root + "/.bit")
   fs.mkdir_p(nested)
   fs.write_string(root + "/.bit/workspace.toml", "version = 1\n")
-  let (cmd, rest) = workspace_translate_implicit_command(Some(nested), "status", [])
+  let (cmd, rest) = workspace_translate_implicit_command(
+    Some(nested),
+    "status",
+    [],
+  )
   assert_eq(cmd, "workspace")
   assert_eq(rest.length(), 1)
   assert_eq(rest[0], "status")
@@ -84,13 +122,65 @@ test "workspace: implicit translation activates inside workspace root tree" {
 
 ///|
 test "workspace: implicit translation is skipped outside workspace" {
-  let root = "/tmp/bit-test-workspace-skip-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-workspace-skip-" +
+    get_current_timestamp().to_string()
   let fs = @osfs.OsFs::new()
   fs.mkdir_p(root)
-  let (cmd, rest) = workspace_translate_implicit_command(Some(root), "status", ["--short"])
+  let (cmd, rest) = workspace_translate_implicit_command(Some(root), "status", [
+    "--short",
+  ])
   assert_eq(cmd, "status")
   assert_eq(rest.length(), 1)
   assert_eq(rest[0], "--short")
+  fs.remove_dir(root) catch {
+    _ => ()
+  }
+}
+
+///|
+test "workspace: flow cache key keeps task and node scope" {
+  let key = workspace_flow_cache_key("test", "pkg")
+  assert_eq(key, "test::pkg")
+}
+
+///|
+test "workspace: flow fingerprint changes when dependency signature changes" {
+  let node = workspace_new_node()
+  node.id = "pkg"
+  node.path = "pkg"
+  node.depends_on = ["root"]
+  let signatures : Map[String, String] = { "pkg": "pkg-1", "root": "root-1" }
+  let fp1 = workspace_flow_fingerprint("test", "just test", node, signatures)
+  signatures["root"] = "root-2"
+  let fp2 = workspace_flow_fingerprint("test", "just test", node, signatures)
+  assert_eq(fp1 == fp2, false)
+}
+
+///|
+test "workspace: implicit translation includes flow command inside workspace" {
+  let fs = @osfs.OsFs::new()
+  let root = "/tmp/bit-test-workspace-flow-translate-" +
+    get_current_timestamp().to_string()
+  let nested = root + "/nested"
+  fs.mkdir_p(root + "/.bit")
+  fs.mkdir_p(nested)
+  fs.write_string(root + "/.bit/workspace.toml", "version = 1\n")
+  let (cmd, rest) = workspace_translate_implicit_command(Some(nested), "flow", [
+    "test",
+  ])
+  assert_eq(cmd, "workspace")
+  assert_eq(rest.length(), 2)
+  assert_eq(rest[0], "flow")
+  assert_eq(rest[1], "test")
+  fs.remove_file(root + "/.bit/workspace.toml") catch {
+    _ => ()
+  }
+  fs.remove_dir(root + "/.bit") catch {
+    _ => ()
+  }
+  fs.remove_dir(root + "/nested") catch {
+    _ => ()
+  }
   fs.remove_dir(root) catch {
     _ => ()
   }

@@ -234,6 +234,7 @@ test "main: command_handles_builtin_help allows agent subcommand-specific help" 
   assert_true(command_handles_builtin_help("agent"))
 }
 
+///|
 test "main: normalize_dispatch_command maps ws to workspace" {
   assert_eq(normalize_dispatch_command("ws"), "workspace")
 }

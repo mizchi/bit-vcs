@@ -1,6 +1,7 @@
 import {
   "mizchi/bit" @git,
   "mizchi/bit/lib" @gitlib,
+  "mizchi/ripple" @ripple,
   "mizchi/bit/osfs" @osfs,
   "moonbitlang/async" @async,
   "moonbitlang/async/process" @process,

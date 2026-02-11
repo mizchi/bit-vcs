@@ -229,7 +229,7 @@ fn workspace_default_manifest() -> WorkspaceManifest {
 
 ///|
 fn workspace_subcommand_names() -> Array[String] {
-  ["init", "status", "commit", "push", "run", "export", "doctor"]
+  ["init", "status", "commit", "push", "run", "flow", "export", "doctor"]
 }
 
 ///|
@@ -321,7 +321,10 @@ fn workspace_manifest_path_at(
 }
 
 ///|
-fn workspace_meta_dir_for_root(fs : &@git.RepoFileSystem, root : String) -> String {
+fn workspace_meta_dir_for_root(
+  fs : &@git.RepoFileSystem,
+  root : String,
+) -> String {
   let bit_marker = workspace_bit_marker(root)
   if fs.is_dir(bit_marker) {
     return bit_marker
@@ -356,6 +359,14 @@ fn workspace_manifest_write_path(
 ///|
 fn workspace_lock_path(fs : &@git.RepoFileSystem, root : String) -> String {
   workspace_meta_dir_for_root(fs, root) + "/workspace.lock.json"
+}
+
+///|
+fn workspace_flow_cache_path(
+  fs : &@git.RepoFileSystem,
+  root : String,
+) -> String {
+  workspace_meta_dir_for_root(fs, root) + "/workspace.flow-cache.json"
 }
 
 ///|
@@ -442,7 +453,8 @@ fn parse_toml_string(raw : String) -> String? {
     return None
   }
   let inner = String::unsafe_substring(text, start=1, end=text.length() - 1)
-  let unescaped = inner.replace_all(old="\\\"", new="\"")
+  let unescaped = inner
+    .replace_all(old="\\\"", new="\"")
     .replace_all(old="\\\\", new="\\")
   Some(unescaped)
 }
@@ -501,7 +513,9 @@ fn parse_workspace_manifest(text : String) -> WorkspaceManifest {
     }
     match line.find("=") {
       Some(eq_idx) => {
-        let key = trim_string(String::unsafe_substring(line, start=0, end=eq_idx))
+        let key = trim_string(
+          String::unsafe_substring(line, start=0, end=eq_idx),
+        )
         let value = trim_string(
           String::unsafe_substring(line, start=eq_idx + 1, end=line.length()),
         )
@@ -509,15 +523,10 @@ fn parse_workspace_manifest(text : String) -> WorkspaceManifest {
           Some(node) => {
             let next = node
             match key {
-              "id" =>
-                if parse_toml_string(value) is Some(v) {
-                  next.id = v
-                }
-              "path" =>
-                if parse_toml_string(value) is Some(v) {
-                  next.path = v
-                }
-              "required" => next.required = parse_toml_bool(value, next.required)
+              "id" => if parse_toml_string(value) is Some(v) { next.id = v }
+              "path" => if parse_toml_string(value) is Some(v) { next.path = v }
+              "required" =>
+                next.required = parse_toml_bool(value, next.required)
               "remote" => next.remote = parse_toml_string(value)
               "branch" => next.branch = parse_toml_string(value)
               "depends_on" => next.depends_on = parse_toml_string_array(value)
@@ -537,9 +546,7 @@ fn parse_workspace_manifest(text : String) -> WorkspaceManifest {
           }
           None =>
             if key == "version" {
-              version = @strconv.parse_int(value[:]) catch {
-                _ => version
-              }
+              version = @strconv.parse_int(value[:]) catch { _ => version }
             }
         }
       }
@@ -637,7 +644,10 @@ fn load_workspace_manifest(
 }
 
 ///|
-fn ensure_workspace_meta_dir(fs : @osfs.OsFs, workspace_root : String) -> String raise Error {
+fn ensure_workspace_meta_dir(
+  fs : @osfs.OsFs,
+  workspace_root : String,
+) -> String raise Error {
   let meta_dir = workspace_meta_dir_for_root(fs, workspace_root)
   fs.mkdir_p(meta_dir)
   fs.mkdir_p(meta_dir + "/txns")
@@ -645,7 +655,10 @@ fn ensure_workspace_meta_dir(fs : @osfs.OsFs, workspace_root : String) -> String
 }
 
 ///|
-fn workspace_node_abs_path(workspace_root : String, node_path : String) -> String {
+fn workspace_node_abs_path(
+  workspace_root : String,
+  node_path : String,
+) -> String {
   if node_path == "." {
     workspace_root
   } else if node_path.has_prefix("/") {
@@ -658,12 +671,14 @@ fn workspace_node_abs_path(workspace_root : String, node_path : String) -> Strin
 ///|
 fn workspace_node_git_dir(fs : @osfs.OsFs, node_root : String) -> String? {
   let marker = default_repo_marker_path(fs, node_root)
-  let marker_exists = fs.is_dir(marker) || fs.is_file(marker) || is_bare_repo_dir(node_root)
+  let marker_exists = fs.is_dir(marker) ||
+    fs.is_file(marker) ||
+    is_bare_repo_dir(node_root)
   if not(marker_exists) {
     return None
   }
   let git_dir = resolve_git_dir(fs, node_root)
-  let head_ok = @gitlib.read_head_ref(fs, git_dir) catch {
+  let head_ok = try @gitlib.read_head_ref(fs, git_dir) catch {
     _ => None
   } noraise {
     _ => Some(true)
@@ -679,13 +694,11 @@ fn workspace_node_head_hex(fs : @osfs.OsFs, node_root : String) -> String? {
   guard workspace_node_git_dir(fs, node_root) is Some(git_dir) else {
     return None
   }
-  let head = @gitlib.read_head_ref(fs, git_dir) catch {
-    _ => return None
-  }
+  let head = @gitlib.read_head_ref(fs, git_dir) catch { _ => return None }
   match head {
     @gitlib.HeadRef::Detached(id) => Some(id.to_hex())
     @gitlib.HeadRef::Branch(name) =>
-      @gitlib.resolve_ref(fs, git_dir, "refs/heads/" + name) catch {
+      try @gitlib.resolve_ref(fs, git_dir, "refs/heads/" + name) catch {
         _ => None
       } noraise {
         maybe_id =>
@@ -698,7 +711,11 @@ fn workspace_node_head_hex(fs : @osfs.OsFs, node_root : String) -> String? {
 }
 
 ///|
-fn workspace_json_string(obj : Map[String, Json], key : String, fallback : String) -> String {
+fn workspace_json_string(
+  obj : Map[String, Json],
+  key : String,
+  fallback : String,
+) -> String {
   match obj.get(key) {
     Some(Json::String(value)) => value
     Some(Json::Number(value, ..)) => value.to_string()
@@ -753,19 +770,11 @@ fn read_workspace_lock_commits(
   if not(fs.is_file(path)) {
     return {}
   }
-  let text = decode_bytes(fs.read_file(path)) catch {
-    _ => return {}
-  }
-  let parsed = @json.parse(text) catch {
-    _ => return {}
-  }
+  let text = decode_bytes(fs.read_file(path)) catch { _ => return {} }
+  let parsed = @json.parse(text) catch { _ => return {} }
   let result : Map[String, String] = {}
-  guard parsed is Json::Object(root_obj) else {
-    return result
-  }
-  guard root_obj.get("nodes") is Some(Json::Array(nodes)) else {
-    return result
-  }
+  guard parsed is Json::Object(root_obj) else { return result }
+  guard root_obj.get("nodes") is Some(Json::Array(nodes)) else { return result }
   for node in nodes {
     guard node is Json::Object(node_obj) else { continue }
     let id = workspace_json_string(node_obj, "id", "")
@@ -775,6 +784,53 @@ fn read_workspace_lock_commits(
     }
   }
   result
+}
+
+///|
+fn read_workspace_flow_cache(
+  fs : @osfs.OsFs,
+  workspace_root : String,
+) -> Map[String, String] {
+  let path = workspace_flow_cache_path(fs, workspace_root)
+  if not(fs.is_file(path)) {
+    return {}
+  }
+  let text = decode_bytes(fs.read_file(path)) catch { _ => return {} }
+  let parsed = @json.parse(text) catch { _ => return {} }
+  let result : Map[String, String] = {}
+  guard parsed is Json::Object(root_obj) else { return result }
+  guard root_obj.get("entries") is Some(Json::Object(entries)) else {
+    return result
+  }
+  for key, value in entries {
+    if value is Json::String(fingerprint) {
+      result[key] = fingerprint
+    }
+  }
+  result
+}
+
+///|
+fn write_workspace_flow_cache(
+  fs : @osfs.OsFs,
+  workspace_root : String,
+  cache : Map[String, String],
+) -> Unit raise Error {
+  let entries : Map[String, Json] = {}
+  for key, fingerprint in cache {
+    entries[key] = Json::string(fingerprint)
+  }
+  let obj : Map[String, Json] = {}
+  obj["schema"] = Json::string("bit.workspace.flow-cache.v1")
+  obj["generated_at"] = Json::number(
+    get_current_timestamp().to_double(),
+    repr=get_current_timestamp().to_string(),
+  )
+  obj["entries"] = Json::object(entries)
+  fs.write_string(
+    workspace_flow_cache_path(fs, workspace_root),
+    Json::object(obj).stringify(indent=2),
+  )
 }
 
 ///|
@@ -828,18 +884,10 @@ fn read_successful_push_nodes(
   if not(fs.is_file(path)) {
     return {}
   }
-  let text = decode_bytes(fs.read_file(path)) catch {
-    _ => return {}
-  }
-  let parsed = @json.parse(text) catch {
-    _ => return {}
-  }
-  guard parsed is Json::Object(root_obj) else {
-    return {}
-  }
-  guard root_obj.get("steps") is Some(Json::Array(steps)) else {
-    return {}
-  }
+  let text = decode_bytes(fs.read_file(path)) catch { _ => return {} }
+  let parsed = @json.parse(text) catch { _ => return {} }
+  guard parsed is Json::Object(root_obj) else { return {} }
+  guard root_obj.get("steps") is Some(Json::Array(steps)) else { return {} }
   let completed : Map[String, Bool] = {}
   for step in steps {
     guard step is Json::Object(step_obj) else { continue }
@@ -866,7 +914,9 @@ fn workspace_node_id_set(manifest : WorkspaceManifest) -> Map[String, Bool] {
 }
 
 ///|
-fn workspace_node_map(manifest : WorkspaceManifest) -> Map[String, WorkspaceNode] {
+fn workspace_node_map(
+  manifest : WorkspaceManifest,
+) -> Map[String, WorkspaceNode] {
   let node_map : Map[String, WorkspaceNode] = {}
   for node in manifest.nodes {
     node_map[node.id] = node
@@ -875,7 +925,9 @@ fn workspace_node_map(manifest : WorkspaceManifest) -> Map[String, WorkspaceNode
 }
 
 ///|
-fn workspace_topological_nodes(manifest : WorkspaceManifest) -> Array[WorkspaceNode] {
+fn workspace_topological_nodes(
+  manifest : WorkspaceManifest,
+) -> Array[WorkspaceNode] {
   let ids = workspace_node_id_set(manifest)
   let node_map = workspace_node_map(manifest)
   let indegree : Map[String, Int] = {}
@@ -985,9 +1037,7 @@ async fn workspace_is_node_dirty(fs : @osfs.OsFs, node_root : String) -> Bool {
   if workspace_node_git_dir(fs, node_root) is None {
     return false
   }
-  let lines = @gitlib.status_porcelain(fs, node_root) catch {
-    _ => []
-  }
+  let lines = @gitlib.status_porcelain(fs, node_root) catch { _ => [] }
   lines.length() > 0
 }
 
@@ -1021,44 +1071,101 @@ fn expand_affected_node_ids(
   manifest : WorkspaceManifest,
   initial : Map[String, Bool],
 ) -> Map[String, Bool] {
-  let node_map = workspace_node_map(manifest)
-  let affected : Map[String, Bool] = {}
-  let queue : Array[String] = []
-  for node_id, _ in initial {
-    affected[node_id] = true
-    queue.push(node_id)
+  // Use ripple query graph to model transitive change propagation.
+  let db = @ripple.Database::new()
+  let rt = db.runtime()
+  let changed_input : @ripple.Input[String, Bool] = db.input()
+  changed_input.register(rt)
+  let neighbors_input : @ripple.Input[String, Array[String]] = db.input()
+  neighbors_input.register(rt)
+  let known_ids = workspace_node_id_set(manifest)
+  let dependents : Map[String, Array[String]] = {}
+  for node in manifest.nodes {
+    dependents[node.id] = []
   }
-  while queue.length() > 0 {
-    let current = queue.pop().unwrap_or("")
-    if current.length() == 0 {
-      continue
+  for node in manifest.nodes {
+    for dep in node.depends_on {
+      if known_ids.get(dep) is Some(_) {
+        let next = dependents.get(dep).unwrap_or([])
+        next.push(node.id)
+        dependents[dep] = next
+      }
     }
-    match node_map.get(current) {
-      Some(node) => {
-        for dep in node.depends_on {
-          if affected.get(dep) is None {
-            affected[dep] = true
-            queue.push(dep)
-          }
+  }
+  for node in manifest.nodes {
+    let neighbors : Array[String] = []
+    let seen_neighbor : Map[String, Bool] = {}
+    for dep in node.depends_on {
+      if known_ids.get(dep) is Some(_) {
+        neighbors.push(dep)
+        seen_neighbor[dep] = true
+      }
+    }
+    for follower in dependents.get(node.id).unwrap_or([]) {
+      if seen_neighbor.get(follower) is None {
+        neighbors.push(follower)
+        seen_neighbor[follower] = true
+      }
+    }
+    neighbors_input.set(rt, node.id, neighbors) |> ignore
+    changed_input.set(rt, node.id, initial.get(node.id) is Some(_)) |> ignore
+  }
+  let affected_ref : Ref[@ripple.CycleQuery[String, Bool]?] = { val: None }
+  let affected_query : @ripple.CycleQuery[String, Bool] = db.cycle_query_with_fallback(
+    fn(rt, node_id) {
+      if changed_input.get(rt, node_id).unwrap_or(false) {
+        return true
+      }
+      let neighbors = neighbors_input.get(rt, node_id).unwrap_or([])
+      let self = affected_ref.val.unwrap()
+      for neighbor in neighbors {
+        if self.fetch(rt, neighbor) {
+          return true
         }
       }
-      None => ()
-    }
-    for node in manifest.nodes {
-      let mut depends_current = false
-      for dep in node.depends_on {
-        if dep == current {
-          depends_current = true
-          break
-        }
-      }
-      if depends_current && affected.get(node.id) is None {
-        affected[node.id] = true
-        queue.push(node.id)
-      }
+      false
+    },
+    false,
+  )
+  affected_ref.val = Some(affected_query)
+  affected_query.register(rt)
+  let affected : Map[String, Bool] = {}
+  for node in manifest.nodes {
+    if affected_query.fetch(rt, node.id) {
+      affected[node.id] = true
     }
   }
   affected
+}
+
+///|
+fn workspace_flow_cache_key(task : String, node_id : String) -> String {
+  task + "::" + node_id
+}
+
+///|
+fn workspace_flow_fingerprint(
+  task : String,
+  task_cmd : String,
+  node : WorkspaceNode,
+  signatures : Map[String, String],
+) -> String {
+  let buf = StringBuilder::new()
+  buf.write_string("task=")
+  buf.write_string(task)
+  buf.write_string("\nnode=")
+  buf.write_string(node.id)
+  buf.write_string("\ncommand=")
+  buf.write_string(task_cmd)
+  buf.write_string("\nself=")
+  buf.write_string(signatures.get(node.id).unwrap_or("missing"))
+  for dep in node.depends_on {
+    buf.write_string("\ndep:")
+    buf.write_string(dep)
+    buf.write_string("=")
+    buf.write_string(signatures.get(dep).unwrap_or("missing"))
+  }
+  buf.to_string()
 }
 
 ///|
@@ -1073,6 +1180,7 @@ pub fn print_workspace_usage() -> Unit {
     #|  commit -m <msg>     Commit changed nodes as one workspace transaction
     #|  push [--resume ID]  Push nodes in dependency order
     #|  run <task>          Run configured task in nodes
+    #|  flow <task>         Run topological workflow with success cache
     #|  export --format git-interop
     #|                      Export workspace interoperability metadata
     #|  doctor              Validate workspace consistency
@@ -1139,7 +1247,11 @@ fn workspace_record_step(
 
 ///|
 fn workspace_txn_id(prefix : String) -> String {
-  prefix + "-" + get_current_timestamp().to_string()
+  prefix +
+  "-" +
+  get_current_timestamp().to_string() +
+  "-" +
+  @async.now().to_string()
 }
 
 ///|
@@ -1225,7 +1337,10 @@ async fn handle_workspace_status(args : Array[String]) -> Unit raise Error {
 ///|
 async fn handle_workspace_commit(
   args : Array[String],
-  run_repo_builtin_in_dir : (async (String, String, Array[String]) -> (Int, String)),
+  run_repo_builtin_in_dir : async (String, String, Array[String]) -> (
+    Int,
+    String,
+  ),
 ) -> Unit raise Error {
   let mut message : String? = None
   let mut allow_empty = false
@@ -1243,10 +1358,12 @@ async fn handle_workspace_commit(
         print_workspace_usage()
         return
       }
-      _ if arg.has_prefix("--message=") => {
-        message = Some(String::unsafe_substring(arg, start=10, end=arg.length()))
-      }
-      _ if arg.has_prefix("-") => warn_unimplemented_arg("workspace commit", arg)
+      _ if arg.has_prefix("--message=") =>
+        message = Some(
+          String::unsafe_substring(arg, start=10, end=arg.length()),
+        )
+      _ if arg.has_prefix("-") =>
+        warn_unimplemented_arg("workspace commit", arg)
       _ => ()
     }
     i += 1
@@ -1267,11 +1384,7 @@ async fn handle_workspace_commit(
     let repo_exists = workspace_node_git_dir(fs, node_root) is Some(_)
     if not(repo_exists) {
       workspace_record_step(
-        steps,
-        node,
-        "commit",
-        "failed",
-        "repository marker not found",
+        steps, node, "commit", "failed", "repository marker not found",
       )
       if node.required {
         required_failed = true
@@ -1296,7 +1409,11 @@ async fn handle_workspace_commit(
         node,
         "commit",
         "failed",
-        if err.length() == 0 { "commit failed" } else { err },
+        if err.length() == 0 {
+          "commit failed"
+        } else {
+          err
+        },
       )
       if node.required {
         required_failed = true
@@ -1318,7 +1435,10 @@ async fn handle_workspace_commit(
 ///|
 async fn handle_workspace_push(
   args : Array[String],
-  run_repo_builtin_in_dir : (async (String, String, Array[String]) -> (Int, String)),
+  run_repo_builtin_in_dir : async (String, String, Array[String]) -> (
+    Int,
+    String,
+  ),
 ) -> Unit raise Error {
   let mut resume_txn : String? = None
   let mut i = 0
@@ -1334,9 +1454,10 @@ async fn handle_workspace_push(
         print_workspace_usage()
         return
       }
-      _ if arg.has_prefix("--resume=") => {
-        resume_txn = Some(String::unsafe_substring(arg, start=9, end=arg.length()))
-      }
+      _ if arg.has_prefix("--resume=") =>
+        resume_txn = Some(
+          String::unsafe_substring(arg, start=9, end=arg.length()),
+        )
       _ if arg.has_prefix("-") => warn_unimplemented_arg("workspace push", arg)
       _ => ()
     }
@@ -1355,13 +1476,17 @@ async fn handle_workspace_push(
   let mut required_failed = false
   for node in ordered {
     if completed.get(node.id) is Some(_) {
-      workspace_record_step(steps, node, "push", "skipped", "already pushed in resume")
+      workspace_record_step(
+        steps, node, "push", "skipped", "already pushed in resume",
+      )
       continue
     }
     let node_root = workspace_node_abs_path(workspace_root, node.path)
     let repo_exists = workspace_node_git_dir(fs, node_root) is Some(_)
     if not(repo_exists) {
-      workspace_record_step(steps, node, "push", "failed", "repository marker not found")
+      workspace_record_step(
+        steps, node, "push", "failed", "repository marker not found",
+      )
       if node.required {
         required_failed = true
         break
@@ -1377,7 +1502,11 @@ async fn handle_workspace_push(
         node,
         "push",
         "failed",
-        if err.length() == 0 { "push failed" } else { err },
+        if err.length() == 0 {
+          "push failed"
+        } else {
+          err
+        },
       )
       if node.required {
         required_failed = true
@@ -1419,7 +1548,9 @@ async fn handle_workspace_run(args : Array[String]) -> Unit raise Error {
   let workspace_root = require_workspace_root(None)
   let manifest = load_workspace_manifest(fs, workspace_root)
   let lock_commits = read_workspace_lock_commits(fs, workspace_root)
-  let changed = collect_changed_node_ids(fs, workspace_root, manifest, lock_commits)
+  let changed = collect_changed_node_ids(
+    fs, workspace_root, manifest, lock_commits,
+  )
   let selected = if affected_only {
     expand_affected_node_ids(manifest, changed)
   } else {
@@ -1464,7 +1595,14 @@ async fn handle_workspace_run(args : Array[String]) -> Unit raise Error {
           }
         }
       }
-      None => workspace_record_step(steps, node, "run", "skipped", "task '\{task}' not configured")
+      None =>
+        workspace_record_step(
+          steps,
+          node,
+          "run",
+          "skipped",
+          "task '\{task}' not configured",
+        )
     }
   }
   let _ = ensure_workspace_meta_dir(fs, workspace_root)
@@ -1474,6 +1612,213 @@ async fn handle_workspace_run(args : Array[String]) -> Unit raise Error {
   if required_failed {
     raise @git.GitError::InvalidObject(
       "workspace run failed on required nodes (txn: " + txn_id + ")",
+    )
+  }
+}
+
+///|
+async fn handle_workspace_flow(args : Array[String]) -> Unit raise Error {
+  let mut affected_only = false
+  let mut no_cache = false
+  let mut reset_cache = false
+  let mut task_name : String? = None
+  for arg in args {
+    match arg {
+      "--affected" => affected_only = true
+      "--no-cache" => no_cache = true
+      "--reset-cache" | "--clear-cache" => reset_cache = true
+      "-h" | "--help" => {
+        print_workspace_usage()
+        return
+      }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("workspace flow", arg)
+      _ => if task_name is None { task_name = Some(arg) }
+    }
+  }
+  guard task_name is Some(task) else {
+    raise @git.GitError::InvalidObject("workspace flow requires <task>")
+  }
+  let fs = @osfs.OsFs::new()
+  let workspace_root = require_workspace_root(None)
+  let manifest = load_workspace_manifest(fs, workspace_root)
+  let lock_commits = read_workspace_lock_commits(fs, workspace_root)
+  let changed = collect_changed_node_ids(
+    fs, workspace_root, manifest, lock_commits,
+  )
+  let selected = if affected_only {
+    expand_affected_node_ids(manifest, changed)
+  } else {
+    let all_ids : Map[String, Bool] = {}
+    for node in manifest.nodes {
+      all_ids[node.id] = true
+    }
+    all_ids
+  }
+  let ordered = workspace_topological_nodes(manifest)
+  let flow_signature_nonce = workspace_txn_id("flow-sig")
+  let node_signatures : Map[String, String] = {}
+  let node_repo_exists : Map[String, Bool] = {}
+  let node_dirty : Map[String, Bool] = {}
+  for node in manifest.nodes {
+    let node_root = workspace_node_abs_path(workspace_root, node.path)
+    let repo_exists = workspace_node_git_dir(fs, node_root) is Some(_)
+    node_repo_exists[node.id] = repo_exists
+    if not(repo_exists) {
+      node_signatures[node.id] = "missing"
+      node_dirty[node.id] = false
+      continue
+    }
+    let dirty = workspace_is_node_dirty(fs, node_root)
+    node_dirty[node.id] = dirty
+    let head = workspace_node_head_hex(fs, node_root).unwrap_or("unknown")
+    node_signatures[node.id] = if dirty {
+      head + "+dirty@" + flow_signature_nonce
+    } else {
+      head
+    }
+  }
+  let flow_cache = if no_cache {
+    {}
+  } else {
+    read_workspace_flow_cache(fs, workspace_root)
+  }
+  if reset_cache {
+    flow_cache.clear()
+  }
+  let txn_id = workspace_txn_id("flow-" + task)
+  let steps : Array[WorkspaceTxnStep] = []
+  let node_success : Map[String, Bool] = {}
+  let node_ran : Map[String, Bool] = {}
+  let mut required_failed = false
+  for node in ordered {
+    if selected.get(node.id) is None {
+      continue
+    }
+    let blocked_deps : Array[String] = []
+    for dep in node.depends_on {
+      if selected.get(dep) is None {
+        continue
+      }
+      let dep_ok = node_success.get(dep).unwrap_or(false)
+      if not(dep_ok) {
+        blocked_deps.push(dep)
+      }
+    }
+    if blocked_deps.length() > 0 {
+      workspace_record_step(
+        steps,
+        node,
+        "flow",
+        "blocked",
+        "blocked by dependency: " + blocked_deps.join(", "),
+      )
+      node_success[node.id] = false
+      if node.required {
+        required_failed = true
+      }
+      continue
+    }
+    let node_root = workspace_node_abs_path(workspace_root, node.path)
+    let repo_exists = node_repo_exists.get(node.id).unwrap_or(false)
+    if not(repo_exists) {
+      workspace_record_step(
+        steps, node, "flow", "failed", "repository marker not found",
+      )
+      node_success[node.id] = false
+      if node.required {
+        required_failed = true
+      }
+      continue
+    }
+    match node.tasks.get(task) {
+      Some(task_cmd) => {
+        let cache_key = workspace_flow_cache_key(task, node.id)
+        let fingerprint = workspace_flow_fingerprint(
+          task, task_cmd, node, node_signatures,
+        )
+        let dirty = node_dirty.get(node.id).unwrap_or(false)
+        let mut dep_ran = false
+        for dep in node.depends_on {
+          if selected.get(dep) is None {
+            continue
+          }
+          if node_ran.get(dep).unwrap_or(false) {
+            dep_ran = true
+            break
+          }
+        }
+        if not(no_cache) && not(dirty) && not(dep_ran) {
+          match flow_cache.get(cache_key) {
+            Some(prev) if prev == fingerprint => {
+              workspace_record_step(steps, node, "flow", "cached", task)
+              node_success[node.id] = true
+              node_ran[node.id] = false
+              continue
+            }
+            _ => ()
+          }
+        }
+        println("workspace flow[\{node.id}]: \{task_cmd}")
+        let code = @process.run(
+          "sh",
+          ["-lc", task_cmd],
+          inherit_env=true,
+          cwd=node_root,
+        ) catch {
+          _ => 1
+        }
+        if code == 0 {
+          workspace_record_step(steps, node, "flow", "success", task)
+          node_success[node.id] = true
+          node_ran[node.id] = true
+          if not(no_cache) {
+            if dirty {
+              flow_cache.remove(cache_key)
+            } else {
+              flow_cache[cache_key] = fingerprint
+            }
+          }
+        } else {
+          workspace_record_step(
+            steps,
+            node,
+            "flow",
+            "failed",
+            "task '\{task}' failed with exit \{code}",
+          )
+          node_success[node.id] = false
+          node_ran[node.id] = true
+          if not(no_cache) {
+            flow_cache.remove(cache_key)
+          }
+          if node.required {
+            required_failed = true
+          }
+        }
+      }
+      None => {
+        workspace_record_step(
+          steps,
+          node,
+          "flow",
+          "skipped",
+          "task '\{task}' not configured",
+        )
+        node_success[node.id] = true
+        node_ran[node.id] = false
+      }
+    }
+  }
+  let _ = ensure_workspace_meta_dir(fs, workspace_root)
+  if not(no_cache) {
+    write_workspace_flow_cache(fs, workspace_root, flow_cache)
+  }
+  let state = if required_failed { "partial_failed" } else { "completed" }
+  write_workspace_txn(fs, workspace_root, txn_id, "flow:" + task, state, steps)
+  println("workspace flow txn: " + txn_id + " (" + state + ")")
+  if required_failed {
+    raise @git.GitError::InvalidObject(
+      "workspace flow failed on required nodes (txn: " + txn_id + ")",
     )
   }
 }
@@ -1496,7 +1841,8 @@ async fn handle_workspace_export(args : Array[String]) -> Unit raise Error {
       }
       _ if arg.has_prefix("--format=") =>
         format = Some(String::unsafe_substring(arg, start=9, end=arg.length()))
-      _ if arg.has_prefix("-") => warn_unimplemented_arg("workspace export", arg)
+      _ if arg.has_prefix("-") =>
+        warn_unimplemented_arg("workspace export", arg)
       _ => ()
     }
     i += 1
@@ -1593,7 +1939,10 @@ async fn handle_workspace_doctor(args : Array[String]) -> Unit raise Error {
 ///|
 pub async fn handle_workspace(
   args : Array[String],
-  run_repo_builtin_in_dir : (async (String, String, Array[String]) -> (Int, String)),
+  run_repo_builtin_in_dir : async (String, String, Array[String]) -> (
+    Int,
+    String,
+  ),
 ) -> Unit raise Error {
   if args.length() == 0 {
     print_workspace_usage()
@@ -1608,6 +1957,7 @@ pub async fn handle_workspace(
     "commit" => handle_workspace_commit(rest, run_repo_builtin_in_dir)
     "push" => handle_workspace_push(rest, run_repo_builtin_in_dir)
     "run" => handle_workspace_run(rest)
+    "flow" => handle_workspace_flow(rest)
     "export" => handle_workspace_export(rest)
     "doctor" => handle_workspace_doctor(rest)
     _ => {

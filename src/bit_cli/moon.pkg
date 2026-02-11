@@ -143,8 +143,8 @@ options(
     "update_ref.mbt": [ "native" ],
     "upload_pack.mbt": [ "native" ],
     "verify_pack.mbt": [ "native" ],
-    "worktree.mbt": [ "native" ],
     "workspace.mbt": [ "native" ],
+    "worktree.mbt": [ "native" ],
     "write_tree.mbt": [ "native" ],
   },
 )

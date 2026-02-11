@@ -45,8 +45,7 @@ async fn run_workspace_repo_command_inner(
     "commit" => handle_commit(rest)
     "push" => handle_push(rest)
     "init" => handle_init(rest)
-    _ =>
-      raise @git.GitError::InvalidObject("unsupported repo command '\{cmd}'")
+    _ => raise @git.GitError::InvalidObject("unsupported repo command '\{cmd}'")
   }
 }
 
