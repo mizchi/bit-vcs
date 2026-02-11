@@ -22,6 +22,14 @@ bit workspace init
 cp /path/to/repo/fixtures/workspace_flow/workspace.toml .git/workspace.toml
 # failure profile
 cp /path/to/repo/fixtures/workspace_flow/workspace.fail.toml .git/workspace.toml
+# security boundary profile (path escape)
+cp /path/to/repo/fixtures/workspace_flow/workspace.escape.toml .git/workspace.toml
+# optional-node failure profile (manager policy)
+cp /path/to/repo/fixtures/workspace_flow/workspace.optional-fail.toml .git/workspace.toml
+# invalid graph profiles
+cp /path/to/repo/fixtures/workspace_flow/workspace.unknown-dep.toml .git/workspace.toml
+cp /path/to/repo/fixtures/workspace_flow/workspace.cycle.toml .git/workspace.toml
+cp /path/to/repo/fixtures/workspace_flow/workspace.duplicate-id.toml .git/workspace.toml
 ```
 
 ## hello.pack

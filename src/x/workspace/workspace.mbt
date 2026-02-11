@@ -718,6 +718,83 @@ fn workspace_node_abs_path(
 }
 
 ///|
+fn path_is_within_workspace_root(
+  workspace_root : String,
+  candidate_path : String,
+) -> Bool {
+  let normalized_root = normalize_path(workspace_root)
+  let normalized_candidate = normalize_path(candidate_path)
+  if normalized_root == "/" {
+    normalized_candidate.has_prefix("/")
+  } else if normalized_candidate == normalized_root {
+    true
+  } else {
+    normalized_candidate.has_prefix(normalized_root + "/")
+  }
+}
+
+///|
+fn workspace_manifest_issues(
+  fs : @osfs.OsFs,
+  workspace_root : String,
+  manifest : WorkspaceManifest,
+  include_repo_checks : Bool,
+) -> Array[String] {
+  let issues : Array[String] = []
+  let seen_ids : Map[String, Bool] = {}
+  for node in manifest.nodes {
+    if node.id.length() == 0 {
+      issues.push("node id is empty")
+    } else if seen_ids.get(node.id) is Some(_) {
+      issues.push("duplicate node id '\{node.id}'")
+    } else {
+      seen_ids[node.id] = true
+    }
+    let node_root = workspace_node_abs_path(workspace_root, node.path)
+    if not(path_is_within_workspace_root(workspace_root, node_root)) {
+      issues.push("node '\{node.id}' path escapes workspace root: \{node.path}")
+      continue
+    }
+    if include_repo_checks {
+      if not(fs.is_dir(node_root)) {
+        issues.push("node '\{node.id}' path does not exist: \{node.path}")
+      }
+      if workspace_node_git_dir(fs, node_root) is None {
+        issues.push("node '\{node.id}' is not a bit repository: \{node.path}")
+      }
+    }
+  }
+  let id_set = workspace_node_id_set(manifest)
+  for node in manifest.nodes {
+    for dep in node.depends_on {
+      if id_set.get(dep) is None {
+        issues.push("node '\{node.id}' depends on unknown node '\{dep}'")
+      }
+    }
+  }
+  if workspace_has_dependency_cycle(manifest) {
+    issues.push("dependency graph has a cycle")
+  }
+  issues
+}
+
+///|
+fn require_workspace_manifest_valid(
+  fs : @osfs.OsFs,
+  workspace_root : String,
+  manifest : WorkspaceManifest,
+  command : String,
+) -> Unit raise @git.GitError {
+  let issues = workspace_manifest_issues(fs, workspace_root, manifest, false)
+  if issues.length() == 0 {
+    return
+  }
+  raise @git.GitError::InvalidObject(
+    "workspace \{command} manifest invalid: " + issues[0],
+  )
+}
+
+///|
 fn workspace_node_git_dir(fs : @osfs.OsFs, node_root : String) -> String? {
   let marker = default_repo_marker_path(fs, node_root)
   let marker_exists = fs.is_dir(marker) ||
@@ -1365,6 +1442,7 @@ async fn handle_workspace_status(args : Array[String]) -> Unit raise Error {
   let fs = @osfs.OsFs::new()
   let workspace_root = require_workspace_root(None)
   let manifest = load_workspace_manifest(fs, workspace_root)
+  require_workspace_manifest_valid(fs, workspace_root, manifest, "status")
   let lock_commits = read_workspace_lock_commits(fs, workspace_root)
   let ordered = workspace_topological_nodes(manifest)
   println("workspace root: " + workspace_root)
@@ -1437,6 +1515,7 @@ async fn handle_workspace_commit(
   let fs = @osfs.OsFs::new()
   let workspace_root = require_workspace_root(None)
   let manifest = load_workspace_manifest(fs, workspace_root)
+  require_workspace_manifest_valid(fs, workspace_root, manifest, "commit")
   let ordered = workspace_topological_nodes(manifest)
   let txn_id = workspace_txn_id("commit")
   let txn_message = raw_message + "\n\nBit-Workspace-Txn: " + txn_id
@@ -1529,6 +1608,7 @@ async fn handle_workspace_push(
   let fs = @osfs.OsFs::new()
   let workspace_root = require_workspace_root(None)
   let manifest = load_workspace_manifest(fs, workspace_root)
+  require_workspace_manifest_valid(fs, workspace_root, manifest, "push")
   let ordered = workspace_topological_nodes(manifest)
   let txn_id = match resume_txn {
     Some(id) => id
@@ -1610,6 +1690,7 @@ async fn handle_workspace_run(args : Array[String]) -> Unit raise Error {
   let fs = @osfs.OsFs::new()
   let workspace_root = require_workspace_root(None)
   let manifest = load_workspace_manifest(fs, workspace_root)
+  require_workspace_manifest_valid(fs, workspace_root, manifest, "run")
   let lock_commits = read_workspace_lock_commits(fs, workspace_root)
   let changed = collect_changed_node_ids(
     fs, workspace_root, manifest, lock_commits,
@@ -1704,6 +1785,7 @@ async fn handle_workspace_flow(args : Array[String]) -> Unit raise Error {
   let fs = @osfs.OsFs::new()
   let workspace_root = require_workspace_root(None)
   let manifest = load_workspace_manifest(fs, workspace_root)
+  require_workspace_manifest_valid(fs, workspace_root, manifest, "flow")
   let lock_commits = read_workspace_lock_commits(fs, workspace_root)
   let changed = collect_changed_node_ids(
     fs, workspace_root, manifest, lock_commits,
@@ -1918,6 +2000,7 @@ async fn handle_workspace_export(args : Array[String]) -> Unit raise Error {
   let fs = @osfs.OsFs::new()
   let workspace_root = require_workspace_root(None)
   let manifest = load_workspace_manifest(fs, workspace_root)
+  require_workspace_manifest_valid(fs, workspace_root, manifest, "export")
   let lock_commits = read_workspace_lock_commits(fs, workspace_root)
   let nodes_json : Array[Json] = []
   for node in manifest.nodes {
@@ -1967,28 +2050,7 @@ async fn handle_workspace_doctor(args : Array[String]) -> Unit raise Error {
   let fs = @osfs.OsFs::new()
   let workspace_root = require_workspace_root(None)
   let manifest = load_workspace_manifest(fs, workspace_root)
-  let id_set = workspace_node_id_set(manifest)
-  let issues : Array[String] = []
-  for node in manifest.nodes {
-    if node.id.length() == 0 {
-      issues.push("node id is empty")
-    }
-    let node_root = workspace_node_abs_path(workspace_root, node.path)
-    if not(fs.is_dir(node_root)) {
-      issues.push("node '\{node.id}' path does not exist: \{node.path}")
-    }
-    if workspace_node_git_dir(fs, node_root) is None {
-      issues.push("node '\{node.id}' is not a bit repository: \{node.path}")
-    }
-    for dep in node.depends_on {
-      if id_set.get(dep) is None {
-        issues.push("node '\{node.id}' depends on unknown node '\{dep}'")
-      }
-    }
-  }
-  if workspace_has_dependency_cycle(manifest) {
-    issues.push("dependency graph has a cycle")
-  }
+  let issues = workspace_manifest_issues(fs, workspace_root, manifest, true)
   if issues.length() == 0 {
     println("workspace doctor: ok")
     return

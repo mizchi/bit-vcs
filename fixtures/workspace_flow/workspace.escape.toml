@@ -1,0 +1,15 @@
+version = 1
+
+[[nodes]]
+id = "root"
+path = "."
+required = true
+depends_on = []
+task.test = "echo root >> \"$BIT_WORKSPACE_FLOW_LOG_DIR/root.log\""
+
+[[nodes]]
+id = "outside"
+path = "../outside"
+required = true
+depends_on = ["root"]
+task.test = "echo outside >> \"$BIT_WORKSPACE_FLOW_LOG_DIR/outside.log\""

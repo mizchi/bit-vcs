@@ -1,4 +1,14 @@
 ///|
+fn issues_contain(issues : Array[String], needle : String) -> Bool {
+  for issue in issues {
+    if issue.contains(needle) {
+      return true
+    }
+  }
+  false
+}
+
+///|
 test "workspace: parse manifest with dependencies and tasks" {
   let manifest_text =
     #|version = 1
@@ -184,6 +194,33 @@ test "workspace: flow fingerprint changes when dependency signature changes" {
   signatures["root"] = "root-2"
   let fp2 = workspace_flow_fingerprint("test", "just test", node, signatures)
   assert_eq(fp1 == fp2, false)
+}
+
+///|
+test "workspace: path containment rejects escape outside workspace root" {
+  let workspace_root = "/tmp/ws"
+  let inside_path = workspace_node_abs_path(workspace_root, "dep")
+  let escaped_path = workspace_node_abs_path(workspace_root, "../outside")
+  assert_eq(path_is_within_workspace_root(workspace_root, inside_path), true)
+  assert_eq(path_is_within_workspace_root(workspace_root, escaped_path), false)
+}
+
+///|
+test "workspace: manifest issues include governance and security violations" {
+  let fs = @osfs.OsFs::new()
+  let node1 = workspace_new_node()
+  node1.id = "dup"
+  node1.path = "."
+  node1.depends_on = []
+  let node2 = workspace_new_node()
+  node2.id = "dup"
+  node2.path = "../outside"
+  node2.depends_on = ["missing"]
+  let manifest : WorkspaceManifest = { version: 1, nodes: [node1, node2] }
+  let issues = workspace_manifest_issues(fs, "/tmp/ws", manifest, false)
+  assert_true(issues_contain(issues, "duplicate node id"))
+  assert_true(issues_contain(issues, "escapes workspace root"))
+  assert_true(issues_contain(issues, "depends on unknown node"))
 }
 
 ///|

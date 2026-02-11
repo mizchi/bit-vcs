@@ -1,0 +1,15 @@
+version = 1
+
+[[nodes]]
+id = "dup"
+path = "."
+required = true
+depends_on = []
+task.test = "echo root >> \"$BIT_WORKSPACE_FLOW_LOG_DIR/root.log\""
+
+[[nodes]]
+id = "dup"
+path = "dep"
+required = true
+depends_on = []
+task.test = "echo dep >> \"$BIT_WORKSPACE_FLOW_LOG_DIR/dep.log\""

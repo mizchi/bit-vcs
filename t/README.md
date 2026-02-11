@@ -84,3 +84,5 @@ test_done
 | `t9009-workspace-flow-fixture.sh` | Workspace flow fixture bootstrap and e2e verification |
 | `t90010-workspace-git-compat.sh` | Workspace flow/commit/push compatibility checks against native git behavior |
 | `t9011-workspace-init-template.sh` | Workspace init template scaffolding (`--template flow`) and invalid template validation |
+| `t9012-workspace-security-boundary.sh` | Security boundary checks (escaped paths rejected, external repos untouched, git compatibility preserved) |
+| `t9013-workspace-manager-review.sh` | Manager/governance checks (optional-node failure policy, unknown deps, cycle, duplicate IDs) |
