@@ -129,7 +129,8 @@ pub fn checkout(
     fs.write_string(head_path, commit_id.to_hex() + "\n")
   }
   if update_worktree || update_index {
-    let db = ObjectDb::load(rfs, actual_git_dir)
+    let db = ObjectDb::load_lazy(rfs, actual_git_dir)
+    db.set_skip_verify(true)
     let files = collect_tree_files_from_commit(db, rfs, commit_id)
     if update_worktree && update_index {
       // Combined path: read each blob only once

@@ -109,6 +109,7 @@ pub struct ObjectDb {
   pack_cache_limit : Int
   mut prefer_packed : Bool
   mut saw_corrupt_pack : Bool
+  mut skip_verify : Bool
 }
 
 ///|
@@ -176,6 +177,7 @@ pub fn ObjectDb::load(
     pack_cache_limit,
     prefer_packed: false,
     saw_corrupt_pack: false,
+    skip_verify: false,
   }
 }
 
@@ -207,6 +209,7 @@ pub fn ObjectDb::load_lazy(
     pack_cache_limit,
     prefer_packed: false,
     saw_corrupt_pack: false,
+    skip_verify: false,
   }
 }
 
@@ -215,6 +218,11 @@ pub fn ObjectDb::load_lazy(
 ///|
 pub fn ObjectDb::set_prefer_packed(self : ObjectDb, value : Bool) -> Unit {
   self.prefer_packed = value
+}
+
+///|
+pub fn ObjectDb::set_skip_verify(self : ObjectDb, value : Bool) -> Unit {
+  self.skip_verify = value
 }
 
 ///|
@@ -276,9 +284,11 @@ fn get_loose_by_hex(
         e => raise @git.GitError::InvalidObject("Zlib error: \{e}")
       }
       let obj = parse_loose_object(raw)
-      let computed = @git.hash_object_content(obj.obj_type, obj.data).to_hex()
-      if computed != hex {
-        raise @git.GitError::HashMismatch(computed, hex)
+      if not(db.skip_verify) {
+        let computed = @git.hash_object_content(obj.obj_type, obj.data).to_hex()
+        if computed != hex {
+          raise @git.GitError::HashMismatch(computed, hex)
+        }
       }
       Some(obj)
     }
@@ -326,13 +336,15 @@ fn get_from_packs(
         try {
           let data = get_pack_bytes(db, fs, pack.pack_path)
           let obj = read_pack_object_at(data, pack, offset, db, fs, seen)
-          let computed = obj.id.to_hex()
-          if computed != hex {
-            if pack.version == 1 {
-              db.saw_corrupt_pack = true
-              return Some(obj)
+          if not(db.skip_verify) {
+            let computed = obj.id.to_hex()
+            if computed != hex {
+              if pack.version == 1 {
+                db.saw_corrupt_pack = true
+                return Some(obj)
+              }
+              raise @git.GitError::HashMismatch(computed, hex)
             }
-            raise @git.GitError::HashMismatch(computed, hex)
           }
           return Some(obj)
         } catch {
@@ -349,13 +361,15 @@ fn get_from_packs(
           let pack = lazy_pack.get(fs) // ensure loaded
           let data = get_pack_bytes(db, fs, pack.pack_path)
           let obj = read_pack_object_at(data, pack, offset, db, fs, seen)
-          let computed = obj.id.to_hex()
-          if computed != hex {
-            if pack.version == 1 {
-              db.saw_corrupt_pack = true
-              return Some(obj)
+          if not(db.skip_verify) {
+            let computed = obj.id.to_hex()
+            if computed != hex {
+              if pack.version == 1 {
+                db.saw_corrupt_pack = true
+                return Some(obj)
+              }
+              raise @git.GitError::HashMismatch(computed, hex)
             }
-            raise @git.GitError::HashMismatch(computed, hex)
           }
           return Some(obj)
         }
@@ -413,10 +427,11 @@ fn get_by_hex(
         e => raise @git.GitError::InvalidObject("Zlib error: \{e}")
       }
       let obj = parse_loose_object(raw)
-      // Verify hash
-      let computed = @git.hash_object_content(obj.obj_type, obj.data).to_hex()
-      if computed != hex {
-        raise @git.GitError::HashMismatch(computed, hex)
+      if not(db.skip_verify) {
+        let computed = @git.hash_object_content(obj.obj_type, obj.data).to_hex()
+        if computed != hex {
+          raise @git.GitError::HashMismatch(computed, hex)
+        }
       }
       return Some(obj)
     }
