@@ -83,7 +83,6 @@ pub async fn pull_http(
       fs.write_string(remote_path, commit_id.to_hex() + "\n")
       if rebase {
         let _ = @gitlib.rebase_onto(fs, rfs, root, commit_id)
-
       } else {
         let head = @gitlib.resolve_head_commit(rfs, git_dir)
         match head {

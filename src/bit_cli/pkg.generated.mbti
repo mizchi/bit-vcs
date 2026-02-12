@@ -99,6 +99,8 @@ type PushSourceKind
 
 type PushTargetPlan
 
+type RebaseAiArgs
+
 type RebaseTodoEntry
 
 type RunGitCommandInvocation

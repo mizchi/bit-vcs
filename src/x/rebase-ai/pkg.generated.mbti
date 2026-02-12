@@ -1,0 +1,48 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/bit/x/rebase-ai"
+
+import {
+  "mizchi/bit/lib",
+  "mizchi/bit/object",
+  "mizchi/bit/types",
+  "mizchi/llm",
+}
+
+// Values
+pub fn ai_rebase_abort(&@types.FileSystem, &@types.RepoFileSystem, String) -> Unit raise @object.GitError
+
+pub fn ai_rebase_continue(&@types.FileSystem, &@types.RepoFileSystem, String, options? : AiRebaseOptions) -> @lib.RebaseResult raise @object.GitError
+
+pub fn ai_rebase_skip(&@types.FileSystem, &@types.RepoFileSystem, String, options? : AiRebaseOptions) -> @lib.RebaseResult raise @object.GitError
+
+pub fn ai_rebase_start(&@types.FileSystem, &@types.RepoFileSystem, String, @object.ObjectId, options? : AiRebaseOptions) -> @lib.RebaseResult raise @object.GitError
+
+pub let default_model : String
+
+pub let default_provider : String
+
+pub fn find_conflict_marker_paths(&@types.RepoFileSystem, String) -> Array[String]
+
+// Errors
+
+// Types and methods
+pub struct AiConflictResolution {
+  resolved : Array[String]
+  failed : Array[String]
+}
+
+pub struct AiRebaseOptions {
+  model : String
+  max_auto_rounds : Int
+  agent_max_steps : Int
+  use_agent_loop : Bool
+  verbose : Bool
+  provider : @llm.BoxedProvider?
+}
+pub fn AiRebaseOptions::default() -> Self
+pub fn AiRebaseOptions::new(model? : String, max_auto_rounds? : Int, agent_max_steps? : Int, use_agent_loop? : Bool, verbose? : Bool, provider? : @llm.BoxedProvider?) -> Self
+
+// Type aliases
+
+// Traits
+

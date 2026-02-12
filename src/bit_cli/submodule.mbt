@@ -444,7 +444,6 @@ async fn handle_submodule_update(
         _ => Bytes::default()
       },
     )
-
   }
   let mut init = false
   let mut recursive = false

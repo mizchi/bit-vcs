@@ -230,6 +230,12 @@ async test "main: show_command_help supports hub command" {
 }
 
 ///|
+async test "main: show_command_help supports rebase-ai command" {
+  let ok = show_command_help("rebase-ai")
+  assert_true(ok)
+}
+
+///|
 test "main: command_handles_builtin_help allows agent subcommand-specific help" {
   assert_true(command_handles_builtin_help("agent"))
 }

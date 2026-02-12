@@ -80,14 +80,12 @@ async fn handle_checkout(args : Array[String]) -> Unit raise Error {
     if is_file && is_branch {
       // Ambiguous - default to branch (like git)
       let _ = @gitlib.checkout(fs, fs, root, target)
-
     } else if is_file {
       // Restore single file
       @gitlib.restore_paths(fs, fs, root, [target])
     } else {
       // Try as branch/commit
       let _ = @gitlib.checkout(fs, fs, root, target)
-
     }
   } else {
     // Multiple targets: treat as file paths

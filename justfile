@@ -77,10 +77,15 @@ test-distributed:
     moon test --target native -p mizchi/bit/x/agent
     moon test --target native -p mizchi/bit/x/agent/llm
     moon test --target native -p mizchi/bit/x/mcp
+    moon test --target native -p mizchi/bit/x/rebase-ai
     moon test --target native -p mizchi/bit/x/agent/native
     moon test --target native -p mizchi/bit/x/hub
     moon test --target native -p mizchi/bit/x/hub/native
     moon test --target native -p mizchi/bit/x/kv
+
+# Prepare an intentional rebase conflict to debug rebase-ai locally
+test-ai:
+    bash tools/test-ai.sh
 
 # Pre-release check
 release-check: fmt info check test e2e

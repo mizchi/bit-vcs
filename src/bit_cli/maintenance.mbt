@@ -169,6 +169,5 @@ async fn stage_all_changes(fs : OsFs, root : String) -> Unit raise Error {
       err if @async.is_cancellation_error(err) => raise err
       _ => ()
     }
-
   }
 }

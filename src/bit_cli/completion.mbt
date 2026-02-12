@@ -783,6 +783,7 @@ fn all_subcommands() -> Array[(String, String)] {
     ("ls-files", "Show information about files in the index"),
     ("ls-tree", "List the contents of a tree object"),
     ("maintenance", "Run tasks to optimize Git repository data"),
+    ("mcp", "Run bit MCP server (stdio)"),
     ("merge", "Join two or more development histories together"),
     ("mktree", "Build a tree-object from ls-tree formatted text"),
     ("multi-pack-index", "Write and verify multi-pack-indexes"),

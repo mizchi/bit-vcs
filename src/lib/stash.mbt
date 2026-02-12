@@ -280,7 +280,6 @@ fn stash_drop_at(
   lines.rev_in_place()
   if index < lines.length() {
     let _ = lines.remove(index)
-
   }
   if lines.length() == 0 {
     // No more entries

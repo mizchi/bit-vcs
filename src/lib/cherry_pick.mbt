@@ -121,13 +121,11 @@ pub fn cherry_pick(
           Some(parent_entry) if parent_entry.id == head_entry.id => {
             // No conflict - safe to delete
             let _ = result_files.remove(path)
-
           }
           _ => {
             // Conflict - head modified a file that was deleted
             conflicts.push(path)
             let _ = result_files.remove(path)
-
           }
         }
       None => () // Already deleted

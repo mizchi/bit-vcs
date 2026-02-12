@@ -36,6 +36,109 @@ eval "$(bit completion zsh)"
 - **Distributed filesystem primitives**: `x/fs` (Git-backed virtual filesystem) and `x/kv` (Gossip-synced KV on Git objects) are designed as building blocks for distributed state sharing.
 - **Workspace fingerprint extension**: `bit workspace flow` cache keys include per-node directory fingerprints. Default `git` mode is aligned with `git add -A` style snapshots (includes staged + unstaged changes).
 
+## Bit Extension Commands Quick Guide
+
+### bit fingerprint
+
+`bit fingerprint` is currently a feature set (workspace/hub integration), not a standalone top-level command.
+
+```bash
+# Workspace flow uses per-node directory fingerprints
+BIT_WORKSPACE_FINGERPRINT_MODE=git bit workspace flow test
+BIT_WORKSPACE_FINGERPRINT_MODE=fast bit workspace flow test
+
+# Hub workflow records can carry a workspace fingerprint
+bit hub pr workflow submit 123 \
+  --task test --status success \
+  --fingerprint <workspace-fingerprint> \
+  --txn <txn-id>
+```
+
+### bit subdir
+
+Use `bit subdir-clone` (or clone shorthand) to work on a repository subdirectory as an independent repo.
+
+```bash
+# Explicit command
+bit subdir-clone https://github.com/user/repo src/lib mylib
+
+# Shorthand via clone
+bit clone user/repo:src/lib
+bit clone user/repo@main:src/lib
+```
+
+After clone, use normal commands in the extracted repo (`bit status`, `bit rebase`, `bit push`).
+
+### bit hub
+
+Git-native PR/Issue workflow stored in repository data.
+
+```bash
+bit hub init
+
+# PR / Issue
+bit hub pr list --open
+bit hub issue list --open
+
+# Sync metadata
+bit hub sync push
+bit hub sync fetch
+
+# Search
+bit hub search "cache" --type pr --state open
+
+# Shortcuts
+bit pr list --open
+bit issue list --open
+```
+
+### bit rebase-ai
+
+AI-assisted rebase conflict resolution (OpenRouter, default model `moonshotai/kimi-k2`).
+
+```bash
+export OPENROUTER_API_KEY=...
+
+# Start / continue / abort / skip
+bit rebase-ai main
+bit rebase-ai --continue
+bit rebase-ai --abort
+bit rebase-ai --skip
+
+# Options
+bit rebase-ai --model moonshotai/kimi-k2 --max-ai-rounds 16 main
+bit rebase-ai --agent-loop --agent-max-steps 24 main
+```
+
+### bit mcp
+
+Start the MCP server via `bit mcp` (native target).
+
+```bash
+# Start MCP server (stdio)
+bit mcp
+
+# Help
+bit mcp --help
+bit help mcp
+
+# Standalone MoonBit entrypoint (equivalent server implementation)
+moon run src/x/mcp --target native
+```
+
+### bit hq
+
+`ghq`-compatible repository manager (default root: `~/bhq`).
+
+```bash
+bit hq get mizchi/git
+bit hq get -u mizchi/git
+bit hq get --shallow mizchi/git
+bit hq list
+bit hq list mizchi
+bit hq root
+```
+
 ## Subdirectory Clone
 
 Clone subdirectories directly from GitHub:

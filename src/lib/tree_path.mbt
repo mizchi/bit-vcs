@@ -8,7 +8,6 @@ fn normalize_repo_path_internal(path : String) -> String {
     } else if part == ".." {
       if parts.length() > 0 && parts[parts.length() - 1] != ".." {
         let _ = parts.pop()
-
       } else if not(path.has_prefix("/")) {
         parts.push(part)
       }

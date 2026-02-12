@@ -371,12 +371,7 @@ async test "fingerprint: git compat add-all matrix matches git write-tree" {
   assert_true(git_reset_clean(root))
   fs.write_string(root + "/tracked.txt", "stage-1\n")
   ignore(
-    @process.run(
-      "git",
-      ["add", "tracked.txt"],
-      inherit_env=true,
-      cwd=root,
-    ),
+    @process.run("git", ["add", "tracked.txt"], inherit_env=true, cwd=root),
   ) catch {
     _ => ()
   }
@@ -400,12 +395,7 @@ async test "fingerprint: git compat add-all matrix matches git write-tree" {
   // case: staged delete + untracked file
   assert_true(git_reset_clean(root))
   ignore(
-    @process.run(
-      "git",
-      ["rm", "-f", "dir/a.txt"],
-      inherit_env=true,
-      cwd=root,
-    ),
+    @process.run("git", ["rm", "-f", "dir/a.txt"], inherit_env=true, cwd=root),
   ) catch {
     _ => ()
   }

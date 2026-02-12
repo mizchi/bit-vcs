@@ -134,7 +134,6 @@ test "bench bitfs read 100 files (cached)" (b : @bench.T) {
   let bitfs = try! Fs::from_commit(fs, "/repo/.git", commit)
   for i in 0..<100 {
     let _ = try! bitfs.read_file(fs, "file\{i}.txt")
-
   }
   b.bench(fn() {
     for i in 0..<100 {

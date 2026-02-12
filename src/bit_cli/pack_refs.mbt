@@ -114,7 +114,6 @@ fn cleanup_empty_dirs(
     let entries = fs.readdir(dir)
     if entries.length() == 0 {
       let _ = fs.remove_dir(dir) catch { _ => () }
-
     } else {
       break
     }

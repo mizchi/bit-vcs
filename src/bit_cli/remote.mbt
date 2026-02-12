@@ -1774,7 +1774,6 @@ fn clone_local_repo(
       checkout_spec,
       detach=detached_head,
     )
-
   }
 }
 

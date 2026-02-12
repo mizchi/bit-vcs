@@ -37,7 +37,6 @@ async fn handle_hash_object(args : Array[String]) -> Unit raise Error {
         parse_object_type(obj_type),
         content,
       )
-
     }
     print_line(id.to_hex())
     return ()
@@ -53,7 +52,6 @@ async fn handle_hash_object(args : Array[String]) -> Unit raise Error {
         parse_object_type(obj_type),
         content,
       )
-
     }
     print_line(id.to_hex())
   }

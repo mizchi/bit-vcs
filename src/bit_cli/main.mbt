@@ -34,6 +34,7 @@ async fn show_help() -> Unit {
     #|   checkout    Switch branches or restore working tree files
     #|   merge       Join two or more development histories together
     #|   rebase      Reapply commits on top of another base tip
+    #|   rebase-ai   Rebase with AI conflict resolution (OpenRouter kimi-k2)
     #|   reset       Reset current HEAD to the specified state
     #|   stash       Stash the changes in a dirty working directory
     #|   switch      Switch branches
@@ -53,6 +54,7 @@ async fn show_help() -> Unit {
     #|   pr           Shortcut for 'hub pr' (gh-like)
     #|   issue        Shortcut for 'hub issue' (gh-like)
     #|   agent        P2P agent for automated PR hub workflow
+    #|   mcp          Run bit MCP server (stdio)
     #|   workspace    Manage hierarchical bit workspace projects
     #|   ws           Shortcut for 'workspace'
     #|   repo         Run regular bit command without workspace translation
@@ -124,6 +126,10 @@ async fn show_command_help(cmd : String) -> Bool {
     }
     "agent" => {
       print_agent_usage()
+      true
+    }
+    "mcp" => {
+      print_mcp_usage()
       true
     }
     "workspace" | "ws" => {
@@ -225,6 +231,13 @@ async fn show_command_help(cmd : String) -> Bool {
       show_simple_command_help(
         "git rebase [<options>] <upstream> [<branch>]",
         summary="Reapply commits on top of another base tip.",
+      )
+      true
+    }
+    "rebase-ai" => {
+      show_simple_command_help(
+        "git rebase-ai [<options>] <upstream>",
+        summary="Rebase with AI conflict resolution (OpenRouter moonshotai/kimi-k2, supports --agent-loop).",
       )
       true
     }
@@ -956,6 +969,7 @@ async fn dispatch_known_command(
     "switch" => handle_switch(rest)
     "reset" => handle_reset(rest)
     "rebase" => handle_rebase(rest)
+    "rebase-ai" => handle_rebase_ai(rest)
     "stash" => handle_stash(rest)
     "cherry-pick" => handle_cherry_pick(rest)
     "show-branches" => handle_show_branches(rest)
@@ -971,6 +985,7 @@ async fn dispatch_known_command(
     "pr" => handle_hub_pr(rest)
     "issue" => handle_hub_issue(rest)
     "agent" => handle_agent(rest)
+    "mcp" => handle_mcp(rest)
     "workspace" => handle_workspace(rest)
     "repo" => handle_repo(rest)
     "hq" => handle_hq(rest)

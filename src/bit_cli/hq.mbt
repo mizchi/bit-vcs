@@ -183,7 +183,6 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
     ])
     let _ = run_git_command(["-C", local_path, "sparse-checkout", "set", subdir])
     let _ = run_git_command(["-C", local_path, "checkout"])
-
   }
   print_line("Cloned to \{contract_path_hq(local_path)}")
 }

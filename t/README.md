@@ -86,3 +86,5 @@ test_done
 | `t9011-workspace-init-template.sh` | Workspace init template scaffolding (`--template flow`) and invalid template validation |
 | `t9012-workspace-security-boundary.sh` | Security boundary checks (escaped paths rejected, external repos untouched, git compatibility preserved) |
 | `t9013-workspace-manager-review.sh` | Manager/governance checks (optional-node failure policy, unknown deps, cycle, duplicate IDs) |
+| `t0016-rebase-ai-debug-setup.sh` | Local debug helper (`just test-ai`) creates an intentional rebase conflict and remains git-compatible |
+| `t0017-mcp-command.sh` | `bit mcp` subcommand wiring (`--help`, `help mcp`, completion exposure) and git workflow non-regression |

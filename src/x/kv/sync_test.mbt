@@ -119,7 +119,6 @@ test "sync: two nodes basic sync" {
   let node1 = net.node(1)
   if node1.db.has_pending_objects() {
     let _ = node1.db.apply_pending_objects()
-
   }
   // Node 1 should have received the objects
   assert_true(node1.db.pending_object_count() >= 0)
@@ -203,7 +202,6 @@ test "sync: random operations simulation" {
       if next_random() % 3 == 0 {
         // 33% chance to commit
         let _ = node.db.commit("Round " + round.to_string(), net.tick)
-
       }
     } else if op < 8 {
       // 20% chance: broadcast
@@ -211,7 +209,6 @@ test "sync: random operations simulation" {
     } else {
       // 20% chance: process messages
       let _ = net.process_all()
-
     }
   }
   // Final sync: all nodes broadcast and process
@@ -220,13 +217,11 @@ test "sync: random operations simulation" {
     let node = net.node(i)
     if node.db.is_dirty() {
       let _ = node.db.commit("Final commit", net.tick)
-
     }
     net.broadcast_announce(i)
   }
   for round = 0; round < 5; round = round + 1 {
     let _ = net.process_all()
-
   }
   // Verify all nodes have some state
   for idx = 0; idx < 4; idx = idx + 1 {
@@ -261,7 +256,6 @@ test "sync: vector clock ordering" {
   net.broadcast_announce(0)
   net.broadcast_announce(1)
   let _ = net.process_all()
-
 }
 
 ///|

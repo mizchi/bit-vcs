@@ -428,12 +428,12 @@ fn apply_relay_record(
   record : @hub.HubRecord,
 ) -> Bool raise @git.GitError {
   if not(
-    relay_record_matches_signing_policy(
-      record,
-      store.signing_key(),
-      store.require_signed(),
-    )
-  ) {
+      relay_record_matches_signing_policy(
+        record,
+        store.signing_key(),
+        store.require_signed(),
+      ),
+    ) {
     return false
   }
   let entry_name = hub_record_entry_name(record.key)
@@ -582,12 +582,13 @@ async fn relay_push_with_http(
     refs,
     node_id="relay",
     signing_key~,
-    require_signed=require_signed,
+    require_signed~,
   )
   let records = store.list_records(objects, "hub/", include_deleted=true)
-  let headers = relay_headers_with_auth({
-    "Content-Type": "application/json",
-  }, auth_token)
+  let headers = relay_headers_with_auth(
+    { "Content-Type": "application/json" },
+    auth_token,
+  )
   let mut accepted = 0
   for record in records {
     let payload_obj : Map[String, Json] = {}
@@ -639,7 +640,10 @@ async fn relay_fetch_with_http(
   let before = @lib.resolve_ref(rfs, git_dir, @hub.hub_notes_ref_name())
   let cursor = read_relay_cursor(rfs, git_dir, base_url)
   let url = relay_poll_url(base_url, cursor, 200)
-  let headers = relay_headers_with_auth({ "Accept": "application/json" }, auth_token)
+  let headers = relay_headers_with_auth(
+    { "Accept": "application/json" },
+    auth_token,
+  )
   let (response, data) = http_get(url, headers)
   if response.code != 200 {
     let body_text = @utf8.decode_lossy(data[:])
@@ -662,7 +666,7 @@ async fn relay_fetch_with_http(
     refs,
     node_id="relay",
     signing_key~,
-    require_signed=require_signed,
+    require_signed~,
   )
   let mut max_ts : Int64 = 0
   for record in records {

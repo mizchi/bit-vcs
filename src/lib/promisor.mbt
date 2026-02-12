@@ -125,7 +125,6 @@ pub async fn PromisorDb::fetch_missing(
   // Write to local storage
   for obj in objects {
     let _ = write_loose_object(write_fs, self.git_dir, obj.obj_type, obj.data)
-
   }
   objects
 }

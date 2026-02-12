@@ -1,0 +1,21 @@
+import {
+  "moonbitlang/async" @async,
+  "mizchi/bit" @git,
+  "mizchi/bit/lib" @gitlib,
+  "mizchi/bit/osfs" @osfs,
+  "mizchi/bit/x/agent/llm" @agent_llm,
+  "mizchi/llm" @llmlib,
+  "mizchi/llm/ffi" @llm_ffi,
+  "moonbitlang/async/process" @process,
+  "moonbitlang/core/encoding/utf8" @utf8,
+  "moonbitlang/core/json" @json,
+  "moonbitlang/core/strconv" @strconv,
+  "moonbitlang/core/env" @env,
+  "moonbitlang/x/sys" @sys,
+}
+
+warnings = "-29"
+
+options(
+  targets: { "rebase_ai_wbtest.mbt": [ "native" ] },
+)

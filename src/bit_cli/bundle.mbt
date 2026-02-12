@@ -302,7 +302,6 @@ async fn handle_bundle_unbundle(args : Array[String]) -> Unit raise Error {
   let objects = @pack.parse_packfile(pack_data)
   for obj in objects {
     let _ = @gitlib.write_loose_object(fs, git_dir, obj.obj_type, obj.data)
-
   }
   // Print refs
   for item in refs {

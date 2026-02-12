@@ -90,7 +90,6 @@ fn delete_from_tree(root : TreeNode, path : String) -> Unit {
   let parts = split_path(path)
   guard parts.length() > 0 else { return }
   let _ = delete_recursive(root, parts, 0)
-
 }
 
 ///|

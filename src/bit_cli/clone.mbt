@@ -177,7 +177,6 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
       }
       if ref_spec is Some(refname) && not(bare) && not(filter.is_partial()) {
         let _ = @gitlib.checkout(fs, fs, target, refname)
-
       }
       print_line("done.")
     }
@@ -231,11 +230,9 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
                     _ => ()
                   }
                   let _ = @gitlib.checkout(fs, fs, target, name)
-
                 }
                 None => {
                   let _ = @gitlib.checkout(fs, fs, target, commit_id.to_hex())
-
                 }
               }
             }
