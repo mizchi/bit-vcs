@@ -466,6 +466,108 @@ test "pr: is_approved with request changes" {
 }
 
 ///|
+test "pr merge policy: required approvals blocks until approved" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let hub = Hub::init(objects, refs)
+  let pr = hub.create_pr(
+    objects, refs, clock, "Policy PR", "Body", "refs/heads/feature", "refs/heads/main",
+    "alice@example.com",
+  )
+  let policy = PrMergePolicy::new(1, true, false)
+  ignore(
+    hub.check_merge_policy(objects, refs, pr.id(), policy) catch {
+      @git.GitError::InvalidObject(message) => {
+        assert_true(message.contains("required approvals=1"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
+}
+
+///|
+test "pr merge policy: request changes blocks when disabled" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let hub = Hub::init(objects, refs)
+  let pr = hub.create_pr(
+    objects, refs, clock, "Policy PR", "Body", "refs/heads/feature", "refs/heads/main",
+    "alice@example.com",
+  )
+  let feature_id = refs.resolve("refs/heads/feature")
+  guard feature_id is Some(fid) else { panic() }
+  let _ = hub.submit_review(
+    objects,
+    refs,
+    clock,
+    pr.id(),
+    "bob@example.com",
+    ReviewVerdict::RequestChanges,
+    "needs work",
+    fid,
+  )
+  let policy = PrMergePolicy::new(0, false, false)
+  ignore(
+    hub.check_merge_policy(objects, refs, pr.id(), policy) catch {
+      @git.GitError::InvalidObject(message) => {
+        assert_true(message.contains("request-changes review is present"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
+}
+
+///|
+test "pr merge policy: require signed records fails without signing key" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let hub = Hub::init(objects, refs)
+  let pr = hub.create_pr(
+    objects, refs, clock, "Policy PR", "Body", "refs/heads/feature", "refs/heads/main",
+    "alice@example.com",
+  )
+  let policy = PrMergePolicy::new(0, true, true)
+  ignore(
+    hub.check_merge_policy(objects, refs, pr.id(), policy) catch {
+      @git.GitError::InvalidObject(message) => {
+        assert_true(message.contains("signing key"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
+}
+
+///|
+test "pr merge policy: require signed records rejects unsigned PR with key" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let hub = Hub::init(objects, refs)
+  let pr = hub.create_pr(
+    objects, refs, clock, "Unsigned PR", "Body", "refs/heads/feature", "refs/heads/main",
+    "alice@example.com",
+  )
+  let policy = PrMergePolicy::new(0, true, true)
+  ignore(
+    hub.check_merge_policy(
+      objects,
+      refs,
+      pr.id(),
+      policy,
+      signing_key=Some("k1"),
+    ) catch {
+      @git.GitError::InvalidObject(message) => {
+        assert_true(message.contains("PR metadata is unsigned"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
+}
+
+///|
 test "pr: merge fast-forward" {
   let (_fs, objects, refs, clock) = setup_repo_with_branch()
   let prs = Hub::init(objects, refs)

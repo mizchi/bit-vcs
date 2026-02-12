@@ -245,19 +245,8 @@ fn print_hub_dump_usage() -> Unit {
 }
 
 ///|
-struct HubMergePolicy {
-  required_approvals : Int
-  allow_request_changes : Bool
-  require_signed_records : Bool
-}
-
-///|
-fn default_hub_merge_policy() -> HubMergePolicy {
-  {
-    required_approvals: 0,
-    allow_request_changes: true,
-    require_signed_records: false,
-  }
+fn default_hub_merge_policy() -> @hub.PrMergePolicy {
+  @hub.PrMergePolicy::default()
 }
 
 ///|
@@ -293,7 +282,7 @@ fn parse_merge_policy_bool(
 ///|
 fn parse_hub_merge_policy_toml(
   content : String,
-) -> HubMergePolicy raise @git.GitError {
+) -> @hub.PrMergePolicy raise @git.GitError {
   let mut required_approvals = 0
   let mut allow_request_changes = true
   let mut require_signed_records = false
@@ -356,7 +345,11 @@ fn parse_hub_merge_policy_toml(
         )
     }
   }
-  { required_approvals, allow_request_changes, require_signed_records }
+  @hub.PrMergePolicy::new(
+    required_approvals,
+    allow_request_changes,
+    require_signed_records,
+  )
 }
 
 ///|
@@ -381,7 +374,7 @@ fn ensure_hub_merge_policy_file(
 fn load_hub_merge_policy(
   fs : OsFs,
   git_dir : String,
-) -> HubMergePolicy raise @git.GitError {
+) -> @hub.PrMergePolicy raise @git.GitError {
   let policy_path = hub_merge_policy_path(git_dir)
   if not(fs.is_file(policy_path)) {
     return default_hub_merge_policy()
@@ -390,80 +383,6 @@ fn load_hub_merge_policy(
   parse_hub_merge_policy_toml(content)
 }
 
-///|
-fn summarize_latest_review_state(reviews : Array[@hub.PrReview]) -> (Int, Bool) {
-  let latest_verdicts : Map[String, @hub.ReviewVerdict] = {}
-  for review in reviews {
-    latest_verdicts[review.author] = review.verdict
-  }
-  let mut approvals = 0
-  let mut has_request_changes = false
-  for item in latest_verdicts.to_array() {
-    let (_, verdict) = item
-    match verdict {
-      @hub.ReviewVerdict::Approved => approvals += 1
-      @hub.ReviewVerdict::RequestChanges => has_request_changes = true
-      @hub.ReviewVerdict::Comment => ()
-    }
-  }
-  (approvals, has_request_changes)
-}
-
-///|
-fn check_hub_pr_merge_policy(
-  hub : @hub.Hub,
-  objects : &@gitlib.ObjectStore,
-  refs : &@gitlib.RefStore,
-  pr_id : String,
-  policy : HubMergePolicy,
-) -> Unit raise @git.GitError {
-  let pr = hub.get_pr(objects, pr_id)
-  guard pr is Some(existing_pr) else { return () }
-  if existing_pr.state() != @hub.PrState::Open {
-    return ()
-  }
-  let reviews = hub.list_reviews(objects, pr_id)
-  let (approved_count, has_request_changes) = summarize_latest_review_state(
-    reviews,
-  )
-  if not(policy.allow_request_changes) && has_request_changes {
-    raise @git.GitError::InvalidObject(
-      "Merge blocked by policy: request-changes review is present",
-    )
-  }
-  if approved_count < policy.required_approvals {
-    raise @git.GitError::InvalidObject(
-      "Merge blocked by policy: required approvals=\{policy.required_approvals}, current approvals=\{approved_count}",
-    )
-  }
-  if policy.require_signed_records {
-    let signing_key = get_hub_signing_key()
-    if signing_key is None {
-      raise @git.GitError::InvalidObject(
-        "Merge blocked by policy: require_signed_records=true requires BIT_COLLAB_SIGN_KEY",
-      )
-    }
-    let strict_hub = @hub.Hub::load(
-      objects,
-      refs,
-      signing_key~,
-      require_signed=true,
-    )
-    if strict_hub.get_pr(objects, pr_id) is None {
-      raise @git.GitError::InvalidObject(
-        "Merge blocked by policy: PR metadata is unsigned or has invalid signature",
-      )
-    }
-    let strict_reviews = strict_hub.list_reviews(objects, pr_id)
-    if strict_reviews.length() != reviews.length() {
-      raise @git.GitError::InvalidObject(
-        "Merge blocked by policy: unsigned or invalid PR reviews are present",
-      )
-    }
-  }
-}
-
-///|
 async fn handle_hub(args : Array[String]) -> Unit raise Error {
   if args.length() == 0 {
     print_hub_usage()
@@ -1357,7 +1276,13 @@ async fn handle_hub_pr_merge(args : Array[String]) -> Unit raise Error {
   let (objects, refs, clock) = make_hub_stores(git_dir)
   let hub = init_hub_store(objects, refs)
   let merge_policy = load_hub_merge_policy(fs, git_dir)
-  check_hub_pr_merge_policy(hub, objects, refs, id, merge_policy)
+  hub.check_merge_policy(
+    objects,
+    refs,
+    id,
+    merge_policy,
+    signing_key=get_hub_signing_key(),
+  )
   let result = match strategy {
     Some(s) =>
       hub.merge_pr(objects, refs, clock, id, get_author_string(), strategy=s)

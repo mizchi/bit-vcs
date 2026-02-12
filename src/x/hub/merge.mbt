@@ -16,6 +16,42 @@ pub struct PrMergeResult {
 }
 
 ///|
+pub struct PrMergePolicy {
+  required_approvals : Int
+  allow_request_changes : Bool
+  require_signed_records : Bool
+}
+
+///|
+pub fn PrMergePolicy::new(
+  required_approvals : Int,
+  allow_request_changes : Bool,
+  require_signed_records : Bool,
+) -> PrMergePolicy {
+  { required_approvals, allow_request_changes, require_signed_records }
+}
+
+///|
+pub fn PrMergePolicy::default() -> PrMergePolicy {
+  PrMergePolicy::new(0, true, false)
+}
+
+///|
+pub fn PrMergePolicy::required_approvals(self : PrMergePolicy) -> Int {
+  self.required_approvals
+}
+
+///|
+pub fn PrMergePolicy::allow_request_changes(self : PrMergePolicy) -> Bool {
+  self.allow_request_changes
+}
+
+///|
+pub fn PrMergePolicy::require_signed_records(self : PrMergePolicy) -> Bool {
+  self.require_signed_records
+}
+
+///|
 pub fn PrMergeResult::success(self : PrMergeResult) -> Bool {
   self.success
 }
@@ -33,6 +69,79 @@ pub fn PrMergeResult::conflicts(self : PrMergeResult) -> Array[String] {
 ///|
 pub fn PrMergeResult::message(self : PrMergeResult) -> String {
   self.message
+}
+
+///|
+fn summarize_latest_review_state(reviews : Array[PrReview]) -> (Int, Bool) {
+  let latest_verdicts : Map[String, ReviewVerdict] = {}
+  for review in reviews {
+    latest_verdicts[review.author] = review.verdict
+  }
+  let mut approvals = 0
+  let mut has_request_changes = false
+  for item in latest_verdicts.to_array() {
+    let (_, verdict) = item
+    match verdict {
+      ReviewVerdict::Approved => approvals += 1
+      ReviewVerdict::RequestChanges => has_request_changes = true
+      ReviewVerdict::Comment => ()
+    }
+  }
+  (approvals, has_request_changes)
+}
+
+///|
+pub fn Hub::check_merge_policy(
+  self : Hub,
+  objects : &@lib.ObjectStore,
+  refs : &@lib.RefStore,
+  pr_id : String,
+  policy : PrMergePolicy,
+  signing_key? : String? = None,
+) -> Unit raise @git.GitError {
+  let pr = self.get_pr(objects, pr_id)
+  guard pr is Some(existing_pr) else { return () }
+  if existing_pr.state != PrState::Open {
+    return ()
+  }
+  let reviews = self.list_reviews(objects, pr_id)
+  let (approved_count, has_request_changes) = summarize_latest_review_state(
+    reviews,
+  )
+  if not(policy.allow_request_changes) && has_request_changes {
+    raise @git.GitError::InvalidObject(
+      "Merge blocked by policy: request-changes review is present",
+    )
+  }
+  if approved_count < policy.required_approvals {
+    raise @git.GitError::InvalidObject(
+      "Merge blocked by policy: required approvals=\{policy.required_approvals}, current approvals=\{approved_count}",
+    )
+  }
+  if policy.require_signed_records {
+    guard signing_key is Some(sign_key) else {
+      raise @git.GitError::InvalidObject(
+        "Merge blocked by policy: require_signed_records=true requires signing key (BIT_COLLAB_SIGN_KEY for CLI)",
+      )
+    }
+    let strict_hub = Hub::load(
+      objects,
+      refs,
+      signing_key=Some(sign_key),
+      require_signed=true,
+    )
+    if strict_hub.get_pr(objects, pr_id) is None {
+      raise @git.GitError::InvalidObject(
+        "Merge blocked by policy: PR metadata is unsigned or has invalid signature",
+      )
+    }
+    let strict_reviews = strict_hub.list_reviews(objects, pr_id)
+    if strict_reviews.length() != reviews.length() {
+      raise @git.GitError::InvalidObject(
+        "Merge blocked by policy: unsigned or invalid PR reviews are present",
+      )
+    }
+  }
 }
 
 ///|

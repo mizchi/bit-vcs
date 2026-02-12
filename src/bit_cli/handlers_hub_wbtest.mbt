@@ -378,9 +378,9 @@ test "hub parser: parse_gh_issues rejects non-array JSON" {
 ///|
 test "hub merge policy parser: defaults without explicit values" {
   let policy = parse_hub_merge_policy_toml("")
-  assert_eq(policy.required_approvals, 0)
-  assert_true(policy.allow_request_changes)
-  assert_false(policy.require_signed_records)
+  assert_eq(policy.required_approvals(), 0)
+  assert_true(policy.allow_request_changes())
+  assert_false(policy.require_signed_records())
 }
 
 ///|
@@ -391,9 +391,9 @@ test "hub merge policy parser: parse merge section values" {
     #|allow_request_changes = false
     #|require_signed_records = true
   let policy = parse_hub_merge_policy_toml(policy_text)
-  assert_eq(policy.required_approvals, 2)
-  assert_false(policy.allow_request_changes)
-  assert_true(policy.require_signed_records)
+  assert_eq(policy.required_approvals(), 2)
+  assert_false(policy.allow_request_changes())
+  assert_true(policy.require_signed_records())
 }
 
 ///|
