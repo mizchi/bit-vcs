@@ -219,7 +219,7 @@ async fn run_git_internal_command(
 ///|
 async fn run_git_command(
   args : Array[String],
-  cwd? : String? = None,
+  cwd~ : String?,
   inherit_env? : Bool = true,
 ) -> Int {
   ignore(inherit_env)
@@ -229,11 +229,11 @@ async fn run_git_command(
   }
   let snapshot = enter_run_git_env(invocation.cwd, invocation.git_dir)
   let code = run_git_internal_command(invocation.cmd, invocation.rest) catch {
-    err if @async.is_cancellation_error(err) => {
-      restore_run_git_env(snapshot)
-      raise err
-    }
     err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        restore_run_git_env(snapshot)
+        raise err
+      }
       eprint_line("\{invocation.cmd} failed: \{err}")
       1
     }

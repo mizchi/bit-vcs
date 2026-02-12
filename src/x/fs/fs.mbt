@@ -136,6 +136,7 @@ pub fn Fs::get_promisor_db(
         backing_fs,
         self.git_dir,
         lazy_load=self.lazy_mode,
+        fetch_fn=None,
       )
       self.cached_promisor_db = Some(db)
       Some(db)

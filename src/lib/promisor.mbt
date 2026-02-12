@@ -45,10 +45,10 @@ pub fn PromisorDb::new(
   fs : &@git.RepoFileSystem,
   git_dir : String,
   lazy_load? : Bool = true,
-  fetch_fn? : (async (String, Array[@git.ObjectId]) -> Result[
+  fetch_fn~ : (async (String, Array[@git.ObjectId]) -> Result[
     Array[@git.PackObject],
     @git.GitError,
-  ] noraise)? = None,
+  ] noraise)?,
 ) -> PromisorDb raise @git.GitError {
   let db = if lazy_load {
     ObjectDb::load_lazy(fs, git_dir)

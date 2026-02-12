@@ -742,8 +742,12 @@ async fn run_main_for_args(args : Array[String]) -> Unit {
     effective_rest,
   )
   dispatch_command(dispatch_cmd, dispatch_rest) catch {
-    err if @async.is_cancellation_error(err) => raise err
-    err => exit_with_error("dispatch", err)
+    err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
+      exit_with_error("dispatch", err)
+    }
   }
 }
 
@@ -892,8 +896,12 @@ async fn dispatch_command(
     }
   }
   dispatch_known_command(normalized_cmd, rest) catch {
-    err if @async.is_cancellation_error(err) => raise err
-    err => exit_with_error(command_error_name(normalized_cmd), err)
+    err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
+      exit_with_error(command_error_name(normalized_cmd), err)
+    }
   }
 }
 

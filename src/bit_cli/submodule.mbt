@@ -193,11 +193,14 @@ async fn handle_submodule_add(
   @gitlibnative.apply_worktree_modes_from_commit(
     fs, fs, sub_path, modules_dir, target_id,
   ) catch {
-    err if @async.is_cancellation_error(err) => raise err
-    err =>
+    err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
       eprint_line(
         "warning: failed to apply worktree modes in submodule '\{path}': \{err}",
       )
+    }
   }
   @gitlib.add_paths_async(fs, fs, root, [".gitmodules"])
   update_submodule_index_entry(fs, git_dir, path, target_id)
@@ -337,8 +340,10 @@ async fn handle_submodule_status(
     // Get HEAD of submodule
     let sub_git_dir = @gitlib.resolve_gitdir(rfs, sub_git)
     let head_id = @gitlib.resolve_head_commit(rfs, sub_git_dir) catch {
-      err if @async.is_cancellation_error(err) => raise err
-      _ => {
+      err => {
+        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          raise err
+        }
         print_line("-\{String::make(40, '0')} \{sub.path}")
         continue
       }
@@ -441,7 +446,12 @@ async fn handle_submodule_update(
   if has_init_flag && rfs.is_file(gitfile) {
     let _gitfile_content = decode_bytes(
       rfs.read_file(gitfile) catch {
-        _ => Bytes::default()
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          Bytes::default()
+        }
       },
     )
   }
@@ -515,11 +525,14 @@ async fn handle_submodule_update(
     @gitlibnative.apply_worktree_modes_from_commit(
       fs, fs, sub_path, sub_git_dir, target_id,
     ) catch {
-      err if @async.is_cancellation_error(err) => raise err
-      err =>
+      err => {
+        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          raise err
+        }
         eprint_line(
           "warning: failed to apply worktree modes in submodule '\{sub.path}': \{err}",
         )
+      }
     }
     // Handle recursive
     if recursive {
@@ -669,8 +682,12 @@ async fn handle_submodule_deinit(
       let sub_git_dir = @gitlib.resolve_gitdir(rfs, sub_path + "/.git")
       if rfs.is_dir(sub_git_dir) {
         let status = @gitlib.status(rfs, sub_path) catch {
-          err if @async.is_cancellation_error(err) => raise err
-          _ => continue
+          err => {
+            if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+              raise err
+            }
+            continue
+          }
         }
         if status.unstaged_modified.length() > 0 {
           @stdio.stderr.write(
@@ -690,8 +707,12 @@ async fn handle_submodule_deinit(
     // Clear working directory
     if rfs.is_dir(sub_path) {
       let entries = rfs.readdir(sub_path) catch {
-        err if @async.is_cancellation_error(err) => raise err
-        _ => continue
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          continue
+        }
       }
       for e in entries {
         if e == ".git" {
@@ -702,8 +723,13 @@ async fn handle_submodule_deinit(
           remove_dir_recursive(fs, full)
         } else {
           wfs.remove_file(full) catch {
-            err if @async.is_cancellation_error(err) => raise err
-            _ => ()
+            err => {
+              if @async.is_being_cancelled() ||
+                @async.is_cancellation_error(err) {
+                raise err
+              }
+              ()
+            }
           }
         }
       }

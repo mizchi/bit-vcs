@@ -150,12 +150,18 @@ async fn handle_agent_run(args : Array[String]) -> Unit raise Error {
   let task_bytes = (osfs : &@git.RepoFileSystem).read_file(task_file)
   let task_json = @json.parse(agent_bytes_to_string(task_bytes)) catch {
     err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
       println("Error: invalid JSON in task file: \{err}")
       return
     }
   }
   let task = parse_agent_task(task_json) catch {
     err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
       println("Error: invalid task format: \{err}")
       return
     }
@@ -248,14 +254,38 @@ async fn handle_agent_status(args : Array[String]) -> Unit raise Error {
     let fs : &@git.FileSystem = osfs
     let rfs : &@git.RepoFileSystem = osfs
     let hub = load_hub_store(objects, refs) catch {
-      _ => init_hub_store(objects, refs)
+      err => {
+        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          raise err
+        }
+        init_hub_store(objects, refs)
+      }
     }
-    ignore(@hub_native.hub_fetch(hub, fs, rfs, git_dir, config.remote_url)) catch {
-      _ => ()
+    ignore(
+      @hub_native.hub_fetch(
+        hub,
+        fs,
+        rfs,
+        git_dir,
+        config.remote_url,
+        signing_key=None,
+        require_signed=None,
+        auth_token=None,
+      ),
+    ) catch {
+      err => {
+        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          raise err
+        }
+        ()
+      }
     }
   }
   let hub = load_hub_store(objects, refs) catch {
-    _ => {
+    err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
       println("No hub metadata found. Run 'bit hub init' first.")
       return
     }

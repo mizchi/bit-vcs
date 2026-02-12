@@ -14,7 +14,18 @@ pub async fn poll_once(
     make_obj_store(rfs, fs, git_dir),
     make_ref_store(fs, rfs, git_dir),
   )
-  ignore(@hub_native.hub_fetch(hub, fs, rfs, git_dir, config.remote_url))
+  ignore(
+    @hub_native.hub_fetch(
+      hub,
+      fs,
+      rfs,
+      git_dir,
+      config.remote_url,
+      signing_key=None,
+      require_signed=None,
+      auth_token=None,
+    ),
+  )
   // Reload after fetch
   hub.reload_store(
     make_obj_store(rfs, fs, git_dir),
@@ -105,7 +116,17 @@ pub async fn poll_once(
     }
   }
   // 6. Push hub notes
-  ignore(@hub_native.hub_push(hub, rfs, git_dir, config.remote_url))
+  ignore(
+    @hub_native.hub_push(
+      hub,
+      rfs,
+      git_dir,
+      config.remote_url,
+      signing_key=None,
+      require_signed=None,
+      auth_token=None,
+    ),
+  )
 }
 
 ///|

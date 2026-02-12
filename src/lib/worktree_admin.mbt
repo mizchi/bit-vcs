@@ -81,7 +81,7 @@ pub fn create_worktree(
   worktree_path : String,
   commit_ish : String?,
   detach? : Bool = false,
-  new_branch? : String? = None,
+  new_branch~ : String?,
 ) -> Unit raise @git.GitError {
   let git_dir = resolve_git_dir(rfs, root)
   // Resolve the absolute worktree path
@@ -255,7 +255,7 @@ pub fn lock_worktree(
   rfs : &@git.RepoFileSystem,
   root : String,
   worktree_path : String,
-  reason? : String? = None,
+  reason~ : String?,
 ) -> Unit raise @git.GitError {
   let git_dir = resolve_git_dir(rfs, root)
   // Resolve absolute path

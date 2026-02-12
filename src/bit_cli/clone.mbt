@@ -16,8 +16,12 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
       // Parse depth value
       let depth_str = args[i + 1]
       depth = @strconv.parse_int(depth_str) catch {
-        err if @async.is_cancellation_error(err) => raise err
-        _ => 0
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          0
+        }
       }
       i += 2
       continue
@@ -25,8 +29,12 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
     if arg.has_prefix("--depth=") {
       let depth_str = String::unsafe_substring(arg, start=8, end=arg.length())
       depth = @strconv.parse_int(depth_str) catch {
-        err if @async.is_cancellation_error(err) => raise err
-        _ => 0
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          0
+        }
       }
       i += 1
       continue
@@ -219,15 +227,25 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
               match branch {
                 Some(name) => {
                   fs.mkdir_p(git_dir + "/refs/heads") catch {
-                    err if @async.is_cancellation_error(err) => raise err
-                    _ => ()
+                    err => {
+                      if @async.is_being_cancelled() ||
+                        @async.is_cancellation_error(err) {
+                        raise err
+                      }
+                      ()
+                    }
                   }
                   fs.write_string(
                     git_dir + "/refs/heads/" + name,
                     commit_id.to_hex() + "\n",
                   ) catch {
-                    err if @async.is_cancellation_error(err) => raise err
-                    _ => ()
+                    err => {
+                      if @async.is_being_cancelled() ||
+                        @async.is_cancellation_error(err) {
+                        raise err
+                      }
+                      ()
+                    }
                   }
                   let _ = @gitlib.checkout(fs, fs, target, name)
                 }

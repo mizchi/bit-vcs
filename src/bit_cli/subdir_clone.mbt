@@ -210,22 +210,34 @@ async fn subdir_clone(
   // Update HEAD
   let head_path = git_dir + "/HEAD"
   fs.write_file(head_path, string_to_bytes("ref: refs/heads/main\n")) catch {
-    err if @async.is_cancellation_error(err) => raise err
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
+      ()
+    }
   }
   let ref_path = git_dir + "/refs/heads/main"
   fs.mkdir_p(git_dir + "/refs/heads") catch {
-    err if @async.is_cancellation_error(err) => raise err
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
+      ()
+    }
   }
   fs.write_file(ref_path, string_to_bytes(new_commit_id.to_hex() + "\n")) catch {
-    err if @async.is_cancellation_error(err) => raise err
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
+      ()
+    }
   }
   // Step 7: Write subdir-clone metadata to .git/info/attributes
   write_subdir_attributes(fs, git_dir, remote_url, subdir_path, commit_id)
   // Step 8: Reset index
-  let _ = run_git_command(["-C", target, "reset", "HEAD"])
+  let _ = run_git_command(["-C", target, "reset", "HEAD"], cwd=None)
   print_line("done.")
   print_line("")
   print_line("Cloned '\{subdir_path}' to '\{relative_target}/'")

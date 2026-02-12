@@ -11,7 +11,12 @@ fn test_tmp_root(prefix : String) -> String {
 ///|
 async fn test_cleanup(path : String) -> Unit {
   ignore(@process.run("rm", ["-rf", path], inherit_env=true)) catch {
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      ()
+    }
   }
 }
 
@@ -22,7 +27,12 @@ async fn test_exec_code(
   cwd : String,
 ) -> Int {
   @process.run(cmd, args, inherit_env=true, cwd~) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
 }
 
@@ -38,12 +48,24 @@ async fn test_exec_text(
     inherit_env=true,
     cwd~,
   ) catch {
-    _ => return None
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      return None
+    }
   }
   if code != 0 {
     return None
   }
-  let text = out.text() catch { _ => return None }
+  let text = out.text() catch {
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      return None
+    }
+  }
   Some(text.trim_end().to_string())
 }
 

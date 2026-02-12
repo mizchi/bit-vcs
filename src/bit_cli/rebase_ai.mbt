@@ -175,6 +175,7 @@ fn rebase_ai_options(parsed : RebaseAiArgs) -> @rebase_ai.AiRebaseOptions {
     use_agent_loop=parsed.use_agent_loop,
     agent_max_steps=parsed.agent_max_steps,
     verbose=true,
+    provider=None,
   )
 }
 

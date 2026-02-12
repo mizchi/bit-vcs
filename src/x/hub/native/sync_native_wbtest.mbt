@@ -145,7 +145,14 @@ async test "relay: relay_fetch_with_http imports records and stores cursor" {
   let refs : &@lib.RefStore = native_refs
   let hub = @hub.Hub::load(objects, refs, node_id="node-local")
   let result = relay_fetch_with_http(
-    hub, fs, fs, git_dir, "http://relay.test", relay_test_http_get_ok,
+    hub,
+    fs,
+    fs,
+    git_dir,
+    "http://relay.test",
+    relay_test_http_get_ok,
+    signing_key=None,
+    auth_token=None,
   )
   assert_true(result.success())
   let reloaded = @hub.HubStore::load(objects, refs, node_id="node-local")
@@ -175,7 +182,12 @@ async test "relay: relay_push_with_http sends local hub records" {
   )
   let hub = @hub.Hub::load(objects, refs, node_id="node-local")
   let result = relay_push_with_http(
-    fs, git_dir, "http://relay.test", relay_test_http_post_ok,
+    fs,
+    git_dir,
+    "http://relay.test",
+    relay_test_http_post_ok,
+    signing_key=None,
+    auth_token=None,
   )
   ignore(hub)
   assert_true(result.success())
@@ -226,6 +238,7 @@ async test "relay: relay push forwards auth token header" {
     git_dir,
     "http://relay.test",
     post,
+    signing_key=None,
     auth_token=Some("token-1"),
   )
   assert_true(result.success())
@@ -269,6 +282,7 @@ async test "relay: relay fetch forwards auth token header" {
     git_dir,
     "http://relay.test",
     get,
+    signing_key=None,
     auth_token=Some("token-2"),
   )
   assert_true(result.success())
@@ -302,6 +316,7 @@ async test "relay: strict signed policy rejects unsigned records during fetch" {
     relay_test_http_get_ok,
     signing_key=Some("k1"),
     require_signed=true,
+    auth_token=None,
   )
   assert_true(result.success())
   let notes_ref = @lib.resolve_ref(fs, git_dir, @hub.hub_notes_ref_name())

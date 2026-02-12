@@ -41,7 +41,7 @@ pub fn AiRebaseOptions::new(
   agent_max_steps? : Int = 16,
   use_agent_loop? : Bool = false,
   verbose? : Bool = false,
-  provider? : @llmlib.BoxedProvider? = None,
+  provider~ : @llmlib.BoxedProvider?,
 ) -> AiRebaseOptions {
   { model, max_auto_rounds, agent_max_steps, use_agent_loop, verbose, provider }
 }

@@ -309,7 +309,15 @@ pub async fn run_task(
           )
           // Push hub notes
           ignore(
-            @hub_native.hub_push(hub, rfs, git_dir, config.remote_url) catch {
+            @hub_native.hub_push(
+              hub,
+              rfs,
+              git_dir,
+              config.remote_url,
+              signing_key=None,
+              require_signed=None,
+              auth_token=None,
+            ) catch {
               err => {
                 if @async.is_being_cancelled() ||
                   @async.is_cancellation_error(err) {

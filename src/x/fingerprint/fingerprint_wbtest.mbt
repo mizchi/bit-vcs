@@ -11,14 +11,24 @@ fn make_tmp_root(prefix : String) -> String {
 ///|
 async fn cleanup_tmp_dir(path : String) -> Unit {
   ignore(@process.run("rm", ["-rf", path], inherit_env=true)) catch {
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      ()
+    }
   }
 }
 
 ///|
 async fn git_write_tree_after_add_all(root : String) -> String? {
   let add_code = @process.run("git", ["add", "-A"], inherit_env=true, cwd=root) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   if add_code != 0 {
     return None
@@ -29,12 +39,24 @@ async fn git_write_tree_after_add_all(root : String) -> String? {
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => return None
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      return None
+    }
   }
   if code != 0 {
     return None
   }
-  let text = out.text() catch { _ => return None }
+  let text = out.text() catch {
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      return None
+    }
+  }
   Some(text.trim_end().to_string())
 }
 
@@ -46,12 +68,24 @@ async fn git_cached_name_status(root : String) -> String? {
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => return None
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      return None
+    }
   }
   if code != 0 {
     return None
   }
-  let text = out.text() catch { _ => return None }
+  let text = out.text() catch {
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      return None
+    }
+  }
   Some(text.trim_end().to_string())
 }
 
@@ -63,7 +97,12 @@ async fn git_reset_clean(root : String) -> Bool {
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   if reset_code != 0 {
     return false
@@ -74,7 +113,12 @@ async fn git_reset_clean(root : String) -> Bool {
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   clean_code == 0
 }
@@ -150,7 +194,12 @@ async test "fingerprint: git compat mode matches git write-tree for simple files
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   if init_code != 0 {
     cleanup_tmp_dir(root)
@@ -181,7 +230,12 @@ async test "fingerprint: git compat matches git add -A write-tree with staged an
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   if init_code != 0 {
     cleanup_tmp_dir(root)
@@ -193,7 +247,12 @@ async test "fingerprint: git compat matches git add -A write-tree with staged an
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   let cfg_name = @process.run(
     "git",
@@ -201,7 +260,12 @@ async test "fingerprint: git compat matches git add -A write-tree with staged an
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   assert_eq(cfg_email, 0)
   assert_eq(cfg_name, 0)
@@ -209,7 +273,12 @@ async test "fingerprint: git compat matches git add -A write-tree with staged an
   fs.write_string(root + "/tracked.txt", "base\n")
   fs.write_string(root + "/dir/a.txt", "a\n")
   let add_base = @process.run("git", ["add", "-A"], inherit_env=true, cwd=root) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   let commit_base = @process.run(
     "git",
@@ -217,7 +286,12 @@ async test "fingerprint: git compat matches git add -A write-tree with staged an
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   assert_eq(add_base, 0)
   assert_eq(commit_base, 0)
@@ -230,7 +304,12 @@ async test "fingerprint: git compat matches git add -A write-tree with staged an
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   assert_eq(stage_code, 0)
   fs.write_string(root + "/tracked.txt", "worktree-2\n")
@@ -308,7 +387,12 @@ async test "fingerprint: git compat add-all matrix matches git write-tree" {
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   if init_code != 0 {
     cleanup_tmp_dir(root)
@@ -322,7 +406,12 @@ async test "fingerprint: git compat add-all matrix matches git write-tree" {
       cwd=root,
     ),
   ) catch {
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      ()
+    }
   }
   ignore(
     @process.run(
@@ -332,13 +421,23 @@ async test "fingerprint: git compat add-all matrix matches git write-tree" {
       cwd=root,
     ),
   ) catch {
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      ()
+    }
   }
   fs.mkdir_p(root + "/dir")
   fs.write_string(root + "/tracked.txt", "base\n")
   fs.write_string(root + "/dir/a.txt", "a\n")
   let add_base = @process.run("git", ["add", "-A"], inherit_env=true, cwd=root) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   let commit_base = @process.run(
     "git",
@@ -346,7 +445,12 @@ async test "fingerprint: git compat add-all matrix matches git write-tree" {
     inherit_env=true,
     cwd=root,
   ) catch {
-    _ => -1
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      -1
+    }
   }
   assert_eq(add_base, 0)
   assert_eq(commit_base, 0)
@@ -373,7 +477,12 @@ async test "fingerprint: git compat add-all matrix matches git write-tree" {
   ignore(
     @process.run("git", ["add", "tracked.txt"], inherit_env=true, cwd=root),
   ) catch {
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      ()
+    }
   }
   fs.write_string(root + "/tracked.txt", "worktree-2\n")
   assert_git_add_all_equivalent(fs, root)
@@ -388,7 +497,12 @@ async test "fingerprint: git compat add-all matrix matches git write-tree" {
       cwd=root,
     ),
   ) catch {
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      ()
+    }
   }
   assert_git_add_all_equivalent(fs, root)
 
@@ -397,7 +511,12 @@ async test "fingerprint: git compat add-all matrix matches git write-tree" {
   ignore(
     @process.run("git", ["rm", "-f", "dir/a.txt"], inherit_env=true, cwd=root),
   ) catch {
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() {
+        raise err
+      }
+      ()
+    }
   }
   fs.write_string(root + "/extra.txt", "x\n")
   assert_git_add_all_equivalent(fs, root)

@@ -125,8 +125,12 @@ pub async fn stash_push(
   let old_id = if rfs.is_file(stash_ref_path) {
     let content = @utf8.decode_lossy(rfs.read_file(stash_ref_path)[:])
     let hex = content.trim_end(chars="\n\r ").to_string()
-    @git.ObjectId::from_hex(hex) catch {
-      _ => @git.ObjectId::zero()
+    let parsed : Result[@git.ObjectId, Error] = try? @git.ObjectId::from_hex(
+      hex,
+    )
+    match parsed {
+      Ok(id) => id
+      Err(_) => @git.ObjectId::zero()
     }
   } else {
     @git.ObjectId::zero()

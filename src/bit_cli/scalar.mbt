@@ -334,7 +334,7 @@ fn scalar_rewrite_repo_config(fs : OsFs, repo : String) -> Unit {
 
 ///|
 async fn scalar_run_git(args : Array[String]) -> Int {
-  run_git_command(args)
+  run_git_command(args, cwd=None)
 }
 
 ///|
@@ -593,7 +593,12 @@ async fn scalar_handle_delete(
     scalar_remove_dir_recursive(fs, target)
   } else if fs.is_file(target) {
     fs.remove_file(target) catch {
-      _ => ()
+      err => {
+        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          raise err
+        }
+        ()
+      }
     }
   }
 }
@@ -672,7 +677,12 @@ async fn scalar_handle_clone(
   let repo = if parsed.src { enlistment + "/src" } else { enlistment }
   if parsed.src {
     fs.mkdir_p(enlistment) catch {
-      _ => ()
+      err => {
+        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          raise err
+        }
+        ()
+      }
     }
   }
   let clone_args : Array[String] = ["clone", "--filter=blob:none"]
@@ -823,23 +833,35 @@ async fn handle_scalar(args : Array[String]) -> Unit raise Error {
     }
     "register" =>
       scalar_handle_register(fs, cwd, subargs) catch {
-        err if @async.is_cancellation_error(err) => raise err
-        err => scalar_die(1, err.to_string())
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          scalar_die(1, err.to_string())
+        }
       }
     "list" => scalar_handle_list(fs)
     "unregister" => scalar_handle_unregister(fs, cwd, subargs)
     "delete" => scalar_handle_delete(fs, cwd, subargs)
     "reconfigure" =>
       scalar_handle_reconfigure(fs, cwd, subargs) catch {
-        err if @async.is_cancellation_error(err) => raise err
-        err => scalar_die(1, err.to_string())
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          scalar_die(1, err.to_string())
+        }
       }
     "clone" => scalar_handle_clone(fs, cwd, subargs)
     "run" => scalar_handle_run(fs, cwd, subargs)
     "diagnose" =>
       scalar_handle_diagnose(fs, cwd, subargs) catch {
-        err if @async.is_cancellation_error(err) => raise err
-        err => scalar_die(1, err.to_string())
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          scalar_die(1, err.to_string())
+        }
       }
     _ => {
       print_scalar_usage()

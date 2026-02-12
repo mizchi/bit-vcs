@@ -151,8 +151,12 @@ fn get_config_value_simple(
 ///|
 async fn stage_all_changes(fs : OsFs, root : String) -> Unit raise Error {
   let status = @gitlib.status(fs, root) catch {
-    err if @async.is_cancellation_error(err) => raise err
-    _ => return
+    err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
+      return
+    }
   }
   let all_paths : Array[String] = []
   for p in status.untracked {
@@ -166,8 +170,12 @@ async fn stage_all_changes(fs : OsFs, root : String) -> Unit raise Error {
   }
   if all_paths.length() > 0 {
     let _ = @gitlib.add_paths_async(fs, fs, root, all_paths) catch {
-      err if @async.is_cancellation_error(err) => raise err
-      _ => ()
+      err => {
+        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          raise err
+        }
+        ()
+      }
     }
   }
 }

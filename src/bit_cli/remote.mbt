@@ -355,8 +355,12 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
       }
       if progress {
         emit_trace_region("progress", "Renaming remote references") catch {
-          err if @async.is_cancellation_error(err) => raise err
-          _ => ()
+          err => {
+            if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+              raise err
+            }
+            ()
+          }
         }
       }
       remote_rename(fs, fs, git_dir, old_name, new_name)
@@ -771,8 +775,12 @@ async fn remote_remove(
     @gitlib.sort_strings_lex(warn_branches)
     let msg = @gitlib.format_remove_warning(warn_branches)
     @stdio.stderr.write(str_to_bytes(msg)) catch {
-      err if @async.is_cancellation_error(err) => raise err
-      _ => ()
+      err => {
+        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          raise err
+        }
+        ()
+      }
     }
   }
 }
@@ -1005,8 +1013,12 @@ async fn remote_rename(
           lines,
         })
         fs.remove_file(legacy_remotes) catch {
-          err if @async.is_cancellation_error(err) => raise err
-          _ => ()
+          err => {
+            if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+              raise err
+            }
+            ()
+          }
         }
         found_remote = true
       }
@@ -1042,8 +1054,12 @@ async fn remote_rename(
         lines,
       })
       fs.remove_file(legacy_branches) catch {
-        err if @async.is_cancellation_error(err) => raise err
-        _ => ()
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          ()
+        }
       }
       found_remote = true
     }
@@ -1081,14 +1097,22 @@ async fn remote_rename(
     }
     if has_conflict {
       eprint_line("error: renaming remote references failed") catch {
-        err if @async.is_cancellation_error(err) => raise err
-        _ => ()
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          ()
+        }
       }
       eprint_line(
         "error: The remote you are trying to rename has conflicting references",
       ) catch {
-        err if @async.is_cancellation_error(err) => raise err
-        _ => ()
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          ()
+        }
       }
       rename_failed = true
     } else {
@@ -1988,7 +2012,14 @@ async fn fetch_local_repo(
       not(looks_like_object_id(spec.src)) {
       continue
     }
-    let object_id = @git.ObjectId::from_hex(spec.src) catch { _ => continue }
+    let object_id = @git.ObjectId::from_hex(spec.src) catch {
+      err => {
+        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          raise err
+        }
+        continue
+      }
+    }
     let object_id_hex = object_id.to_hex()
     if enforce_unadvertised_oid {
       let mut reachable_from_visible_tip = false
@@ -2250,15 +2281,25 @@ async fn fetch_from_remote(
       if fs.is_file(remote_path) {
         let content = decode_bytes(
           fs.read_file(remote_path) catch {
-            err if @async.is_cancellation_error(err) => raise err
-            _ => Bytes::default()
+            err => {
+              if @async.is_being_cancelled() ||
+                @async.is_cancellation_error(err) {
+                raise err
+              }
+              Bytes::default()
+            }
           },
         )
         let hex = trim_string(content)
         if hex.length() > 0 {
           prev_id = (hex |> @git.ObjectId::from_hex |> Some) catch {
-            err if @async.is_cancellation_error(err) => raise err
-            _ => None
+            err => {
+              if @async.is_being_cancelled() ||
+                @async.is_cancellation_error(err) {
+                raise err
+              }
+              None
+            }
           }
         }
       }

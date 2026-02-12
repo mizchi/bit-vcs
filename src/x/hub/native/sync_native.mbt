@@ -557,9 +557,9 @@ async fn relay_push_with_http(
     @git.HttpResponse,
     Bytes,
   ) raise @git.GitError,
-  signing_key? : String? = None,
+  signing_key~ : String?,
   require_signed? : Bool = false,
-  auth_token? : String? = None,
+  auth_token~ : String?,
 ) -> @hub.PrSyncResult raise @git.GitError {
   let ref_name = @hub.hub_notes_ref_name()
   let local_commit = @lib.resolve_ref(rfs, git_dir, ref_name)
@@ -632,9 +632,9 @@ async fn relay_fetch_with_http(
   git_dir : String,
   remote_url : String,
   http_get : async (String, Map[String, String]) -> (@git.HttpResponse, Bytes) raise @git.GitError,
-  signing_key? : String? = None,
+  signing_key~ : String?,
   require_signed? : Bool = false,
-  auth_token? : String? = None,
+  auth_token~ : String?,
 ) -> @hub.PrSyncResult raise @git.GitError {
   let base_url = trim_trailing_slash(remote_url)
   let before = @lib.resolve_ref(rfs, git_dir, @hub.hub_notes_ref_name())
@@ -809,9 +809,9 @@ pub async fn hub_push(
   rfs : &@git.RepoFileSystem,
   git_dir : String,
   remote_url : String,
-  signing_key? : String? = None,
-  require_signed? : Bool? = None,
-  auth_token? : String? = None,
+  signing_key~ : String?,
+  require_signed~ : Bool?,
+  auth_token~ : String?,
 ) -> @hub.PrSyncResult raise @git.GitError {
   let effective_signing_key = match signing_key {
     Some(value) => Some(value)
@@ -838,17 +838,24 @@ pub async fn hub_push(
       )
     None =>
       hub_push_git_http(rfs, git_dir, remote_url) catch {
-        err if should_fallback_to_relay(err, remote_url) =>
-          relay_push_with_http(
-            rfs,
-            git_dir,
-            trim_trailing_slash(remote_url),
-            @gitnative.native_http_post,
-            signing_key=effective_signing_key,
-            require_signed=effective_require_signed,
-            auth_token=effective_auth_token,
-          )
-        other => raise other
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          if should_fallback_to_relay(err, remote_url) {
+            relay_push_with_http(
+              rfs,
+              git_dir,
+              trim_trailing_slash(remote_url),
+              @gitnative.native_http_post,
+              signing_key=effective_signing_key,
+              require_signed=effective_require_signed,
+              auth_token=effective_auth_token,
+            )
+          } else {
+            raise err
+          }
+        }
       }
   }
 }
@@ -861,9 +868,9 @@ pub async fn hub_fetch(
   rfs : &@git.RepoFileSystem,
   git_dir : String,
   remote_url : String,
-  signing_key? : String? = None,
-  require_signed? : Bool? = None,
-  auth_token? : String? = None,
+  signing_key~ : String?,
+  require_signed~ : Bool?,
+  auth_token~ : String?,
 ) -> @hub.PrSyncResult raise @git.GitError {
   let effective_signing_key = match signing_key {
     Some(value) => Some(value)
@@ -892,19 +899,26 @@ pub async fn hub_fetch(
       )
     None =>
       hub_fetch_git_http(hub, fs, rfs, git_dir, remote_url) catch {
-        err if should_fallback_to_relay(err, remote_url) =>
-          relay_fetch_with_http(
-            hub,
-            fs,
-            rfs,
-            git_dir,
-            trim_trailing_slash(remote_url),
-            @gitnative.native_http_get,
-            signing_key=effective_signing_key,
-            require_signed=effective_require_signed,
-            auth_token=effective_auth_token,
-          )
-        other => raise other
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          if should_fallback_to_relay(err, remote_url) {
+            relay_fetch_with_http(
+              hub,
+              fs,
+              rfs,
+              git_dir,
+              trim_trailing_slash(remote_url),
+              @gitnative.native_http_get,
+              signing_key=effective_signing_key,
+              require_signed=effective_require_signed,
+              auth_token=effective_auth_token,
+            )
+          } else {
+            raise err
+          }
+        }
       }
   }
 }

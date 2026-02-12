@@ -130,7 +130,10 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
     if update {
       // Update existing
       print_line("Updating \{contract_path_hq(local_path)}...")
-      let code = run_git_command(["-C", local_path, "pull", "--ff-only"])
+      let code = run_git_command(
+        ["-C", local_path, "pull", "--ff-only"],
+        cwd=None,
+      )
       if code == 0 {
         print_line("Updated \{contract_path_hq(local_path)}")
       } else {
@@ -150,8 +153,12 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
   // Create parent directories
   let parent = get_parent_dir(local_path)
   fs.mkdir_p(parent) catch {
-    err if @async.is_cancellation_error(err) => raise err
-    _ => ()
+    err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
+      ()
+    }
   }
   let clone_args : Array[String] = ["clone"]
   if options.shallow {
@@ -170,7 +177,7 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
   }
   clone_args.push(r.clone_url(ssh~))
   clone_args.push(local_path)
-  let code = run_git_command(clone_args)
+  let code = run_git_command(clone_args, cwd=None)
   if code != 0 {
     eprint_line("bit hq get: clone failed")
     return
@@ -178,11 +185,15 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
   // Handle sparse checkout
   if r.needs_sparse() {
     let subdir = r.subdir.unwrap_or("")
-    let _ = run_git_command([
-      "-C", local_path, "sparse-checkout", "init", "--cone",
-    ])
-    let _ = run_git_command(["-C", local_path, "sparse-checkout", "set", subdir])
-    let _ = run_git_command(["-C", local_path, "checkout"])
+    let _ = run_git_command(
+      ["-C", local_path, "sparse-checkout", "init", "--cone"],
+      cwd=None,
+    )
+    let _ = run_git_command(
+      ["-C", local_path, "sparse-checkout", "set", subdir],
+      cwd=None,
+    )
+    let _ = run_git_command(["-C", local_path, "checkout"], cwd=None)
   }
   print_line("Cloned to \{contract_path_hq(local_path)}")
 }

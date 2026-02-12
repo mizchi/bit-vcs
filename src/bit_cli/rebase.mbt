@@ -794,12 +794,14 @@ async fn handle_subdir_rebase(
   print_line("  Base commit: \{base_hex}")
   // Step 1: Fetch from origin
   print_line("  Fetching from origin...")
-  let _ = run_git_command(["-C", root, "fetch", "origin"])
+  let _ = run_git_command(["-C", root, "fetch", "origin"], cwd=None)
   // Step 2: Resolve upstream ref
   let upstream_path = git_dir + "/refs/remotes/" + target_ref
   let upstream_bytes = fs.read_file(upstream_path) catch {
-    err if @async.is_cancellation_error(err) => raise err
-    _ => {
+    err => {
+      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        raise err
+      }
       print_line("Error: cannot resolve ref: \{target_ref}")
       print_line("Make sure it exists (e.g., origin/main)")
       return
@@ -833,7 +835,7 @@ async fn handle_subdir_rebase(
   // Step 5: Update base commit
   update_subdir_base(fs, git_dir, upstream_hex)
   // Step 6: Reset index
-  let _ = run_git_command(["-C", root, "reset", "HEAD"])
+  let _ = run_git_command(["-C", root, "reset", "HEAD"], cwd=None)
   print_line("done.")
   print_line("")
   print_line("Successfully rebased onto \{target_ref}")
