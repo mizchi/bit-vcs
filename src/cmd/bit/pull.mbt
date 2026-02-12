@@ -157,7 +157,7 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
       None =>
         match resolve_remote_ref_id(url, upstream_ref) {
           Some((id, _)) => {
-            let pack = @gitnative.fetch_pack_http(url, [id], true)
+            let pack = @gitionative.fetch_pack_http(url, [id], true)
             let objects = @pack.parse_packfile(pack)
             @pack.write_packfile_with_index(fs, git_dir, pack, objects)
             write_ref_file(fs, git_dir, target_ref, id)

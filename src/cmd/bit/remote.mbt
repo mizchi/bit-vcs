@@ -2256,7 +2256,7 @@ async fn fetch_from_remote(
     None => ()
   }
   // Fallback to HTTP fetch
-  let (refs, _caps, _version, symrefs) = @gitnative.discover_upload_refs_http(
+  let (refs, _caps, _version, symrefs) = @gitionative.discover_upload_refs_http(
     remote_url, true,
   )
   let default_ref = @protocol.select_default_ref(refs, symrefs)
@@ -2307,7 +2307,7 @@ async fn fetch_from_remote(
         return ()
       }
       print_line("Fetching from \{remote_url}...")
-      let pack = @gitnative.fetch_pack_http(remote_url, [commit_id], true)
+      let pack = @gitionative.fetch_pack_http(remote_url, [commit_id], true)
       let objects = @pack.parse_packfile(pack)
       @pack.write_packfile_with_index(fs, git_dir, pack, objects)
       let dir = match remote_path.rev_find("/") {

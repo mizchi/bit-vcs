@@ -2,7 +2,6 @@ import {
   "mizchi/bit" @git,
   "mizchi/bit/pack" @pack,
   "mizchi/bit/protocol" @protocol,
-  "mizchi/bit/native" @gitnative,
   "mizchi/bit/lib" @gitlib,
   "mizchi/bit/repo_ops" @gitrepo,
   "mizchi/bit/diff" @gitdiff,

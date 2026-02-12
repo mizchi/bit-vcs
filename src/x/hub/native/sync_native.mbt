@@ -720,10 +720,10 @@ async fn hub_push_git_http(
   let objects = @lib.collect_reachable_objects(db, rfs, local_id)
   let pack = @pack.create_packfile(objects)
   let remote = @protocol.Remote::new(remote_url)
-  let refs = @gitnative.discover_receive_refs_http(remote)
+  let refs = @gitionative.discover_receive_refs_http(remote)
   let (old_id, push_ref) = @hub.find_remote_notes_ref(refs)
   let req = @protocol.PushRequest::new(old_id, local_id, push_ref, pack)
-  let result = @gitnative.push(remote, req)
+  let result = @gitionative.push(remote, req)
   if result.has_prefix("unpack ok") ||
     result.has_prefix("ok ") ||
     result.has_prefix("Push successful") {
@@ -753,7 +753,7 @@ async fn hub_fetch_git_http(
   remote_url : String,
 ) -> @hub.PrSyncResult raise @git.GitError {
   let ref_name = @hub.hub_notes_ref_name()
-  let (refs, _, _, _) = @gitnative.discover_upload_refs_http(remote_url, true)
+  let (refs, _, _, _) = @gitionative.discover_upload_refs_http(remote_url, true)
   let remote_id = @hub.find_upload_notes_ref(refs)
   guard remote_id is Some((rid, remote_ref)) else {
     return @hub.PrSyncResult::new(
@@ -763,7 +763,7 @@ async fn hub_fetch_git_http(
       None,
     )
   }
-  let pack = @gitnative.fetch_pack_http(remote_url, [rid], true)
+  let pack = @gitionative.fetch_pack_http(remote_url, [rid], true)
   let objects = @pack.parse_packfile(pack)
   @pack.write_packfile_with_index(fs, git_dir, pack, objects)
   let remote_short = @hub.short_ref_name(remote_ref)
@@ -831,7 +831,7 @@ pub async fn hub_push(
         rfs,
         git_dir,
         base_url,
-        @gitnative.native_http_post,
+        @gitionative.native_http_post,
         signing_key=effective_signing_key,
         require_signed=effective_require_signed,
         auth_token=effective_auth_token,
@@ -847,7 +847,7 @@ pub async fn hub_push(
               rfs,
               git_dir,
               trim_trailing_slash(remote_url),
-              @gitnative.native_http_post,
+              @gitionative.native_http_post,
               signing_key=effective_signing_key,
               require_signed=effective_require_signed,
               auth_token=effective_auth_token,
@@ -892,7 +892,7 @@ pub async fn hub_fetch(
         rfs,
         git_dir,
         base_url,
-        @gitnative.native_http_get,
+        @gitionative.native_http_get,
         signing_key=effective_signing_key,
         require_signed=effective_require_signed,
         auth_token=effective_auth_token,
@@ -910,7 +910,7 @@ pub async fn hub_fetch(
               rfs,
               git_dir,
               trim_trailing_slash(remote_url),
-              @gitnative.native_http_get,
+              @gitionative.native_http_get,
               signing_key=effective_signing_key,
               require_signed=effective_require_signed,
               auth_token=effective_auth_token,

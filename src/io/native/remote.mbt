@@ -8,7 +8,7 @@ pub async fn discover_receive_refs_http(
   remote : @protocol.Remote,
 ) -> Array[(@git.ObjectId, String)] raise @git.GitError {
   let (refs, _) = @protocol.discover_refs_with_http(
-    remote, @gitionative.native_http_get,
+    remote, native_http_get,
   )
   refs
 }
@@ -18,7 +18,7 @@ pub async fn discover_receive_refs_http(
 pub async fn discover_refs(
   remote : @protocol.Remote,
 ) -> (Array[(@git.ObjectId, String)], Array[String]) raise @git.GitError {
-  @protocol.discover_refs_with_http(remote, @gitionative.native_http_get)
+  @protocol.discover_refs_with_http(remote, native_http_get)
 }
 
 ///|
@@ -28,7 +28,7 @@ pub async fn push(
   req : @protocol.PushRequest,
 ) -> String raise @git.GitError {
   @protocol.push_with_http(
-    remote, req, @gitionative.native_http_get, @gitionative.native_http_post,
+    remote, req, native_http_get, native_http_post,
   )
 }
 

@@ -138,7 +138,7 @@ async fn handle_tree(args : Array[String]) -> Unit raise Error {
   let normalized_filters = normalize_ls_tree_filters(path_filters, "")
   let temp_dir = make_temp_dir(fs, "bit-tree")
   try {
-    let _ = @gitnative.clone_http_to_fs(
+    let _ = @gitionative.clone_http_to_fs(
       remote_url,
       true,
       fs,
@@ -165,7 +165,7 @@ async fn handle_tree(args : Array[String]) -> Unit raise Error {
     }
     let mut db = @gitlib.ObjectDb::load_lazy(fs, git_dir)
     if db.get(fs, commit_id) is None {
-      let pack = @gitnative.fetch_pack_http(remote_url, [commit_id], true)
+      let pack = @gitionative.fetch_pack_http(remote_url, [commit_id], true)
       let objects = @pack.parse_packfile(pack)
       @pack.write_packfile_with_index(fs, git_dir, pack, objects)
       db = @gitlib.ObjectDb::load_lazy(fs, git_dir)

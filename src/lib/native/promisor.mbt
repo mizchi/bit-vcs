@@ -16,7 +16,7 @@ pub fn native_promisor_db(
       wants : Array[@git.ObjectId],
     ) -> Result[Array[@git.PackObject], @git.GitError] noraise {
       let result : Result[Array[@git.PackObject], @git.GitError] = Ok(
-        @gitnative.fetch_objects_http(remote, wants, true, depth=0),
+        @gitionative.fetch_objects_http(remote, wants, true, depth=0),
       ) catch {
         e => Err(e)
       }

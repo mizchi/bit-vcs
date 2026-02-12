@@ -1,6 +1,8 @@
 import {
   "mizchi/bit" @git,
   "mizchi/bit/io" @gitio,
+  "mizchi/bit/pack" @pack,
+  "mizchi/bit/protocol" @protocol,
   "moonbitlang/async" @async,
   "moonbitlang/async/fs" @afs,
   "moonbitlang/async/http" @http,
@@ -8,6 +10,7 @@ import {
   "moonbitlang/core/encoding/utf8" @utf8,
   "moonbitlang/core/env" @env,
   "moonbitlang/x/codec/base64" @base64,
+  "moonbitlang/x/fs",
   "moonbitlang/x/sys" @sys,
 }
 
@@ -18,6 +21,11 @@ options(
     "env_native.mbt": [ "native" ],
     "http_client_native.mbt": [ "native" ],
     "init_native.mbt": [ "native" ],
+    "remote.mbt": [ "native" ],
+    "upload_pack_http.mbt": [ "native" ],
+    "upload_pack_http_common.mbt": [ "native" ],
+    "upload_pack_process.mbt": [ "native" ],
+    "upload_pack_remote_native.mbt": [ "native" ],
     "worktree_probe_native.mbt": [ "native" ],
   },
 )

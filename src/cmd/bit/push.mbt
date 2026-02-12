@@ -1388,7 +1388,7 @@ async fn handle_subdir_push(
   print_line("  Upstream base: \{upstream_base.to_hex()}")
   // Step 5: Fetch upstream base commit and its tree from remote
   print_line("  Fetching upstream objects...")
-  let pack = @gitnative.fetch_pack_http(remote_url, [upstream_base], true)
+  let pack = @gitionative.fetch_pack_http(remote_url, [upstream_base], true)
   let objects = @pack.parse_packfile(pack)
   @pack.write_packfile_with_index(fs, git_dir, pack, objects)
   print_line("  Fetched \{objects.length()} objects")

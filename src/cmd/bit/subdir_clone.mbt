@@ -94,7 +94,7 @@ async fn subdir_clone(
   // Step 2: Clone with blob:none filter to a temp location
   print_line("  Fetching repository metadata...")
   let temp_clone = target + "/.git-temp"
-  let refs = @gitnative.clone_http_to_fs(
+  let refs = @gitionative.clone_http_to_fs(
     remote_url,
     true,
     fs,
@@ -147,7 +147,7 @@ async fn subdir_clone(
   // Load object database and get tree
   let mut db = @gitlib.ObjectDb::load_lazy(fs, temp_git_dir)
   if db.get(fs, commit_id) is None {
-    let pack = @gitnative.fetch_pack_http(remote_url, [commit_id], true)
+    let pack = @gitionative.fetch_pack_http(remote_url, [commit_id], true)
     let objects = @pack.parse_packfile(pack)
     @pack.write_packfile_with_index(fs, temp_git_dir, pack, objects)
     db = @gitlib.ObjectDb::load_lazy(fs, temp_git_dir)
@@ -180,7 +180,7 @@ async fn subdir_clone(
       }
     }
     if missing.length() > 0 {
-      let pack = @gitnative.fetch_pack_http(remote_url, missing, true)
+      let pack = @gitionative.fetch_pack_http(remote_url, missing, true)
       let objects = @pack.parse_packfile(pack)
       @pack.write_packfile_with_index(fs, temp_git_dir, pack, objects)
     }

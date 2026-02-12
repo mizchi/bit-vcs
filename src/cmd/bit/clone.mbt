@@ -189,7 +189,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
       print_line("done.")
     }
     None => {
-      let refs = @gitnative.clone_http_to_fs(
+      let refs = @gitionative.clone_http_to_fs(
         remote_url,
         true,
         fs,
@@ -215,7 +215,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
               let git_dir = target + "/.git"
               let mut db = @gitlib.ObjectDb::load_lazy(fs, git_dir)
               if db.get(fs, commit_id) is None {
-                let pack = @gitnative.fetch_pack_http(
+                let pack = @gitionative.fetch_pack_http(
                   remote_url,
                   [commit_id],
                   true,
