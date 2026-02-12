@@ -162,6 +162,86 @@ EOF
     fi
 '
 
+test_expect_success 'hub pr merge policy: require_signed_records allows merge with matching signing key' '
+    git_cmd init &&
+    echo "base" > README.md &&
+    git_cmd add README.md &&
+    git_cmd commit -m "base" &&
+    git_cmd checkout -b feature/policy-signed-ok &&
+    echo "feature" > signed-ok.txt &&
+    git_cmd add signed-ok.txt &&
+    git_cmd commit -m "feature" &&
+    BIT_COLLAB_SIGN_KEY=sign-key-1 git_cmd hub init >/dev/null &&
+    cat > .git/hub/policy.toml <<-\EOF &&
+[merge]
+required_approvals = 0
+allow_request_changes = true
+require_signed_records = true
+EOF
+    pr_out=$(BIT_COLLAB_SIGN_KEY=sign-key-1 git_cmd hub pr create --title "Signed OK PR" --body "Body" --head refs/heads/feature/policy-signed-ok --base refs/heads/main) &&
+    pr_id=$(printf "%s\n" "$pr_out" | head -n1 | cut -d" " -f2) &&
+    test -n "$pr_id" &&
+    BIT_COLLAB_SIGN_KEY=sign-key-1 git_cmd hub pr merge "$pr_id" >/dev/null &&
+    git_cmd hub pr list --merged | grep -q "Signed OK PR"
+'
+
+test_expect_success 'hub pr merge policy: require_signed_records rejects merge with wrong signing key' '
+    git_cmd init &&
+    echo "base" > README.md &&
+    git_cmd add README.md &&
+    git_cmd commit -m "base" &&
+    git_cmd checkout -b feature/policy-signed-wrong &&
+    echo "feature" > signed-wrong.txt &&
+    git_cmd add signed-wrong.txt &&
+    git_cmd commit -m "feature" &&
+    BIT_COLLAB_SIGN_KEY=writer-key git_cmd hub init >/dev/null &&
+    cat > .git/hub/policy.toml <<-\EOF &&
+[merge]
+required_approvals = 0
+allow_request_changes = true
+require_signed_records = true
+EOF
+    pr_out=$(BIT_COLLAB_SIGN_KEY=writer-key git_cmd hub pr create --title "Signed Wrong Key PR" --body "Body" --head refs/heads/feature/policy-signed-wrong --base refs/heads/main) &&
+    pr_id=$(printf "%s\n" "$pr_out" | head -n1 | cut -d" " -f2) &&
+    test -n "$pr_id" &&
+    if BIT_COLLAB_SIGN_KEY=reader-key git_cmd hub pr merge "$pr_id" >merge.out 2>merge.err; then
+        false
+    else
+        grep -q "PR not found" merge.err
+    fi
+'
+
+test_expect_success 'hub pr merge policy: require_signed_records + required_workflows ignores unsigned workflow records' '
+    git_cmd init &&
+    echo "base" > README.md &&
+    git_cmd add README.md &&
+    git_cmd commit -m "base" &&
+    git_cmd checkout -b feature/policy-signed-workflow &&
+    echo "feature" > signed-workflow.txt &&
+    git_cmd add signed-workflow.txt &&
+    git_cmd commit -m "feature" &&
+    BIT_COLLAB_SIGN_KEY=sign-key-2 git_cmd hub init >/dev/null &&
+    cat > .git/hub/policy.toml <<-\EOF &&
+[merge]
+required_approvals = 0
+allow_request_changes = true
+require_signed_records = true
+required_workflows = ["test"]
+EOF
+    pr_out=$(BIT_COLLAB_SIGN_KEY=sign-key-2 git_cmd hub pr create --title "Signed Workflow PR" --body "Body" --head refs/heads/feature/policy-signed-workflow --base refs/heads/main) &&
+    pr_id=$(printf "%s\n" "$pr_out" | head -n1 | cut -d" " -f2) &&
+    test -n "$pr_id" &&
+    git_cmd hub pr workflow submit "$pr_id" --task test --status success --fingerprint fp-unsigned --txn txn-unsigned >/dev/null &&
+    if BIT_COLLAB_SIGN_KEY=sign-key-2 git_cmd hub pr merge "$pr_id" >merge.out 2>merge.err; then
+        false
+    else
+        grep -q "required workflow '\''test'\'' has no result" merge.err
+    fi &&
+    BIT_COLLAB_SIGN_KEY=sign-key-2 git_cmd hub pr workflow submit "$pr_id" --task test --status success --fingerprint fp-signed --txn txn-signed >/dev/null &&
+    BIT_COLLAB_SIGN_KEY=sign-key-2 git_cmd hub pr merge "$pr_id" >/dev/null &&
+    git_cmd hub pr list --merged | grep -q "Signed Workflow PR"
+'
+
 test_expect_success 'hub pr merge policy: required_workflows blocks until workflow success is recorded' '
     git_cmd init &&
     echo "base" > README.md &&
