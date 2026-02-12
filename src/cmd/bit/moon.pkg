@@ -19,6 +19,7 @@ import {
   "mizchi/bit/x/workspace" @workspace,
   "mizchi/zlib" @zlib,
   "moonbitlang/async" @async,
+  "moonbitlang/async/fs" @asyncfs,
   "moonbitlang/async/process" @process,
   "moonbitlang/async/stdio" @stdio,
   "moonbitlang/core/bench" @bench,

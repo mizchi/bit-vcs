@@ -130,6 +130,16 @@ async fn midx_write(
   }
   let midx_path = pack_dir + "/multi-pack-index"
   let has_existing_midx = fs.is_file(midx_path)
+  let existing_midx_packs : Array[String] = []
+  if has_existing_midx && not(stdin_packs) {
+    match midx_read_pack_usage(fs, pack_dir) {
+      Some((pack_names, _)) =>
+        for pack_name in pack_names {
+          existing_midx_packs.push(pack_name)
+        }
+      None => ()
+    }
+  }
   let normalized_preferred = match preferred_pack {
     Some(name) => {
       let mut value = name
@@ -159,6 +169,7 @@ async fn midx_write(
     @sys.exit(1)
     return
   }
+  let pack_mtimes : Array[Int] = []
   for pack_name in pack_files {
     let idx_path = pack_dir +
       "/" +
@@ -170,14 +181,14 @@ async fn midx_write(
       @sys.exit(1)
       return
     }
+    let pack_mtime = if midx_array_has_string(existing_midx_packs, pack_name) {
+      0
+    } else {
+      midx_pack_mtime(pack_path)
+    }
+    pack_mtimes.push(pack_mtime)
   }
-  let has_alternates = midx_has_alternates(fs, pack_dir)
-  let non_sha1_repo = midx_repo_is_non_sha1(pack_dir)
-  let prefer_requested = preferred_pack is Some(_)
-  ignore(has_existing_midx)
-  ignore(has_alternates)
-  ignore(non_sha1_repo)
-  ignore(prefer_requested)
+  let oid_version = midx_repo_oid_version(pack_dir)
   let mut preferred_pack_idx : Int? = None
   // Collect all objects from all packs
   let all_entries : Array[MidxEntry] = []
@@ -195,19 +206,12 @@ async fn midx_write(
     if normalized_preferred.length() > 0 && pack_name == normalized_preferred {
       preferred_pack_idx = Some(pack_idx)
     }
-    let entries = midx_read_pack_index(fs, idx_path, pack_idx)
-    let mut has_large_offsets = false
-    for entry in entries {
-      if entry.offset_hi != 0 {
-        has_large_offsets = true
-        break
-      }
+    let pack_mtime = if pack_idx < pack_mtimes.length() {
+      pack_mtimes[pack_idx]
+    } else {
+      0
     }
-    if has_large_offsets {
-      eprint_line("error: unsupported 64-bit pack offset")
-      @sys.exit(1)
-      return
-    }
+    let entries = midx_read_pack_index(fs, idx_path, pack_idx, pack_mtime)
     if normalized_preferred.length() > 0 &&
       pack_name == normalized_preferred &&
       entries.length() == 0 {
@@ -235,10 +239,21 @@ async fn midx_write(
           -1
         } else if a.pack_idx != pref_idx && b.pack_idx == pref_idx {
           1
+        } else if a.pack_mtime > b.pack_mtime {
+          -1
+        } else if a.pack_mtime < b.pack_mtime {
+          1
         } else {
-          0
+          a.pack_idx - b.pack_idx
         }
-      None => 0
+      None =>
+        if a.pack_mtime > b.pack_mtime {
+          -1
+        } else if a.pack_mtime < b.pack_mtime {
+          1
+        } else {
+          a.pack_idx - b.pack_idx
+        }
     }
   })
   // Remove duplicates (keep first occurrence = preferred pack)
@@ -259,7 +274,7 @@ async fn midx_write(
     return
   }
   // Build MIDX file
-  let midx_bytes = midx_build(pack_files, unique_entries, bitmap)
+  let midx_bytes = midx_build(pack_files, unique_entries, bitmap, oid_version)
   if has_existing_midx {
     match midx_try_read_file(fs, midx_path) {
       Some(existing) => {
@@ -297,31 +312,19 @@ async fn midx_write(
 }
 
 ///|
-fn midx_has_alternates(fs : OsFs, pack_dir : String) -> Bool {
-  let objects_dir = parent_dir(pack_dir)
-  let alternates_path = objects_dir + "/info/alternates"
-  if not(fs.is_file(alternates_path)) {
-    return false
-  }
-  let content = fs.read_file(alternates_path) catch { _ => return false }
-  for line in decode_bytes(content).split("\n") {
-    if line.trim().length() > 0 {
-      return true
-    }
-  }
-  false
-}
-
-///|
-fn midx_repo_is_non_sha1(pack_dir : String) -> Bool {
+fn midx_repo_oid_version(pack_dir : String) -> Int {
   let objects_dir = parent_dir(pack_dir)
   let git_dir = parent_dir(objects_dir)
   match git_config_get(git_dir, "extensions", "objectformat") {
     Some(fmt) => {
       let f = fmt.trim().to_lower()
-      f.length() > 0 && f != "sha1"
+      if f == "sha256" {
+        2
+      } else {
+        1
+      }
     }
-    None => false
+    None => 1
   }
 }
 
@@ -550,7 +553,7 @@ async fn midx_verify(
       pack_entries.push([])
       continue
     }
-    let entries = midx_read_pack_index(fs, idx_path, i)
+    let entries = midx_read_pack_index(fs, idx_path, i, 0)
     if entries.length() == 0 {
       eprint_line("error: failed to load pack in position " + i.to_string())
       has_error = true
@@ -684,67 +687,53 @@ async fn midx_expire(
     }
     return
   }
-  // Read MIDX to get referenced packs
-  let data = fs.read_file(midx_path)
-  if data.length() < 12 {
-    return
+  let pack_usage = midx_read_pack_usage(fs, pack_dir)
+  let (midx_pack_names, referenced_counts) = match pack_usage {
+    Some(usage) => usage
+    None => return
   }
-  let num_packs = midx_read_u32(data, 8)
-  let num_chunks = data[6].to_int()
-  // Find PNAM chunk to get pack names
-  let pnam_offset = midx_find_chunk(data, num_chunks, "PNAM")
-  let pnam_end = midx_find_chunk_end(data, num_chunks, "PNAM")
-  if pnam_offset == 0 {
-    return
-  }
-  // Parse pack names
   let referenced_packs : Array[String] = []
-  let mut start = pnam_offset
-  for _ in 0..<num_packs {
-    let mut end = start
-    while end < pnam_end && data[end] != b'\x00' {
-      end += 1
+  for i, pack_name in midx_pack_names {
+    if i < referenced_counts.length() && referenced_counts[i] > 0 {
+      referenced_packs.push(pack_name)
     }
-    let name = midx_bytes_to_string(data, start, end)
-    referenced_packs.push(name)
-    start = end + 1
+  }
+  if referenced_packs.length() == 0 {
+    for pack_name in midx_pack_names {
+      referenced_packs.push(pack_name)
+    }
   }
   // Find all pack files
   let all_packs = midx_find_pack_files(fs, pack_dir)
   let mut expired = 0
   for pack_name in all_packs {
-    let mut found = false
-    for ref_name in referenced_packs {
-      if pack_name == ref_name {
-        found = true
-        break
-      }
+    if midx_array_has_string(referenced_packs, pack_name) {
+      continue
     }
-    if not(found) {
-      // Check for .keep file
-      let keep_path = pack_dir +
-        "/" +
-        String::unsafe_substring(pack_name, start=0, end=pack_name.length() - 5) +
-        ".keep"
-      if fs.is_file(keep_path) {
-        continue
-      }
-      // Delete pack and idx
-      let pack_path = pack_dir + "/" + pack_name
-      let idx_path = pack_dir +
-        "/" +
-        String::unsafe_substring(pack_name, start=0, end=pack_name.length() - 5) +
-        ".idx"
-      fs.remove_file(pack_path) catch {
-        err if @async.is_cancellation_error(err) => raise err
-        _ => ()
-      }
-      fs.remove_file(idx_path) catch {
-        err if @async.is_cancellation_error(err) => raise err
-        _ => ()
-      }
-      expired += 1
+    if midx_pack_is_kept(fs, pack_dir, pack_name) {
+      continue
     }
+    if midx_pack_is_cruft(fs, pack_dir, pack_name) {
+      continue
+    }
+    // Delete pack and idx
+    let pack_path = pack_dir + "/" + pack_name
+    let pack_stem = midx_pack_stem(pack_name)
+    let idx_path = pack_dir + "/" + pack_stem + ".idx"
+    let rev_path = pack_dir + "/" + pack_stem + ".rev"
+    fs.remove_file(pack_path) catch {
+      err if @async.is_cancellation_error(err) => raise err
+      _ => ()
+    }
+    fs.remove_file(idx_path) catch {
+      err if @async.is_cancellation_error(err) => raise err
+      _ => ()
+    }
+    fs.remove_file(rev_path) catch {
+      err if @async.is_cancellation_error(err) => raise err
+      _ => ()
+    }
+    expired += 1
   }
   if progress {
     eprint_line("Expired " + expired.to_string() + " pack(s)")
@@ -762,22 +751,144 @@ async fn midx_repack(
   batch_size : Int,
   progress : Bool,
 ) -> Unit raise Error {
-  // Find small packs to consolidate
-  let pack_files = midx_find_pack_files(fs, pack_dir)
-  if pack_files.length() < 2 {
+  let pack_usage = midx_read_pack_usage(fs, pack_dir)
+  let (midx_pack_names, referenced_counts) = match pack_usage {
+    Some(usage) => usage
+    None => {
+      if progress {
+        eprint_line("No multi-pack-index to repack")
+      }
+      return
+    }
+  }
+  if midx_pack_names.length() < 2 {
     if progress {
       eprint_line("Not enough packs to repack")
     }
     return
   }
-  // For simplicity, just suggest running git repack
+  let candidates : Array[MidxRepackPack] = []
+  for pack_idx, pack_name in midx_pack_names {
+    if midx_pack_is_kept(fs, pack_dir, pack_name) ||
+      midx_pack_is_cruft(fs, pack_dir, pack_name) {
+      continue
+    }
+    let pack_path = pack_dir + "/" + pack_name
+    let idx_path = pack_dir + "/" + midx_pack_stem(pack_name) + ".idx"
+    if not(fs.is_file(pack_path)) || not(fs.is_file(idx_path)) {
+      continue
+    }
+    let pack_mtime = midx_pack_mtime(pack_path)
+    let total_objects = midx_read_pack_index(fs, idx_path, pack_idx, pack_mtime).length()
+    if total_objects <= 0 {
+      continue
+    }
+    let pack_bytes = fs.read_file(pack_path) catch { _ => continue }
+    let pack_size = pack_bytes.length()
+    let referenced_objects = if pack_idx < referenced_counts.length() {
+      referenced_counts[pack_idx]
+    } else {
+      0
+    }
+    candidates.push({
+      pack_idx,
+      pack_name,
+      mtime: pack_mtime,
+      referenced_objects,
+      total_objects,
+      pack_size,
+    })
+  }
+  let selected_packs : Array[String] = []
+  if batch_size == 0 {
+    for candidate in candidates {
+      selected_packs.push(candidate.pack_name)
+    }
+  } else {
+    candidates.sort_by(fn(a, b) {
+      if a.mtime < b.mtime {
+        -1
+      } else if a.mtime > b.mtime {
+        1
+      } else {
+        a.pack_idx - b.pack_idx
+      }
+    })
+    let mut total_expected_size = 0
+    for candidate in candidates {
+      if total_expected_size >= batch_size {
+        break
+      }
+      let expected_size = midx_expected_repack_size(
+        candidate.referenced_objects,
+        candidate.total_objects,
+        candidate.pack_size,
+      )
+      if expected_size >= batch_size {
+        continue
+      }
+      selected_packs.push(candidate.pack_name)
+      total_expected_size += expected_size
+    }
+  }
+  if selected_packs.length() < 2 {
+    if progress {
+      eprint_line("Nothing to repack")
+    }
+    return
+  }
+  let objects_dir = parent_dir(pack_dir)
+  let git_dir = parent_dir(objects_dir)
+  let db = @gitlib.ObjectDb::load(fs, git_dir) catch {
+    err if @async.is_cancellation_error(err) => raise err
+    _ => {
+      if progress {
+        eprint_line("Unable to load object database")
+      }
+      return
+    }
+  }
+  let seen : Map[String, Bool] = {}
+  let repack_objects : Array[@git.PackObject] = []
+  for pack_name in selected_packs {
+    let idx_path = pack_dir + "/" + midx_pack_stem(pack_name) + ".idx"
+    let entries = midx_read_pack_index(fs, idx_path, 0, 0)
+    for entry in entries {
+      let hex = entry.id.to_hex()
+      if seen.contains(hex) {
+        continue
+      }
+      seen[hex] = true
+      match db.get(fs, entry.id) {
+        Some(obj) => repack_objects.push(obj)
+        None => ()
+      }
+    }
+  }
+  if repack_objects.length() == 0 {
+    if progress {
+      eprint_line("Nothing to repack")
+    }
+    return
+  }
+  let pack_data = @pack.create_packfile(repack_objects)
+  let objects_for_index : Array[@git.PackObject] = []
+  for obj in repack_objects {
+    objects_for_index.push(
+      @git.PackObject::with_metadata(obj.obj_type, obj.data, obj.id, -1, 0U),
+    )
+  }
+  @pack.write_packfile_with_index(fs, git_dir, pack_data, objects_for_index)
+  midx_write(fs, pack_dir, false, None, false, false)
   if progress {
     eprint_line(
-      "Found " + pack_files.length().to_string() + " pack files to consolidate",
+      "Repacked " +
+      repack_objects.length().to_string() +
+      " objects from " +
+      selected_packs.length().to_string() +
+      " packs",
     )
-    eprint_line("Use 'git repack' for full repacking functionality")
   }
-  ignore(batch_size)
 }
 
 ///|
@@ -785,6 +896,7 @@ async fn midx_repack(
 priv struct MidxEntry {
   id : @git.ObjectId
   pack_idx : Int
+  pack_mtime : Int
   offset_hi : Int
   offset : Int
 }
@@ -794,6 +906,142 @@ priv struct MidxChunkRange {
   id : String
   start : Int
   end : Int
+}
+
+///|
+priv struct MidxRepackPack {
+  pack_idx : Int
+  pack_name : String
+  mtime : Int
+  referenced_objects : Int
+  total_objects : Int
+  pack_size : Int
+}
+
+///|
+fn midx_pack_stem(pack_name : String) -> String {
+  if pack_name.has_suffix(".pack") {
+    return String::unsafe_substring(
+      pack_name,
+      start=0,
+      end=pack_name.length() - 5,
+    )
+  }
+  if pack_name.has_suffix(".idx") {
+    return String::unsafe_substring(
+      pack_name,
+      start=0,
+      end=pack_name.length() - 4,
+    )
+  }
+  pack_name
+}
+
+///|
+fn midx_pack_name_from_pnam(name : String) -> String {
+  if name.has_suffix(".idx") {
+    return midx_pack_stem(name) + ".pack"
+  }
+  name
+}
+
+///|
+fn midx_pack_is_kept(fs : OsFs, pack_dir : String, pack_name : String) -> Bool {
+  fs.is_file(pack_dir + "/" + midx_pack_stem(pack_name) + ".keep")
+}
+
+///|
+fn midx_pack_is_cruft(fs : OsFs, pack_dir : String, pack_name : String) -> Bool {
+  fs.is_file(pack_dir + "/" + midx_pack_stem(pack_name) + ".mtimes")
+}
+
+///|
+async fn midx_pack_mtime(pack_path : String) -> Int {
+  let (sec, _nsec) = @asyncfs.mtime(pack_path[:], follow_symlink=true) catch {
+    _ => (0L, 0)
+  }
+  sec.to_int()
+}
+
+///|
+fn midx_expected_repack_size(
+  referenced_objects : Int,
+  total_objects : Int,
+  pack_size : Int,
+) -> Int {
+  if referenced_objects <= 0 || total_objects <= 0 || pack_size <= 0 {
+    return 0
+  }
+  let numerator = referenced_objects.to_int64() * pack_size.to_int64()
+  let rounded = numerator + (total_objects / 2).to_int64()
+  (rounded / total_objects.to_int64()).to_int()
+}
+
+///|
+fn midx_read_pack_usage(
+  fs : OsFs,
+  pack_dir : String,
+) -> (Array[String], Array[Int])? {
+  let midx_path = pack_dir + "/multi-pack-index"
+  if not(fs.is_file(midx_path)) {
+    return None
+  }
+  let data = fs.read_file(midx_path) catch { _ => return None }
+  midx_read_pack_usage_from_data(data)
+}
+
+///|
+fn midx_read_pack_usage_from_data(data : Bytes) -> (Array[String], Array[Int])? {
+  if data.length() < 12 {
+    return None
+  }
+  let num_packs = midx_read_u32(data, 8)
+  if num_packs <= 0 {
+    return None
+  }
+  let num_chunks = data[6].to_int()
+  let pnam_offset = midx_find_chunk(data, num_chunks, "PNAM")
+  let pnam_end = midx_find_chunk_end(data, num_chunks, "PNAM")
+  if pnam_offset <= 0 || pnam_end <= pnam_offset {
+    return None
+  }
+  let pack_names : Array[String] = []
+  let mut start = pnam_offset
+  for _ in 0..<num_packs {
+    if start >= pnam_end {
+      return None
+    }
+    let mut end = start
+    while end < pnam_end && data[end] != b'\x00' {
+      end += 1
+    }
+    if end >= pnam_end {
+      return None
+    }
+    let idx_name = midx_bytes_to_string(data, start, end)
+    pack_names.push(midx_pack_name_from_pnam(idx_name))
+    start = end + 1
+  }
+  let referenced_counts : Array[Int] = Array::make(num_packs, 0)
+  let oidf_offset = midx_find_chunk(data, num_chunks, "OIDF")
+  let oidf_end = midx_find_chunk_end(data, num_chunks, "OIDF")
+  let ooff_offset = midx_find_chunk(data, num_chunks, "OOFF")
+  let ooff_end = midx_find_chunk_end(data, num_chunks, "OOFF")
+  if oidf_offset > 0 &&
+    ooff_offset > 0 &&
+    oidf_end - oidf_offset == 256 * 4 &&
+    ooff_end >= ooff_offset {
+    let object_count = midx_read_u32(data, oidf_offset + 255 * 4)
+    if object_count >= 0 && ooff_end - ooff_offset >= object_count * 8 {
+      for i in 0..<object_count {
+        let pack_int_id = midx_read_u32(data, ooff_offset + i * 8)
+        if pack_int_id >= 0 && pack_int_id < num_packs {
+          referenced_counts[pack_int_id] = referenced_counts[pack_int_id] + 1
+        }
+      }
+    }
+  }
+  Some((pack_names, referenced_counts))
 }
 
 ///|
@@ -938,6 +1186,7 @@ fn midx_read_pack_index(
   fs : OsFs,
   idx_path : String,
   pack_idx : Int,
+  pack_mtime : Int,
 ) -> Array[MidxEntry] {
   let entries : Array[MidxEntry] = []
   let data = fs.read_file(idx_path) catch { _ => return entries }
@@ -957,18 +1206,39 @@ fn midx_read_pack_index(
     // Read fanout table to get object count
     let fanout_offset = 8
     let object_count = midx_read_u32(data, fanout_offset + 255 * 4)
+    if object_count < 0 {
+      return []
+    }
     // Object names start after fanout
     let names_offset = fanout_offset + 256 * 4
+    let oid_len = midx_detect_idx_oid_len(data, names_offset, object_count)
+    if oid_len <= 0 {
+      return []
+    }
     // CRCs and 32-bit offsets table
-    let crc_offset = names_offset + object_count * 20
+    let crc_offset = names_offset + object_count * oid_len
     let offsets_offset = crc_offset + object_count * 4
-    let large_offsets_offset = offsets_offset + object_count * 4
     if offsets_offset + object_count * 4 > data.length() {
       return []
     }
+    let mut large_count = 0
     for i in 0..<object_count {
-      let id_offset = names_offset + i * 20
-      if id_offset + 20 > data.length() {
+      let raw_offset = midx_read_u32(data, offsets_offset + i * 4)
+      if raw_offset < 0 {
+        let large_idx = raw_offset & 2147483647
+        if large_idx + 1 > large_count {
+          large_count = large_idx + 1
+        }
+      }
+    }
+    let large_offsets_offset = offsets_offset + object_count * 4
+    let large_offsets_end = large_offsets_offset + large_count * 8
+    if large_offsets_end + oid_len * 2 > data.length() {
+      return []
+    }
+    for i in 0..<object_count {
+      let id_offset = names_offset + i * oid_len
+      if id_offset + oid_len > data.length() {
         return []
       }
       let id = @git.ObjectId::new(
@@ -979,7 +1249,7 @@ fn midx_read_pack_index(
       let offset = if raw_offset < 0 {
         let large_idx = raw_offset & 2147483647
         let pos = large_offsets_offset + large_idx * 8
-        if pos + 8 > data.length() {
+        if pos + 8 > large_offsets_end {
           return []
         }
         let high = midx_read_u32(data, pos)
@@ -989,7 +1259,7 @@ fn midx_read_pack_index(
       } else {
         raw_offset
       }
-      entries.push({ id, pack_idx, offset_hi, offset })
+      entries.push({ id, pack_idx, pack_mtime, offset_hi, offset })
     }
     return entries
   }
@@ -1004,9 +1274,41 @@ fn midx_read_pack_index(
     let offset = midx_read_u32(data, entry_offset)
     let id_offset = entry_offset + 4
     let id = @git.ObjectId::new(FixedArray::makei(20, j => data[id_offset + j]))
-    entries.push({ id, pack_idx, offset_hi: 0, offset })
+    entries.push({ id, pack_idx, pack_mtime, offset_hi: 0, offset })
   }
   entries
+}
+
+///|
+fn midx_detect_idx_oid_len(
+  data : Bytes,
+  names_offset : Int,
+  object_count : Int,
+) -> Int {
+  let candidates : Array[Int] = [20, 32]
+  for oid_len in candidates {
+    let crc_offset = names_offset + object_count * oid_len
+    let offsets_offset = crc_offset + object_count * 4
+    if offsets_offset + object_count * 4 > data.length() {
+      continue
+    }
+    let mut large_count = 0
+    for i in 0..<object_count {
+      let raw_offset = midx_read_u32(data, offsets_offset + i * 4)
+      if raw_offset < 0 {
+        let large_idx = raw_offset & 2147483647
+        if large_idx + 1 > large_count {
+          large_count = large_idx + 1
+        }
+      }
+    }
+    let large_offsets_offset = offsets_offset + object_count * 4
+    let expected_len = large_offsets_offset + large_count * 8 + oid_len * 2
+    if expected_len == data.length() {
+      return oid_len
+    }
+  }
+  0
 }
 
 ///|
@@ -1014,16 +1316,25 @@ fn midx_build(
   pack_files : Array[String],
   entries : Array[MidxEntry],
   bitmap : Bool,
+  oid_version : Int,
 ) -> Bytes {
   let out : Array[Byte] = []
-  let num_chunks = if bitmap { 5 } else { 4 }
+  let (ooff_chunk, loff_chunk) = midx_build_ooff_loff(entries)
+  let has_loff = loff_chunk.length() > 0
+  let mut num_chunks = 4
+  if has_loff {
+    num_chunks += 1
+  }
+  if bitmap {
+    num_chunks += 1
+  }
   // Header
   out.push(b'M')
   out.push(b'I')
   out.push(b'D')
   out.push(b'X')
   out.push(b'\x01') // version
-  out.push(b'\x01') // OID version (SHA-1)
+  out.push(oid_version.to_byte()) // OID version
   out.push(num_chunks.to_byte()) // chunk count
   out.push(b'\x00') // number of base MIDX files
   midx_push_u32(out, pack_files.length())
@@ -1031,7 +1342,6 @@ fn midx_build(
   let pnam_chunk = midx_build_pnam(pack_files)
   let oidf_chunk = midx_build_oidf(entries)
   let oidl_chunk = midx_build_oidl(entries)
-  let ooff_chunk = midx_build_ooff(entries)
   let btmp_chunk = if bitmap {
     Some(midx_build_btmp(pack_files.length(), entries))
   } else {
@@ -1071,6 +1381,14 @@ fn midx_build(
   out.push(b'F')
   midx_push_u64(out, offset)
   offset += ooff_chunk.length()
+  if has_loff {
+    out.push(b'L')
+    out.push(b'O')
+    out.push(b'F')
+    out.push(b'F')
+    midx_push_u64(out, offset)
+    offset += loff_chunk.length()
+  }
   match btmp_chunk {
     Some(chunk) => {
       out.push(b'B')
@@ -1105,6 +1423,11 @@ fn midx_build(
   }
   for b in ooff_chunk {
     out.push(b)
+  }
+  if has_loff {
+    for b in loff_chunk {
+      out.push(b)
+    }
   }
   match btmp_chunk {
     Some(chunk) =>
@@ -1169,13 +1492,29 @@ fn midx_build_oidl(entries : Array[MidxEntry]) -> Array[Byte] {
 }
 
 ///|
-fn midx_build_ooff(entries : Array[MidxEntry]) -> Array[Byte] {
-  let out : Array[Byte] = []
+fn midx_entry_has_large_offset(entry : MidxEntry) -> Bool {
+  entry.offset_hi != 0 || entry.offset < 0
+}
+
+///|
+fn midx_build_ooff_loff(
+  entries : Array[MidxEntry],
+) -> (Array[Byte], Array[Byte]) {
+  let ooff : Array[Byte] = []
+  let loff : Array[Byte] = []
+  let mut large_offset_idx = 0
   for entry in entries {
-    midx_push_u32(out, entry.pack_idx)
-    midx_push_u32(out, entry.offset)
+    midx_push_u32(ooff, entry.pack_idx)
+    if midx_entry_has_large_offset(entry) {
+      midx_push_u32(ooff, -2147483648 | large_offset_idx)
+      midx_push_u32(loff, entry.offset_hi)
+      midx_push_u32(loff, entry.offset)
+      large_offset_idx += 1
+    } else {
+      midx_push_u32(ooff, entry.offset)
+    }
   }
-  out
+  (ooff, loff)
 }
 
 ///|
