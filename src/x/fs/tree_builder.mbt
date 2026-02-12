@@ -53,7 +53,7 @@ fn load_tree_structure(
   if tree_id == @git.ObjectId::zero() {
     return root
   }
-  let db = @lib.ObjectDb::load(rfs, git_dir)
+  let db = @lib.ObjectDb::load_lazy(rfs, git_dir)
   load_tree_recursive(db, rfs, tree_id, root)
   root
 }

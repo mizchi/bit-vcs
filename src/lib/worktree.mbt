@@ -411,7 +411,7 @@ pub fn commit(
     }
     match parent {
       Some(parent_id) => {
-        let db = ObjectDb::load(rfs, actual_git_dir)
+        let db = ObjectDb::load_lazy(rfs, actual_git_dir)
         let parent_tree = match db.get(rfs, parent_id) {
           Some(obj) if obj.obj_type == @git.ObjectType::Commit =>
             (@git.parse_commit(obj.data).tree |> Some) catch {
@@ -1102,7 +1102,7 @@ pub fn commit_amend(
   let parents = match current_head {
     Some(head_id) => {
       // Get parent of current HEAD
-      let db = ObjectDb::load(rfs, actual_git_dir)
+      let db = ObjectDb::load_lazy(rfs, actual_git_dir)
       let obj = db.get(rfs, head_id)
       match obj {
         Some(o) => {
