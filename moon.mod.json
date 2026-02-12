@@ -10,7 +10,7 @@
     "mizchi/bitflow": "0.2.0"
   },
   "readme": "README.mbt.md",
-  "repository": "https://github.com/mizchi/bit",
+  "repository": "https://github.com/mizchi/bit-vcs",
   "license": "Apache-2.0",
   "keywords": [
     "git",

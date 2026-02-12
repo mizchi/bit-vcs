@@ -9,7 +9,9 @@ It is positioned like a MoonBit port of gitoxide (a Rust rewrite of git), but de
 It is written in MoonBit and distributed as binaries for macOS/Linux.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mizchi/bit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mizchi/bit-vcs/main/install.sh | bash
+# or
+moon install mizchi/bit/cmd/bit
 ```
 
 > **Warning**: Experimental. Do not use in production. Data loss is possible in the worst case.
@@ -36,8 +38,8 @@ Git cannot extract `foo` as a new root. (hg/svn could.)
 So this is implemented as `bit clone` shorthand:
 
 ```bash
-# extract only src/x/fs from mizchi/bit
-$ bit clone mizchi/bit:src/x/fs
+# extract only src/x/fs from mizchi/bit-vcs
+$ bit clone mizchi/bit-vcs:src/x/fs
 $ cd fs
 $ ls
 fs.mbt  types.mbt  ...
@@ -47,10 +49,10 @@ You can pin a branch/commit with `@<ref>` (short-hash allowed).
 
 ```bash
 # branch
-$ bit clone mizchi/bit@main:src/x/fs
+$ bit clone mizchi/bit-vcs@main:src/x/fs
 
 # commit (short-hash OK)
-$ bit clone mizchi/bit@<commit>:src/x/fs
+$ bit clone mizchi/bit-vcs@<commit>:src/x/fs
 ```
 
 You can also paste a GitHub URL directly.
@@ -78,7 +80,7 @@ cd fs
 echo "// new code" >> fs.mbt
 bit add .
 bit commit -m "update"
-bit push origin main  # pushes back to mizchi/bit
+bit push origin main  # pushes back to mizchi/bit-vcs
 ```
 
 ### Coexistence with the parent repo
@@ -155,5 +157,5 @@ Many Git tests pass for the implemented subset, but many commands remain unimple
 
 ## Links
 
-- GitHub: https://github.com/mizchi/bit
+- GitHub: https://github.com/mizchi/bit-vcs
 - MoonBit: https://www.moonbitlang.com/

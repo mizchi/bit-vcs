@@ -48,16 +48,8 @@ build:
     @chmod +x tools/git-shim/moon
 
 # Install bit to ~/.local/bin
-install: build
-    @mkdir -p ~/.local/bin
-    @bin_path="_build/native/release/build/cmd/bit/bit.exe"; \
-    if [ ! -x "$bin_path" ]; then \
-      echo "bit binary not found at $bin_path"; \
-      exit 1; \
-    fi; \
-    cp "$bin_path" ~/.local/bin/bit
-    @chmod +x ~/.local/bin/bit
-    @echo "Installed bit to ~/.local/bin/bit"
+install:
+    moon install ./src/cmd/bit
 
 # Uninstall bit
 uninstall:

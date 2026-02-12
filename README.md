@@ -10,15 +10,11 @@ Git implementation in [MoonBit](https://docs.moonbitlang.com) - fully compatible
 
 ```bash
 # One-line install
-curl -fsSL https://raw.githubusercontent.com/mizchi/bit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mizchi/bit-vcs/main/install.sh | bash
 
-# Or build from source
-git clone https://github.com/mizchi/bit
-cd bit
-just install  # requires MoonBit toolchain
+# Or install via MoonBit toolchain
+moon install mizchi/bit/cmd/bit
 ```
-
-Installs to `~/.local/bin/bit`.
 
 ## Shell Completion
 
@@ -145,7 +141,7 @@ Clone subdirectories directly from GitHub:
 
 ```bash
 # Using @user/repo/path shorthand
-bit clone mizchi/bit:src/x/fs
+bit clone mizchi/bit-vcs:src/x/fs
 
 # Or paste GitHub browser URL
 bit clone https://github.com/user/repo/tree/main/packages/core

@@ -9,7 +9,9 @@ Rust で git を書き直した gitoxide の MoonBit 版のような位置づけ
 MoonBit で書いていますが、バイナリを Mac/Linux 向けに配布しています。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mizchi/bit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mizchi/bit-vcs/main/install.sh | bash
+# or
+moon install mizchi/bit/cmd/bit
 ```
 
 > **Warning**: 実験的な実装です。本番環境では使わないでください。最悪の場合、データが破損する可能性があります。
@@ -36,8 +38,8 @@ git だとこの `foo` だけをルートディレクトリとして取り出す
 というわけで、まずこれを実装しました。
 
 ```bash
-# mizchi/bit の src/x/fs だけを取り出す
-$ bit clone mizchi/bit:src/x/fs
+# mizchi/bit-vcs の src/x/fs だけを取り出す
+$ bit clone mizchi/bit-vcs:src/x/fs
 $ cd fs
 $ ls
 fs.mbt  types.mbt  ...
@@ -47,10 +49,10 @@ fs.mbt  types.mbt  ...
 
 ```bash
 # ブランチ指定
-$ bit clone mizchi/bit@main:src/x/fs
+$ bit clone mizchi/bit-vcs@main:src/x/fs
 
 # コミット指定 (short-hash OK)
-$ bit clone mizchi/bit@<commit>:src/x/fs
+$ bit clone mizchi/bit-vcs@<commit>:src/x/fs
 ```
 
 GitHub の URL をそのまま貼り付けることもできます。
@@ -78,7 +80,7 @@ cd fs
 echo "// new code" >> fs.mbt
 bit add .
 bit commit -m "update"
-bit push origin main  # 元の mizchi/bit に push される
+bit push origin main  # 元の mizchi/bit-vcs に push される
 ```
 
 ### 親リポジトリとの共存
@@ -179,5 +181,5 @@ broken 178 件はテスト失敗ではなく、環境に依存する前提条件
 
 ## リンク
 
-- GitHub: https://github.com/mizchi/bit
+- GitHub: https://github.com/mizchi/bit-vcs
 - MoonBit: https://www.moonbitlang.com/

@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # bit installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/mizchi/bit/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/mizchi/bit-vcs/main/install.sh | bash
 
-REPO="mizchi/bit"
+REPO="mizchi/bit-vcs"
 INSTALL_DIR="${BIT_INSTALL_DIR:-$HOME/.local/bin}"
 BINARY_NAME="bit"
 
