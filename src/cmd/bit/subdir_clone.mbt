@@ -91,7 +91,9 @@ async fn subdir_clone(
     Some(dir) => dir
     None => root
   }
-  let local_repo_path = @gitlib.resolve_local_repo_path(fs, local_root, remote_url)
+  let local_repo_path = @gitlib.resolve_local_repo_path(
+    fs, local_root, remote_url,
+  )
   // Step 1: Create target directory
   fs.mkdir_p(target) catch {
     _ => raise @git.GitError::IoError("Failed to create directory: " + target)
@@ -135,7 +137,7 @@ async fn subdir_clone(
   // Step 3: Read HEAD commit from temp
   let temp_git_dir = temp_clone + "/.git"
   let commit_id = match ref_spec {
-    Some(refname) => {
+    Some(refname) =>
       if from_local_repo {
         let resolved = @gitrepo.rev_parse(fs, temp_git_dir, refname)
         guard resolved is Some(id) else {
@@ -149,7 +151,6 @@ async fn subdir_clone(
         }
         id
       }
-    }
     None => {
       let head_ref = fs.read_file(temp_git_dir + "/HEAD") catch {
         _ => raise @git.GitError::IoError("Failed to read HEAD")
@@ -217,7 +218,9 @@ async fn subdir_clone(
     }
     if missing.length() > 0 {
       if from_local_repo {
-        raise @git.GitError::InvalidObject("missing local objects for subdir clone")
+        raise @git.GitError::InvalidObject(
+          "missing local objects for subdir clone",
+        )
       }
       let pack = @gitionative.fetch_pack_http(remote_url, missing, true)
       let objects = @pack.parse_packfile(pack)

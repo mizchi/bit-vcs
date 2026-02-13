@@ -389,8 +389,7 @@ fn pack_object_with_delta(
       let back_offset = obj_offset - base_offset
       type_and_size_len(delta.length()) + ofs_delta_len(back_offset)
     }
-    @git.PackDeltaMode::RefDelta =>
-      type_and_size_len(delta.length()) + 20
+    @git.PackDeltaMode::RefDelta => type_and_size_len(delta.length()) + 20
     @git.PackDeltaMode::NoDelta => 0 // unreachable
   }
   let delta_total = delta_overhead + compressed_delta.length()

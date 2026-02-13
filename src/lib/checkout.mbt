@@ -135,7 +135,13 @@ pub fn checkout(
     if update_worktree && update_index {
       // Combined path: read each blob only once
       let entries = write_worktree_and_build_index(
-        db, fs, rfs, root, actual_git_dir, files, remove_missing=true,
+        db,
+        fs,
+        rfs,
+        root,
+        actual_git_dir,
+        files,
+        remove_missing=true,
       )
       write_index_entries(fs, actual_git_dir, entries)
     } else if update_worktree {
