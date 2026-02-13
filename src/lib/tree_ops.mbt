@@ -7,6 +7,63 @@ pub struct TreeFileEntry {
 }
 
 ///|
+fn worktree_is_case_insensitive(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> Bool raise @git.GitError {
+  let lower_path = join_path(git_dir, "bit-case-probe-9fcb2c2d")
+  let upper_path = join_path(git_dir, "BIT-CASE-PROBE-9FCB2C2D")
+  if rfs.is_file(lower_path) || rfs.is_dir(lower_path) ||
+    rfs.is_file(upper_path) || rfs.is_dir(upper_path) {
+    return false
+  }
+  fs.write_string(lower_path, "1")
+  let insensitive = rfs.is_file(upper_path)
+  if rfs.is_file(lower_path) {
+    fs.remove_file(lower_path)
+  }
+  insensitive
+}
+
+///|
+fn detect_case_insensitive_collision_skips(
+  fs : &@git.FileSystem,
+  rfs : &@git.RepoFileSystem,
+  git_dir : String,
+  paths : Array[String],
+) -> Map[String, Bool] raise @git.GitError {
+  let skip : Map[String, Bool] = {}
+  if not(worktree_is_case_insensitive(fs, rfs, git_dir)) {
+    return skip
+  }
+  let mut i = 0
+  while i < paths.length() {
+    let left = paths[i]
+    let left_fold = left.to_lower()
+    let mut j = i + 1
+    while j < paths.length() {
+      let right = paths[j]
+      let right_fold = right.to_lower()
+      if left_fold == right_fold {
+        skip[right] = true
+      } else {
+        let right_prefix = right_fold + "/"
+        let left_prefix = left_fold + "/"
+        if left_fold.has_prefix(right_prefix) {
+          skip[right] = true
+        } else if right_fold.has_prefix(left_prefix) {
+          skip[left] = true
+        }
+      }
+      j += 1
+    }
+    i += 1
+  }
+  skip
+}
+
+///|
 pub fn collect_tree_files(
   db : ObjectDb,
   fs : &@git.RepoFileSystem,
@@ -102,8 +159,29 @@ pub fn write_worktree_from_files(
       }
     }
   }
-  for item in files.to_array() {
+  let items = files.to_array()
+  items.sort_by((left, right) => {
+    let (left_path, _) = left
+    let (right_path, _) = right
+    String::compare(left_path, right_path)
+  })
+  let paths : Array[String] = []
+  for item in items {
+    let (path, _) = item
+    paths.push(path)
+  }
+  let skip_paths = detect_case_insensitive_collision_skips(
+    fs,
+    rfs,
+    git_dir,
+    paths,
+  )
+  for item in items {
     let (path, info) = item
+    let skip_write = skip_paths.contains(path)
+    if skip_write {
+      continue
+    }
     if is_gitlink_mode_int(info.mode) {
       let full_path = join_path(root, path)
       fs.mkdir_p(full_path)
@@ -159,12 +237,32 @@ pub fn write_worktree_and_build_index(
       }
     }
   }
+  let items = files.to_array()
+  items.sort_by((left, right) => {
+    let (left_path, _) = left
+    let (right_path, _) = right
+    String::compare(left_path, right_path)
+  })
+  let paths : Array[String] = []
+  for item in items {
+    let (path, _) = item
+    paths.push(path)
+  }
+  let skip_paths = detect_case_insensitive_collision_skips(
+    fs,
+    rfs,
+    git_dir,
+    paths,
+  )
   let index_entries : Array[IndexEntry] = []
-  for item in files.to_array() {
+  for item in items {
     let (path, info) = item
+    let skip_write = skip_paths.contains(path)
     if is_gitlink_mode_int(info.mode) {
-      let full_path = join_path(root, path)
-      fs.mkdir_p(full_path)
+      if not(skip_write) {
+        let full_path = join_path(root, path)
+        fs.mkdir_p(full_path)
+      }
       index_entries.push({
         path,
         id: info.id,
@@ -175,13 +273,15 @@ pub fn write_worktree_and_build_index(
       })
       continue
     }
-    let full_path = join_path(root, path)
-    if rfs.is_dir(full_path) {
-      let git_marker = join_path(full_path, ".git")
-      if rfs.is_file(git_marker) || rfs.is_dir(git_marker) {
-        raise @git.GitError::InvalidObject(
-          "Refusing to overwrite submodule: \{path}",
-        )
+    if not(skip_write) {
+      let full_path = join_path(root, path)
+      if rfs.is_dir(full_path) {
+        let git_marker = join_path(full_path, ".git")
+        if rfs.is_file(git_marker) || rfs.is_dir(git_marker) {
+          raise @git.GitError::InvalidObject(
+            "Refusing to overwrite submodule: \{path}",
+          )
+        }
       }
     }
     let obj = db.get(rfs, info.id)
@@ -194,10 +294,12 @@ pub fn write_worktree_and_build_index(
         if o.obj_type != @git.ObjectType::Blob {
           raise @git.GitError::InvalidObject("Object is not a blob")
         }
-        let full_path = join_path(root, path)
-        let dir = parent_dir(full_path)
-        fs.mkdir_p(dir)
-        fs.write_file(full_path, o.data)
+        if not(skip_write) {
+          let full_path = join_path(root, path)
+          let dir = parent_dir(full_path)
+          fs.mkdir_p(dir)
+          fs.write_file(full_path, o.data)
+        }
         index_entries.push({
           path,
           id: info.id,
