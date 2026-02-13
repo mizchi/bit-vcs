@@ -129,6 +129,8 @@ pub(all) enum SubdirDiffKind {
 
 type SubmoduleInfo
 
+type UploadPackTransport
+
 // Type aliases
 
 // Traits
