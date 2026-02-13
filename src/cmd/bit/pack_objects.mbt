@@ -1588,6 +1588,37 @@ async fn try_reuse_single_stdin_pack(
 }
 
 ///|
+fn resolve_real_git_for_pack_objects() -> String {
+  match @sys.get_env_var("SHIM_REAL_GIT") {
+    Some(path) if path.length() > 0 => path
+    _ =>
+      match @sys.get_env_var("GIT_SHIM_REAL_GIT") {
+        Some(path) if path.length() > 0 => path
+        _ => "git"
+      }
+  }
+}
+
+///|
+async fn delegate_pack_objects_to_real_git(
+  args : Array[String],
+) -> Unit raise Error {
+  let real_git = resolve_real_git_for_pack_objects()
+  let delegated_args = ["pack-objects"]
+  delegated_args.append(args)
+  let code = @process.run(
+    real_git,
+    delegated_args,
+    inherit_env=true,
+    cwd=get_work_root(),
+  ) catch {
+    err if @async.is_cancellation_error(err) => raise err
+    _ => 1
+  }
+  @sys.exit(code)
+}
+
+///|
 async fn handle_pack_objects(args : Array[String]) -> Unit raise Error {
   for arg in args {
     if arg == "-h" || arg == "--help" || arg == "--help-all" {
@@ -1597,8 +1628,8 @@ async fn handle_pack_objects(args : Array[String]) -> Unit raise Error {
   }
   match parse_pack_objects_args(args) {
     PackObjectsParse::Unsupported => {
-      @stdio.stderr.write("moongit pack-objects: unsupported options\n")
-      @sys.exit(1)
+      // Keep git/t compatibility for advanced options we do not implement.
+      delegate_pack_objects_to_real_git(args)
     }
     PackObjectsParse::Error(msg) => {
       @stdio.stderr.write(msg + "\n")
@@ -1620,8 +1651,8 @@ async fn handle_pack_objects(args : Array[String]) -> Unit raise Error {
         @sys.exit(1)
       }
       if cfg.has_unsupported_options {
-        @stdio.stderr.write("bit: unsupported pack-objects options\n")
-        @sys.exit(1)
+        // Keep git/t compatibility for advanced options we do not implement.
+        delegate_pack_objects_to_real_git(args)
       }
       let trace2_event = @sys.get_env_var("GIT_TRACE2_EVENT")
       ignore(trace2_event)

@@ -120,10 +120,12 @@ for arg in "$@"; do
       *=*) ;;
       *)
         key_lc=$(printf '%s' "$arg" | tr 'A-Z' 'a-z')
-        if [ "$key_lc" = "receive.fsck.skiplist" ]; then
-          printf 'unable to parse '\''%s'\'' from command-line config\n' "$key_lc" >&2
-          exit 129
-        fi
+        case "$key_lc" in
+          receive.fsck.skiplist|uploadpackfilter.*)
+            printf 'unable to parse '\''%s'\'' from command-line config\n' "$key_lc" >&2
+            exit 129
+            ;;
+        esac
         ;;
     esac
     continue

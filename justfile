@@ -37,7 +37,7 @@ clean:
 
 # Build native binary
 build:
-    moon build --target native
+    moon build --target native --release
     @mkdir -p tools/git-shim
     @bin_path="_build/native/release/build/cmd/bit/bit.exe"; \
     if [ ! -x "$bin_path" ]; then \

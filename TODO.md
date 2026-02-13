@@ -1,4 +1,4 @@
-# moongit TODO (updated 2026-02-12)
+# moongit TODO (updated 2026-02-13)
 
 ## 現在のステータス
 
@@ -18,6 +18,15 @@
 - [x] `just e2e` は成功
 - [x] `just test-subdir` は成功（14/14 suites）
 - [x] `just git-t-allowlist` は成功（`success 24279 / failed 0 / broken 177`）
+
+## 直近の互換テスト再計測（2026-02-13）
+
+- [x] `just git-t-full t5516-fetch-push.sh` は成功（`success 123 / failed 0 / broken 0`）
+- [ ] `just git-t-full t5510-fetch.sh` は失敗（`success 75 / failed 140`）
+- [ ] `just git-t-full t5601-clone.sh` は失敗（`success 20 / failed 95`）
+- [x] `just git-t-one-remote t5616-partial-clone.sh` は成功（`success 47 / failed 0 / broken 0`）
+- [x] `t/t0001-init.sh` / `t/t0019-clone-local.sh` / `t/t0020-push-fetch-pull.sh` は成功
+  - `git@host:path` clone/fetch 回帰、ローカル絶対/相対パス clone 回帰を追加
 
 ## 性能改善（2026-02-12）
 
@@ -74,7 +83,8 @@ git/t ではカバーしきれない standalone 動作を補完的に検証す�
 - [x] **`bit init` テスト拡充** (30 テスト) — standalone の起点。git/t の `t0001-init.sh` 相当を移植
   - [x] デフォルト init / bare init / GIT_DIR / reinit / template / initial-branch / separate-git-dir / ディレクトリ作成 / quiet
 - [x] `bit add/commit/status` テスト拡充 — `t0018-commit-workflow.sh` で 25 テスト追加
-- [x] `bit clone/fetch/push` テスト拡充 — `t0019-clone-local.sh` + `t0020-push-fetch-pull.sh` で 30 テスト追加（`clone -b` / empty clone は skip）
+- [x] `bit clone/fetch/push` テスト拡充 — `t0019-clone-local.sh`（18 tests, 2 skip）+ `t0020-push-fetch-pull.sh`（19 tests）
+  - ローカル相対/絶対 path clone と `git@host:path` clone/fetch 回帰を追加
 - [ ] `--help` 移植 — 手間の問題（全サブコマンドの usage テキスト）。優先度低
 - [ ] `multi-pack-index write` / `cat-file` の shim pass-through を bit 実装に置換
 
@@ -89,16 +99,19 @@ git/t ではカバーしきれない standalone 動作を補完的に検証す�
 - [x] `t/` 以下に clone/commit/push/pull の standalone E2E テストを拡充
 - [ ] README に standalone 保証範囲と未対応コマンドを明記する
 
-### 直近 Blocker（2026-02-08 実測）
+### 直近 Blocker（2026-02-13 実測）
 
-- [ ] **t5516-fetch-push.sh**（`git-t-full`: failed 122/123, `git-t-one`: 123/123）
-  - [ ] push/fetch のオプション互換（`--no-ipv4/--no-ipv6` など）
-  - [ ] URL 解決互換（`insteadOf`, `pushInsteadOf`, `pushurl`）
-  - [ ] refspec 解決互換（colon-less, ambiguity, onelevel, `HEAD`/`@`）
-  - [ ] push 後処理互換（hooks, reflog, local ref update）
-  - [ ] `receive.denyCurrentBranch=updateInstead` と worktree 系互換
-  - [ ] protocol v2 / negotiation / hideRefs 周辺互換
-  - [ ] 各論点ごとに wbtest を追加してから `just git-t-full t5516-fetch-push.sh` で検証
+- [x] **t5516-fetch-push.sh**（`git-t-full`: success 123/123）
+- [ ] **t5510-fetch.sh**（`git-t-full`: failed 140/215）
+  - [ ] followRemoteHEAD / tracking / FETCH_HEAD 互換
+  - [ ] `--prune` / `--prune-tags` / `--refmap` / `--atomic` 互換
+  - [ ] bundle / negotiation-tip / D/F conflict / auto-gc 互換
+- [ ] **t5601-clone.sh**（`git-t-full`: failed 95/115）
+  - [ ] clone URL 解釈（scp-style, ssh://, IPv6）と `ssh.variant` 互換
+  - [ ] `--mirror` / `--bare` / `--reference` / `--separate-git-dir` 互換
+  - [ ] partial clone / HTTP bundle URI / reject-shallow 互換
+- [x] **t5616-partial-clone.sh**（`git-t-one-remote`: success 47/47）
+  - [x] promisor/filter/refetch/lazy-fetch/protocol v2 互換（one-remote）
 - [x] **t5529-push-errors.sh**（`git-t-full`: 8/8 pass）
   - [x] 空 remote 指定時のエラーメッセージ互換
   - [x] 曖昧 ref の事前検出（ネットワーク前に fail）互換
@@ -121,7 +134,7 @@ allowlist で残っている 5 テスト:
 - [x] 破損検出の回帰テスト追加
 - [x] allowlist 再計測（t5xxx 拡張後）
 
-## git/t 既知の落ちテスト一覧（2026-02-07）
+## git/t 既知の落ちテスト一覧（2026-02-13）
 
 `failed`/`broken` の代表的な未対応テストファイルを列挙。出典: `COMPAT_RESULTS.md` と直近 `just git-t` サマリ。
 
@@ -132,7 +145,10 @@ allowlist で残っている 5 テスト:
 
 ### 優先修正（次に着手）
 
-- [ ] t5516-fetch-push.sh（standalone blocker）
+- [ ] t5510-fetch.sh（fetch standalone blocker）
+- [ ] t5601-clone.sh（clone standalone blocker）
+- [x] t5616-partial-clone.sh（one-remote は 47/47）
+- [x] t5516-fetch-push.sh（full pass 123/123）
 - [x] t5529-push-errors.sh（standalone blocker）
 - [ ] t5528-push-default.sh（known-breakage 整理）
 
@@ -205,7 +221,7 @@ allowlist で残っている 5 テスト:
 - [x] `src/cmd/bit` 内の `match real_git_path()` を 42 -> 0
 - [x] `src/cmd/bit` 内の `@process.run("git", ...)` を 10 -> 0
 - [x] `just check` が通る
-- [ ] 重点テスト（`t5516`, `t5529`, `t5528`, `t5510`, `t5616`）が `just git-t-full` で通る
+- [ ] 重点テスト（`t5528`, `t5510`, `t5601`, `t5616`）が `just git-t-full` で通る
 
 ## Tier 2: Agent Features (High)
 
@@ -222,7 +238,8 @@ allowlist で残っている 5 テスト:
 - [x] remote show known-breakage resolution (t5505)
 - [x] pull submodule known-breakage resolution (t5572)
 - [x] remote helpers known-breakage resolution (t5801)
-- [ ] Protocol v2 edge cases (t5510, t5616)
+- [ ] Fetch/clone compatibility edge cases (t5510, t5601)
+- [x] Protocol v2 / partial clone edge cases (t5616 one-remote)
 - [x] help/doc formatting (t0450)
 
 ## Tier 4: Future (Low)

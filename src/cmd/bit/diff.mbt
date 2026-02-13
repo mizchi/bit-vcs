@@ -131,8 +131,14 @@ async fn handle_diff(args : Array[String]) -> Unit raise Error {
       }
       let db = @gitlib.ObjectDb::load(rfs, repo_git_dir)
       match resolve_submodule_diff_range(db, rfs, repo_git_dir, spec) {
-        Some((old_id, new_id)) =>
-          @gitdiff.diff_trees(rfs, repo_git_dir, Some(old_id), new_id)
+        Some((old_id, new_id)) => {
+          let old_tree = resolve_diff_tree_id(db, rfs, old_id)
+          let new_tree = resolve_diff_tree_id(db, rfs, new_id)
+          match (old_tree, new_tree) {
+            (Some(ot), Some(nt)) => @gitdiff.diff_trees(rfs, repo_git_dir, Some(ot), nt)
+            _ => raise @git.GitError::InvalidObject("unsupported diff range: " + spec)
+          }
+        }
         None =>
           raise @git.GitError::InvalidObject("unsupported diff range: " + spec)
       }
@@ -180,6 +186,33 @@ async fn handle_diff(args : Array[String]) -> Unit raise Error {
       print_line(line)
     }
   }
+}
+
+///|
+fn resolve_diff_tree_id(
+  db : @gitlib.ObjectDb,
+  rfs : &@git.RepoFileSystem,
+  id : @git.ObjectId,
+) -> @git.ObjectId? {
+  let mut current = id
+  for _ in 0..<8 {
+    let obj = db.get(rfs, current) catch { _ => return None }
+    guard obj is Some(o) else { return None }
+    match o.obj_type {
+      @git.ObjectType::Tree => return Some(current)
+      @git.ObjectType::Commit => {
+        let commit = @git.parse_commit(o.data) catch { _ => return None }
+        return Some(commit.tree)
+      }
+      @git.ObjectType::Tag => {
+        let parsed = parse_tag_object(decode_bytes(o.data)) catch { _ => None }
+        guard parsed is Some(target) else { return None }
+        current = target
+      }
+      _ => return None
+    }
+  }
+  None
 }
 
 ///|

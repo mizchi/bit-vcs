@@ -10,6 +10,15 @@ async fn handle_upload_pack(args : Array[String]) -> Unit raise Error {
       @sys.exit(129)
     }
   }
+  match find_malformed_uploadpackfilter_override() {
+    Some(key) => {
+      @stdio.stderr.write(
+        "unable to parse '" + key + "' from command-line config\n",
+      )
+      @sys.exit(129)
+    }
+    None => ()
+  }
   let mut advertise = false
   let mut protocol_version = 1
   try {
@@ -42,8 +51,14 @@ async fn handle_upload_pack(args : Array[String]) -> Unit raise Error {
     }
     let mut has_uploadpackfilter = false
     for entry in cmdline_config {
-      let (key, _value) = entry
+      let (key, value) = entry
       if key.has_prefix("uploadpackfilter.") {
+        if value.length() == 0 {
+          @stdio.stderr.write(
+            "unable to parse '" + key + "' from command-line config\n",
+          )
+          @sys.exit(129)
+        }
         has_uploadpackfilter = true
         break
       }
@@ -88,6 +103,37 @@ async fn handle_upload_pack(args : Array[String]) -> Unit raise Error {
     err if @async.is_cancellation_error(err) => raise err
     err => upload_pack_fail(err, protocol_version, advertise)
   }
+}
+
+///|
+fn find_malformed_uploadpackfilter_override() -> String? {
+  let cli_args = @sys.get_cli_args()
+  if cli_args.length() < 2 {
+    return None
+  }
+  let mut i = 1
+  let mut in_opts = true
+  while i < cli_args.length() {
+    let arg = cli_args[i]
+    if in_opts && arg == "--" {
+      in_opts = false
+      i += 1
+      continue
+    }
+    if in_opts && arg == "-c" && i + 1 < cli_args.length() {
+      let kv = cli_args[i + 1]
+      if kv.has_prefix("uploadpackfilter.") && kv.find("=") is None {
+        return Some(kv.to_lower())
+      }
+      i += 2
+      continue
+    }
+    if in_opts && !arg.has_prefix("-") {
+      break
+    }
+    i += 1
+  }
+  None
 }
 
 ///|
