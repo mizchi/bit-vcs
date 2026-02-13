@@ -213,25 +213,25 @@ test "main: parse_global_options resolves -C relative path without GIT_SHIM_PWD"
 
 ///|
 async test "main: show_command_help supports pr alias" {
-  let ok = show_command_help("pr")
+  let ok = show_command_help("pr", silent=true)
   assert_true(ok)
 }
 
 ///|
 async test "main: show_command_help supports issue alias" {
-  let ok = show_command_help("issue")
+  let ok = show_command_help("issue", silent=true)
   assert_true(ok)
 }
 
 ///|
 async test "main: show_command_help supports hub command" {
-  let ok = show_command_help("hub")
+  let ok = show_command_help("hub", silent=true)
   assert_true(ok)
 }
 
 ///|
 async test "main: show_command_help supports rebase-ai command" {
-  let ok = show_command_help("rebase-ai")
+  let ok = show_command_help("rebase-ai", silent=true)
   assert_true(ok)
 }
 

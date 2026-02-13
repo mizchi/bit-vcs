@@ -454,15 +454,17 @@ async test "workspace: node signature changes by fingerprint mode" {
   )
   ignore(cleanup_before)
   fs.mkdir_p(root)
-  let init_code_result : Result[Int, Error] = try? @process.run(
-    "git",
-    ["init", "-b", "main"],
-    inherit_env=true,
-    cwd=root,
-  )
-  let init_code = match init_code_result {
-    Ok(code) => code
-    Err(_) => -1
+  let init_code = try
+    @process.collect_output(
+      "git",
+      ["init", "-b", "main"],
+      inherit_env=true,
+      cwd=root,
+    )
+  catch {
+    _ => -1
+  } noraise {
+    (code, _, _) => code
   }
   if init_code != 0 {
     let cleanup_failed : Result[Int, Error] = try? @process.run(

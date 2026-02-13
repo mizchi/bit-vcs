@@ -97,7 +97,7 @@ async fn show_simple_command_help(usage : String, summary? : String) -> Unit {
 }
 
 ///|
-async fn show_command_help(cmd : String) -> Bool {
+async fn show_command_help(cmd : String, silent? : Bool = false) -> Bool {
   match cmd {
     "hq" => {
       print_hq_usage()
@@ -112,15 +112,21 @@ async fn show_command_help(cmd : String) -> Bool {
       true
     }
     "hub" => {
-      print_hub_usage()
+      if not(silent) {
+        print_hub_usage()
+      }
       true
     }
     "pr" => {
-      print_hub_pr_usage()
+      if not(silent) {
+        print_hub_pr_usage()
+      }
       true
     }
     "issue" => {
-      print_hub_issue_usage()
+      if not(silent) {
+        print_hub_issue_usage()
+      }
       true
     }
     "mcp" => {
@@ -230,10 +236,12 @@ async fn show_command_help(cmd : String) -> Bool {
       true
     }
     "rebase-ai" => {
-      show_simple_command_help(
-        "git rebase-ai [<options>] <upstream>",
-        summary="Rebase with AI conflict resolution (OpenRouter moonshotai/kimi-k2, supports --agent-loop).",
-      )
+      if not(silent) {
+        show_simple_command_help(
+          "git rebase-ai [<options>] <upstream>",
+          summary="Rebase with AI conflict resolution (OpenRouter moonshotai/kimi-k2, supports --agent-loop).",
+        )
+      }
       true
     }
     "merge" => {
