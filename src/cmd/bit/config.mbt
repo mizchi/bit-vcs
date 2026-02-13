@@ -3,6 +3,7 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
   let fs = OsFs::new()
   // Parse arguments
   let mut get_mode = false
+  let mut get_all_mode = false
   let mut get_bool = false
   let mut list_mode = false
   let mut unset_mode = false
@@ -13,14 +14,30 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
   let mut local_mode = false
   let mut global_mode = false
   let mut system_mode = false
+  let mut config_path_override : String? = None
+  let mut expect_config_path = false
   let mut key : String? = None
   let mut value : String? = None
   for arg in args {
+    if expect_config_path {
+      config_path_override = Some(arg)
+      expect_config_path = false
+      continue
+    }
     match arg {
       "--local" => local_mode = true
       "--global" => global_mode = true
       "--system" => system_mode = true
+      "-f" | "--file" => expect_config_path = true
+      _ if arg.has_prefix("--file=") =>
+        config_path_override = Some(
+          String::unsafe_substring(arg, start=7, end=arg.length()),
+        )
       "--get" => get_mode = true
+      "--get-all" => {
+        get_mode = true
+        get_all_mode = true
+      }
       "--bool" => get_bool = true
       "--list" | "-l" => list_mode = true
       "--unset" => unset_mode = true
@@ -37,6 +54,9 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
         }
     }
   }
+  if expect_config_path {
+    raise @git.GitError::InvalidObject("option '-f' requires a value")
+  }
   if global_mode && system_mode {
     raise @git.GitError::InvalidObject("only one config scope can be specified")
   }
@@ -45,22 +65,26 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
       "--local cannot be used with --global or --system",
     )
   }
-  let config_path = if global_mode {
-    match @sys.get_env_var("GIT_CONFIG_GLOBAL") {
-      Some(path) => path
-      None =>
-        match @sys.get_env_var("HOME") {
-          Some(home) => home + "/.gitconfig"
-          None => ".gitconfig"
+  let config_path = match config_path_override {
+    Some(path) => path
+    None =>
+      if global_mode {
+        match @sys.get_env_var("GIT_CONFIG_GLOBAL") {
+          Some(path) => path
+          None =>
+            match @sys.get_env_var("HOME") {
+              Some(home) => home + "/.gitconfig"
+              None => ".gitconfig"
+            }
         }
-    }
-  } else if system_mode {
-    @sys.get_env_var("GIT_CONFIG_SYSTEM").unwrap_or("/etc/gitconfig")
-  } else {
-    let rfs : &@git.RepoFileSystem = fs
-    let root = get_work_root()
-    let git_dir = resolve_git_dir(rfs, root)
-    git_dir + "/config"
+      } else if system_mode {
+        @sys.get_env_var("GIT_CONFIG_SYSTEM").unwrap_or("/etc/gitconfig")
+      } else {
+        let rfs : &@git.RepoFileSystem = fs
+        let root = get_work_root()
+        let git_dir = resolve_git_dir(rfs, root)
+        git_dir + "/config"
+      }
   }
   // Handle --list
   if list_mode {
@@ -101,7 +125,9 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
     }
     match result {
       Some(val) =>
-        if get_bool {
+        if get_all_mode {
+          print_line(val)
+        } else if get_bool {
           print_line(
             if val == "true" || val == "1" || val == "yes" {
               "true"
@@ -243,6 +269,9 @@ fn get_config_value(
     }
     (parts[0], Some(sub.join(".")), parts[parts.length() - 1])
   }
+  let section_l = section.to_lower()
+  let subsection_l = subsection.map(sub => sub.to_lower())
+  let name_l = name.to_lower()
   let mut in_section = false
   for line_view in content.split("\n") {
     let line = trim_string(line_view.to_string())
@@ -252,17 +281,19 @@ fn get_config_value(
         start=1,
         end=line.length() - 1,
       )
+      let sec_content_l = sec_content.to_lower()
       match subsection {
-        Some(sub) => {
+        Some(_) => {
           // Looking for [section "subsection"]
-          let expected = section + " \"" + sub + "\""
-          in_section = sec_content == expected ||
-            sec_content == section + " " + sub
+          let sub_l = subsection_l.unwrap_or("")
+          let expected = section_l + " \"" + sub_l + "\""
+          in_section = sec_content_l == expected ||
+            sec_content_l == section_l + " " + sub_l
         }
         None =>
-          in_section = sec_content == section ||
-            sec_content.has_prefix(section + " ") ||
-            sec_content.has_prefix(section + "\t")
+          in_section = sec_content_l == section_l ||
+            sec_content_l.has_prefix(section_l + " ") ||
+            sec_content_l.has_prefix(section_l + "\t")
       }
       continue
     }
@@ -275,7 +306,7 @@ fn get_config_value(
             String::unsafe_substring(line, start=0, end=i),
             " \t",
           )
-          if key_part == name {
+          if key_part.to_lower() == name_l {
             return Some(
               trim_chars(
                 String::unsafe_substring(line, start=i + 1, end=line.length()),

@@ -155,10 +155,8 @@ async fn handle_revert(args : Array[String]) -> Unit raise Error {
     }
     let commit_info = @git.parse_commit(o.data)
     // Get parent (for merge commits, use mainline)
-    let parent_id = if commit_info.parents.length() == 0 {
-      raise @git.GitError::InvalidObject(
-        "cannot revert initial commit without --root",
-      )
+    let parent_id : @git.ObjectId? = if commit_info.parents.length() == 0 {
+      None
     } else if commit_info.parents.length() > 1 {
       // Merge commit
       match mainline {
@@ -168,7 +166,7 @@ async fn handle_revert(args : Array[String]) -> Unit raise Error {
               "mainline must be 1..\{commit_info.parents.length()}",
             )
           } else {
-            commit_info.parents[m - 1]
+            Some(commit_info.parents[m - 1])
           }
         None =>
           raise @git.GitError::InvalidObject(
@@ -176,13 +174,14 @@ async fn handle_revert(args : Array[String]) -> Unit raise Error {
           )
       }
     } else {
-      commit_info.parents[0]
+      Some(commit_info.parents[0])
     }
     // Get trees for commit and parent
     let commit_files = @gitlib.collect_tree_files_from_commit(db, rfs, cid)
-    let parent_files = @gitlib.collect_tree_files_from_commit(
-      db, rfs, parent_id,
-    )
+    let parent_files : Map[String, @gitlib.TreeFileEntry] = match parent_id {
+      Some(pid) => @gitlib.collect_tree_files_from_commit(db, rfs, pid)
+      None => {}
+    }
     // Apply reverse changes
     let mut has_conflicts = false
     // Files that were added in commit -> delete them
@@ -272,7 +271,13 @@ async fn handle_revert(args : Array[String]) -> Unit raise Error {
       let author = get_author_string()
       let timestamp = get_commit_timestamp()
       let new_commit_id = @gitlib.commit(
-        wfs, rfs, root, revert_msg, author, timestamp,
+        wfs,
+        rfs,
+        root,
+        revert_msg,
+        author,
+        timestamp,
+        allow_empty=true,
       )
       let short_id = (try! new_commit_id.to_hex()[:7]).to_string()
       print_line("[\{short_id}] Revert \"\{first_line}\"")

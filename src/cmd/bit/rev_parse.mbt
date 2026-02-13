@@ -1,5 +1,26 @@
 ///|
 async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
+  let mut sq_quote_mode = false
+  let sq_quote_values : Array[String] = []
+  for arg in args {
+    if sq_quote_mode {
+      sq_quote_values.push(arg)
+      continue
+    }
+    if arg == "--sq-quote" {
+      sq_quote_mode = true
+    }
+  }
+  if sq_quote_mode {
+    let quoted : Array[String] = []
+    for value in sq_quote_values {
+      quoted.push(shell_single_quote(value))
+    }
+    if quoted.length() > 0 {
+      print_line(" " + quoted.join(" "))
+    }
+    return
+  }
   let root = get_work_root()
   let fs = OsFs::new()
   let rfs : &@git.RepoFileSystem = fs
@@ -15,11 +36,13 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
   let mut revs_only = false
   let mut verify = false
   let mut quiet = false
+  let mut show_ref_format = false
   for arg in args {
     match arg {
       "--revs-only" => revs_only = true
       "--verify" => verify = true
       "--quiet" => quiet = true
+      "--show-ref-format" => show_ref_format = true
       _ => ()
     }
   }
@@ -37,6 +60,9 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
         }
         print_line(abs)
       }
+      "--show-ref-format" => {
+        print_line("files")
+      }
       "--revs-only" => ()
       "--verify" => ()
       "--quiet" => ()
@@ -53,6 +79,25 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
       }
     }
   }
+  ignore(show_ref_format)
+}
+
+///|
+fn shell_single_quote(value : String) -> String {
+  let out = StringBuilder::new()
+  out.write_char('\'')
+  for c in value {
+    if c == '\'' {
+      out.write_char('\'')
+      out.write_char('\\')
+      out.write_char('\'')
+      out.write_char('\'')
+    } else {
+      out.write_char(c)
+    }
+  }
+  out.write_char('\'')
+  out.to_string()
 }
 
 ///|

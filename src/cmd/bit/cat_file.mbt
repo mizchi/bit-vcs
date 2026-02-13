@@ -6,12 +6,14 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
   let mut show_type = false
   let mut show_size = false
   let mut pretty_print = false
+  let mut exists_check = false
   let positionals : Array[String] = []
   for arg in args {
     match arg {
       "-t" => show_type = true
       "-s" => show_size = true
       "-p" => pretty_print = true
+      "-e" => exists_check = true
       _ if arg.has_prefix("-") => warn_unimplemented_arg("cat-file", arg)
       _ => positionals.push(arg)
     }
@@ -31,6 +33,18 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
     raise @git.GitError::InvalidObject("object name required")
   }
   let obj_id = @gitrepo.rev_parse(fs, git_dir, spec)
+  if exists_check {
+    match obj_id {
+      Some(oid) => {
+        let db = @gitlib.ObjectDb::load(fs, git_dir)
+        if db.get(fs, oid) is Some(_) {
+          return ()
+        }
+      }
+      None => ()
+    }
+    @sys.exit(1)
+  }
   guard obj_id is Some(oid) else {
     raise @git.GitError::InvalidObject("Not a valid object name: \{spec}")
   }
