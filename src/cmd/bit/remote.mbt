@@ -2708,6 +2708,22 @@ async fn fetch_local_repo(
 }
 
 ///|
+enum UploadPackTransport {
+  Http
+  Process
+}
+
+///|
+fn resolve_upload_pack_transport(remote_url : String) -> UploadPackTransport {
+  let remote_spec = @protocol.parse_remote(remote_url)
+  if remote_spec.kind == @protocol.RemoteKind::Http {
+    UploadPackTransport::Http
+  } else {
+    UploadPackTransport::Process
+  }
+}
+
+///|
 async fn fetch_from_remote(
   fs : OsFs,
   git_dir : String,
@@ -2743,10 +2759,13 @@ async fn fetch_from_remote(
       None => ()
     }
   }
-  // Fallback to HTTP fetch
-  let (refs, _caps, _version, symrefs) = @gitionative.discover_upload_refs_http(
-    remote_url, true,
-  )
+  let transport = resolve_upload_pack_transport(remote_url)
+  let (refs, _caps, _version, symrefs) = match transport {
+    UploadPackTransport::Http =>
+      @gitionative.discover_upload_refs_http(remote_url, true)
+    UploadPackTransport::Process =>
+      @gitionative.discover_upload_refs_process(remote_url, true)
+  }
   let default_ref = @protocol.select_default_ref(refs, symrefs)
   match default_ref {
     None => {
@@ -2795,20 +2814,40 @@ async fn fetch_from_remote(
         return ()
       }
       print_line("Fetching from \{remote_url}...")
-      let pack = @gitionative.fetch_pack_http(
-        remote_url,
-        [commit_id],
-        true,
-        filter~,
-      )
-      let objects = @pack.parse_packfile(pack)
-      @pack.write_packfile_with_index(fs, git_dir, pack, objects)
-      if filter.is_partial() {
-        ensure_promisor_remote_file(fs, git_dir, remote_url)
-        let pack_id = read_pack_trailer_id(pack)
-        write_fetch_pack_promisor_marker(
-          fs, git_dir, pack_id, refname, commit_id,
-        )
+      let pack = match transport {
+        UploadPackTransport::Http =>
+          @gitionative.fetch_pack_http(remote_url, [commit_id], true, filter~)
+        UploadPackTransport::Process =>
+          @gitionative.fetch_pack_process(
+            remote_url,
+            [commit_id],
+            true,
+            filter~,
+          )
+      }
+      if pack.length() > 0 {
+        let objects = @pack.parse_packfile(pack)
+        @pack.write_packfile_with_index(fs, git_dir, pack, objects)
+        if filter.is_partial() {
+          ensure_promisor_remote_file(fs, git_dir, remote_url)
+          let pack_id = read_pack_trailer_id(pack)
+          write_fetch_pack_promisor_marker(
+            fs, git_dir, pack_id, refname, commit_id,
+          )
+        }
+      } else {
+        let db_opt = (@gitlib.ObjectDb::load(fs, git_dir) |> Some) catch {
+          _ => None
+        }
+        let has_target = match db_opt {
+          Some(db) => (db.get(fs, commit_id) catch { _ => None }) is Some(_)
+          None => false
+        }
+        if not(has_target) {
+          raise @git.GitError::PackfileError(
+            "No packfile returned and missing object \{commit_id.to_hex()}",
+          )
+        }
       }
       let dir = match remote_path.rev_find("/") {
         None => ""

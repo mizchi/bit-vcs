@@ -445,13 +445,12 @@ fn read_ssh_ip_option() -> String? {
 }
 
 ///|
-fn build_upload_pack_remote_command(path : String, prefer_v2 : Bool) -> String {
+fn build_upload_pack_remote_command(
+  path : String,
+  _advertise_refs : Bool,
+) -> String {
   let quoted_path = "'" + path + "'"
-  if prefer_v2 {
-    "env GIT_PROTOCOL=version=2 git-upload-pack " + quoted_path
-  } else {
-    "git-upload-pack " + quoted_path
-  }
+  "git-upload-pack " + quoted_path
 }
 
 ///|
@@ -537,8 +536,13 @@ fn build_upload_pack_process_spec(
         None => ()
       }
       args.push(endpoint.host)
-      args.push(build_upload_pack_remote_command(endpoint.path, prefer_v2))
-      { cmd: ssh.cmd, args, extra_env: None }
+      args.push(build_upload_pack_remote_command(endpoint.path, advertise_refs))
+      let extra_env = if prefer_v2 {
+        Some({ "GIT_PROTOCOL": "version=2" })
+      } else {
+        None
+      }
+      { cmd: ssh.cmd, args, extra_env }
     }
   }
 }
@@ -582,75 +586,45 @@ async fn run_process_with_files(
   let stderr = @process.redirect_to_file(stderr_path, truncate=true, create=420) catch {
     e => raise @git.GitError::IoError("failed to open stderr file: \{e}")
   }
-  let stdin = match stdin_data {
-    None => None
-    Some(data) => {
-      @fs.write_bytes_to_file(stdin_path, data) catch {
-        e =>
-          raise @git.GitError::IoError("failed to write stdin temp file: \{e}")
-      }
-      let input = @process.redirect_from_file(stdin_path) catch {
-        e => raise @git.GitError::IoError("process stdin failed: \{e}")
-      }
-      Some(input)
-    }
+  let stdin_bytes = match stdin_data {
+    Some(data) => data
+    None => Bytes::default()
+  }
+  @fs.write_bytes_to_file(stdin_path, stdin_bytes) catch {
+    e => raise @git.GitError::IoError("failed to write stdin temp file: \{e}")
+  }
+  let stdin = @process.redirect_from_file(stdin_path) catch {
+    e => raise @git.GitError::IoError("process stdin failed: \{e}")
   }
   let code = match spec.extra_env {
     None =>
-      match stdin {
-        None =>
-          @process.run(spec.cmd, spec.args, inherit_env=true, stdout~, stderr~) catch {
-            e => {
-              cleanup_temp_files(cleanup_paths)
-              raise @git.GitError::IoError("process failed: \{e}")
-            }
-          }
-        Some(input) =>
-          @process.run(
-            spec.cmd,
-            spec.args,
-            inherit_env=true,
-            stdin=input,
-            stdout~,
-            stderr~,
-          ) catch {
-            e => {
-              cleanup_temp_files(cleanup_paths)
-              raise @git.GitError::IoError("process failed: \{e}")
-            }
-          }
+      @process.run(
+        spec.cmd,
+        spec.args,
+        inherit_env=true,
+        stdin~,
+        stdout~,
+        stderr~,
+      ) catch {
+        e => {
+          cleanup_temp_files(cleanup_paths)
+          raise @git.GitError::IoError("process failed: \{e}")
+        }
       }
     Some(env) =>
-      match stdin {
-        None =>
-          @process.run(
-            spec.cmd,
-            spec.args,
-            extra_env=env,
-            inherit_env=true,
-            stdout~,
-            stderr~,
-          ) catch {
-            e => {
-              cleanup_temp_files(cleanup_paths)
-              raise @git.GitError::IoError("process failed: \{e}")
-            }
-          }
-        Some(input) =>
-          @process.run(
-            spec.cmd,
-            spec.args,
-            extra_env=env,
-            inherit_env=true,
-            stdin=input,
-            stdout~,
-            stderr~,
-          ) catch {
-            e => {
-              cleanup_temp_files(cleanup_paths)
-              raise @git.GitError::IoError("process failed: \{e}")
-            }
-          }
+      @process.run(
+        spec.cmd,
+        spec.args,
+        extra_env=env,
+        inherit_env=true,
+        stdin~,
+        stdout~,
+        stderr~,
+      ) catch {
+        e => {
+          cleanup_temp_files(cleanup_paths)
+          raise @git.GitError::IoError("process failed: \{e}")
+        }
       }
   }
   let out = @fs.read_file_to_bytes(stdout_path) catch {
@@ -688,30 +662,29 @@ async fn run_upload_pack_process(
 }
 
 ///|
+fn build_upload_pack_info_refs_process_spec(
+  remote : String,
+  prefer_v2 : Bool,
+) -> ProcessSpec raise @git.GitError {
+  let remote_spec = @protocol.parse_remote(remote)
+  build_upload_pack_process_spec(remote_spec, advertise_refs=true, prefer_v2~)
+}
+
+///|
+fn build_upload_pack_request_process_spec(
+  remote : String,
+  prefer_v2 : Bool,
+) -> ProcessSpec raise @git.GitError {
+  let remote_spec = @protocol.parse_remote(remote)
+  build_upload_pack_process_spec(remote_spec, advertise_refs=false, prefer_v2~)
+}
+
+///|
 pub async fn upload_pack_info_refs_process(
   remote : String,
   prefer_v2 : Bool,
 ) -> Bytes raise @git.GitError {
-  let spec = @protocol.parse_remote(remote)
-  if spec.kind == @protocol.RemoteKind::Ssh {
-    let trace = build_upload_pack_process_spec(
-      spec,
-      advertise_refs=true,
-      prefer_v2~,
-    )
-    ignore(run_process_with_files(trace, None))
-    let endpoint = match resolve_ssh_endpoint(spec) {
-      Some(v) => v
-      None => raise @git.GitError::ProtocolError("SSH remote missing host")
-    }
-    let local_spec = build_upload_pack_file_spec(endpoint.path, true, prefer_v2)
-    return run_upload_pack_process(local_spec, None)
-  }
-  let proc = build_upload_pack_process_spec(
-    spec,
-    advertise_refs=true,
-    prefer_v2~,
-  )
+  let proc = build_upload_pack_info_refs_process_spec(remote, prefer_v2)
   run_upload_pack_process(proc, None)
 }
 
@@ -721,24 +694,7 @@ pub async fn upload_pack_request_process(
   body : Bytes,
   prefer_v2 : Bool,
 ) -> Bytes raise @git.GitError {
-  let spec = @protocol.parse_remote(remote)
-  if spec.kind == @protocol.RemoteKind::Ssh {
-    let endpoint = match resolve_ssh_endpoint(spec) {
-      Some(v) => v
-      None => raise @git.GitError::ProtocolError("SSH remote missing host")
-    }
-    let local_spec = build_upload_pack_file_spec(
-      endpoint.path,
-      false,
-      prefer_v2,
-    )
-    return run_upload_pack_process(local_spec, Some(body))
-  }
-  let proc = build_upload_pack_process_spec(
-    spec,
-    advertise_refs=false,
-    prefer_v2~,
-  )
+  let proc = build_upload_pack_request_process_spec(remote, prefer_v2)
   run_upload_pack_process(proc, Some(body))
 }
 

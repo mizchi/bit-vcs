@@ -32,3 +32,40 @@ test "pull: initial head target uses detached HEAD" {
   let target = resolve_initial_pull_head_target(None)
   assert_eq(target, "HEAD")
 }
+
+///|
+test "fetch transport: http url uses http transport" {
+  let transport = resolve_upload_pack_transport(
+    "https://github.com/mizchi/bit-vcs.git",
+  )
+  assert_true(
+    match transport {
+      UploadPackTransport::Http => true
+      _ => false
+    },
+  )
+}
+
+///|
+test "fetch transport: scp style ssh url uses process transport" {
+  let transport = resolve_upload_pack_transport(
+    "git@github.com:mizchi/bit-vcs.git",
+  )
+  assert_true(
+    match transport {
+      UploadPackTransport::Process => true
+      _ => false
+    },
+  )
+}
+
+///|
+test "fetch transport: file path uses process transport" {
+  let transport = resolve_upload_pack_transport("/tmp/example-repo")
+  assert_true(
+    match transport {
+      UploadPackTransport::Process => true
+      _ => false
+    },
+  )
+}
