@@ -198,42 +198,64 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
       let mut fetch_after_add = false
       let mut mirror_mode : String? = None
       let mut tagopt : String? = None
+      let mut master_branch : String? = None
       let track_branches : Array[String] = []
       let positional : Array[String] = []
       let mut i = 1
+      let mut in_opts = true
       while i < args.length() {
         let arg = args[i]
-        match arg {
-          "-f" | "--fetch" => fetch_after_add = true
-          "--mirror" =>
-            match mirror_mode {
-              None => mirror_mode = Some("mirror")
-              Some(_) => die_remote(129, "usage: git remote add <name> <url>")
+        if in_opts && arg == "--" {
+          in_opts = false
+          i += 1
+          continue
+        }
+        if in_opts {
+          match arg {
+            "-f" | "--fetch" => fetch_after_add = true
+            "--mirror" =>
+              match mirror_mode {
+                None => mirror_mode = Some("mirror")
+                Some(_) => die_remote(129, "usage: git remote add <name> <url>")
+              }
+            _ if arg.has_prefix("--mirror=") => {
+              let mode = String::unsafe_substring(arg, start=9, end=arg.length())
+              match mode {
+                "fetch" | "push" =>
+                  match mirror_mode {
+                    None => mirror_mode = Some(mode)
+                    Some(_) =>
+                      die_remote(129, "usage: git remote add <name> <url>")
+                  }
+                _ => die_remote(129, "usage: git remote add <name> <url>")
+              }
             }
-          _ if arg.has_prefix("--mirror=") => {
-            let mode = String::unsafe_substring(arg, start=9, end=arg.length())
-            match mode {
-              "fetch" | "push" =>
-                match mirror_mode {
-                  None => mirror_mode = Some(mode)
-                  Some(_) =>
-                    die_remote(129, "usage: git remote add <name> <url>")
-                }
-              _ => die_remote(129, "usage: git remote add <name> <url>")
-            }
-          }
-          "--tags" => tagopt = Some("--tags")
-          "--no-tags" => tagopt = Some("--no-tags")
-          "-t" | "--track" =>
-            if i + 1 < args.length() {
-              track_branches.push(args[i + 1])
-              i += 1
-            } else {
+            "--tags" => tagopt = Some("--tags")
+            "--no-tags" => tagopt = Some("--no-tags")
+            "-m" | "--master" =>
+              if i + 1 < args.length() {
+                master_branch = Some(args[i + 1])
+                i += 1
+              } else {
+                die_remote(129, "usage: git remote add <name> <url>")
+              }
+            _ if arg.has_prefix("--master=") =>
+              master_branch = Some(
+                String::unsafe_substring(arg, start=9, end=arg.length()),
+              )
+            "-t" | "--track" =>
+              if i + 1 < args.length() {
+                track_branches.push(args[i + 1])
+                i += 1
+              } else {
+                die_remote(129, "usage: git remote add <name> <url>")
+              }
+            _ if arg.has_prefix("-") =>
               die_remote(129, "usage: git remote add <name> <url>")
-            }
-          _ if arg.has_prefix("-") =>
-            die_remote(129, "usage: git remote add <name> <url>")
-          _ => positional.push(arg)
+            _ => positional.push(arg)
+          }
+        } else {
+          positional.push(arg)
         }
         i += 1
       }
@@ -301,7 +323,17 @@ async fn handle_remote(args : Array[String]) -> Unit raise Error {
       } else {
         fetch_specs.push("+refs/heads/*:refs/remotes/\{name}/*")
       }
-      remote_add(fs, fs, git_dir, name, url, fetch_specs, mirror_push, tagopt)
+      remote_add(
+        fs,
+        fs,
+        git_dir,
+        name,
+        url,
+        fetch_specs,
+        mirror_push,
+        tagopt,
+        master_branch~,
+      )
       if fetch_after_add {
         fetch_from_remote(fs, git_dir, root, name, url, [])
       }
@@ -636,6 +668,7 @@ fn remote_add(
   fetch_specs : Array[String],
   mirror : Bool,
   tagopt : String?,
+  master_branch? : String? = None,
 ) -> Unit raise @git.GitError {
   let config_path = git_dir + "/config"
   if rfs.is_file(config_path + ".lock") {
@@ -670,6 +703,21 @@ fn remote_add(
     lines,
   })
   fs.write_string(config_path, @gitlib.render_config_blocks(new_blocks))
+  if master_branch is Some(raw_branch) {
+    let branch = if raw_branch.has_prefix("refs/heads/") {
+      String::unsafe_substring(raw_branch, start=11, end=raw_branch.length())
+    } else {
+      raw_branch
+    }
+    let head_ref = "refs/remotes/" + name + "/HEAD"
+    let head_target = "refs/remotes/" + name + "/" + branch
+    let head_path = git_dir + "/" + head_ref
+    let dir = parent_dir(head_path)
+    if dir.length() > 0 {
+      fs.mkdir_p(dir)
+    }
+    fs.write_string(head_path, "ref: " + head_target + "\n")
+  }
 }
 
 ///|
@@ -1949,6 +1997,8 @@ fn clone_local_repo(
           dest_path,
           checkout_spec,
           detach=detached_head,
+          update_worktree=true,
+          update_index=true,
         )
       }
       None => ()
@@ -2011,6 +2061,227 @@ fn normalize_fetch_destination_ref(
 }
 
 ///|
+struct FetchHeadEntry {
+  id : @git.ObjectId
+  source_refname : String?
+  for_merge : Bool
+}
+
+///|
+fn normalize_merge_refname(refname : String) -> String {
+  if refname.has_prefix("refs/") {
+    refname
+  } else {
+    "refs/heads/" + refname
+  }
+}
+
+///|
+fn format_fetch_head_description(
+  source_refname : String?,
+  remote_url : String,
+) -> String {
+  match source_refname {
+    Some(refname) if refname.has_prefix("refs/heads/") => {
+      let branch = String::unsafe_substring(
+        refname,
+        start=11,
+        end=refname.length(),
+      )
+      "branch '" + branch + "' of " + remote_url
+    }
+    Some(refname) if refname.has_prefix("refs/tags/") => {
+      let tag = String::unsafe_substring(
+        refname,
+        start=10,
+        end=refname.length(),
+      )
+      "tag '" + tag + "' of " + remote_url
+    }
+    Some(refname) => refname + " of " + remote_url
+    None => remote_url
+  }
+}
+
+///|
+fn render_fetch_head_content(
+  entries : Array[FetchHeadEntry],
+  remote_url : String,
+) -> String {
+  let ordered : Array[FetchHeadEntry] = []
+  for entry in entries {
+    if entry.for_merge {
+      ordered.push(entry)
+    }
+  }
+  for entry in entries {
+    if not(entry.for_merge) {
+      ordered.push(entry)
+    }
+  }
+  let lines : Array[String] = []
+  for entry in ordered {
+    let merge_flag = if entry.for_merge { "" } else { "not-for-merge" }
+    let description = format_fetch_head_description(
+      entry.source_refname,
+      remote_url,
+    )
+    lines.push(entry.id.to_hex() + "\t" + merge_flag + "\t" + description)
+  }
+  if lines.length() == 0 {
+    ""
+  } else {
+    lines.join("\n") + "\n"
+  }
+}
+
+///|
+enum RemoteTrackingHeadState {
+  Missing
+  Symref(String)
+  Detached(String)
+}
+
+///|
+fn read_remote_follow_remote_head_mode(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+  remote_name : String,
+) -> String {
+  let config_path = git_dir + "/config"
+  guard fs.is_file(config_path) else { return "create" }
+  let content = decode_bytes(
+    fs.read_file(config_path) catch {
+      _ => return "create"
+    },
+  )
+  let blocks = @gitlib.parse_config_blocks(content)
+  for block in blocks {
+    if block.section == Some("remote") && block.name == Some(remote_name) {
+      for line in block.lines {
+        match @gitlib.parse_config_kv(line) {
+          Some((key, value)) =>
+            if key.to_lower() == "followremotehead" {
+              let mode = trim_string(value).to_lower()
+              if mode.length() > 0 {
+                return mode
+              }
+            }
+          None => ()
+        }
+      }
+    }
+  }
+  "create"
+}
+
+///|
+fn read_remote_tracking_head_state(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+  remote_name : String,
+) -> RemoteTrackingHeadState {
+  let path = git_dir + "/refs/remotes/" + remote_name + "/HEAD"
+  guard fs.is_file(path) else { return RemoteTrackingHeadState::Missing }
+  let raw = decode_bytes(
+    fs.read_file(path) catch {
+      _ => return RemoteTrackingHeadState::Missing
+    },
+  )
+  let trimmed = trim_string(raw)
+  if trimmed.has_prefix("ref: ") {
+    let target = String::unsafe_substring(trimmed, start=5, end=trimmed.length())
+    return RemoteTrackingHeadState::Symref(trim_string(target))
+  }
+  if trimmed.length() == 0 {
+    RemoteTrackingHeadState::Missing
+  } else {
+    RemoteTrackingHeadState::Detached(trimmed)
+  }
+}
+
+///|
+fn remote_tracking_branch_name_from_target(
+  target : String,
+  remote_name : String,
+) -> String {
+  let prefix = "refs/remotes/" + remote_name + "/"
+  if target.has_prefix(prefix) {
+    String::unsafe_substring(target, start=prefix.length(), end=target.length())
+  } else {
+    target
+  }
+}
+
+///|
+fn update_remote_tracking_head_ref(
+  fs : OsFs,
+  git_dir : String,
+  remote_name : String,
+  remote_head_branch : String,
+  quiet : Bool,
+) -> Unit raise @git.GitError {
+  let mode = read_remote_follow_remote_head_mode(fs, git_dir, remote_name)
+  if mode == "never" {
+    return ()
+  }
+  let local_head_ref = "refs/remotes/" + remote_name + "/HEAD"
+  let remote_head_target = "refs/remotes/" + remote_name + "/" + remote_head_branch
+  let local_state = read_remote_tracking_head_state(fs, git_dir, remote_name)
+  let mut should_update = false
+  let mut warning_message : String? = None
+  if mode == "always" {
+    should_update = true
+  } else if mode == "create" {
+    match local_state {
+      RemoteTrackingHeadState::Missing => should_update = true
+      _ => ()
+    }
+  } else if mode == "warn" || mode.has_prefix("warn-if-not-") {
+    let mut should_warn = mode == "warn"
+    if mode.has_prefix("warn-if-not-") {
+      let expected = String::unsafe_substring(mode, start=12, end=mode.length())
+      should_warn = remote_head_branch != expected
+    }
+    match local_state {
+      RemoteTrackingHeadState::Missing => should_update = true
+      RemoteTrackingHeadState::Symref(local_target) =>
+        if local_target != remote_head_target && should_warn {
+          let local_branch = remote_tracking_branch_name_from_target(
+            local_target,
+            remote_name,
+          )
+          warning_message = Some(
+            "'HEAD' at '" + remote_name + "' is '" + remote_head_branch +
+            "', but we have '" + local_branch + "' locally.",
+          )
+        }
+      RemoteTrackingHeadState::Detached(local_oid) =>
+        if should_warn {
+          warning_message = Some(
+            "'HEAD' at '" + remote_name + "' is '" + remote_head_branch +
+            "', but we have a detached HEAD pointing to '" + local_oid +
+            "' locally.",
+          )
+        }
+    }
+  } else {
+    match local_state {
+      RemoteTrackingHeadState::Missing => should_update = true
+      _ => ()
+    }
+  }
+  if should_update {
+    write_symref_file(fs, git_dir, local_head_ref, remote_head_target)
+    return ()
+  }
+  match warning_message {
+    Some(msg) => if not(quiet) { println(msg) }
+    None => ()
+  }
+}
+
+///|
 async fn fetch_local_repo(
   fs : OsFs,
   src_path : String,
@@ -2020,6 +2291,7 @@ async fn fetch_local_repo(
   remote_url : String,
   explicit_refspecs : Array[String],
   update_head_ok? : Bool = false,
+  quiet? : Bool = false,
 ) -> Unit raise Error {
   guard @gitlib.detect_git_dir(fs, src_path) is Some((src_git_dir, _)) else {
     raise @git.GitError::InvalidObject("Not a git repository: \{src_path}")
@@ -2034,9 +2306,9 @@ async fn fetch_local_repo(
     Some(path) => append_text_file(fs, path, "")
     None => ()
   }
-  print_line("From \{display_url}")
+  eprint_line("From \{display_url}")
   let src_db = @gitlib.ObjectDb::load(fs, src_git_dir)
-  let (remotes, _) = @gitlib.read_repo_config(fs, git_dir)
+  let (remotes, branches) = @gitlib.read_repo_config(fs, git_dir)
   let rc = remotes
     .get(remote_name)
     .unwrap_or({
@@ -2082,6 +2354,20 @@ async fn fetch_local_repo(
   let fetch_hide_refs = read_hide_refs(fs, src_git_dir, [
     "transfer", "uploadpack",
   ])
+  let fetch_head_merge_refs : Map[String, Bool] = {}
+  match @gitlib.read_head_ref(fs, git_dir) {
+    @gitlib.HeadRef::Branch(current_branch_name) =>
+      match branches.get(current_branch_name) {
+        Some(bc) =>
+          if bc.remote is Some(config_remote) && config_remote == remote_name {
+            for merge in bc.merges {
+              fetch_head_merge_refs[normalize_merge_refname(merge)] = true
+            }
+          }
+        None => ()
+      }
+    @gitlib.HeadRef::Detached(_) => ()
+  }
   let allow_tip_sha1_in_want = @gitlib.read_config_bool(
     fs,
     src_git_dir + "/config",
@@ -2127,6 +2413,7 @@ async fn fetch_local_repo(
   let fetched_heads : Array[@git.ObjectId] = []
   let mapped_refs : Map[String, @git.ObjectId] = {}
   let bare_oid_fetches : Array[@git.ObjectId] = []
+  let fetch_head_entries : Array[FetchHeadEntry] = []
   for spec_entry in positive_specs {
     let spec = spec_entry.0
     let spec_force = spec_entry.1
@@ -2160,6 +2447,17 @@ async fn fetch_local_repo(
       if normalized_dst.has_prefix("refs/heads/") {
         fetched_heads.push(head_id)
       }
+      let for_merge = match head_source_ref {
+        Some(source_ref) => fetch_head_merge_refs.contains(source_ref)
+        None => false
+      }
+      fetch_head_entries.push(
+        {
+          id: head_id,
+          source_refname: head_source_ref,
+          for_merge,
+        },
+      )
       continue
     }
     if spec.src.length() == 0 ||
@@ -2203,6 +2501,13 @@ async fn fetch_local_repo(
     }
     if spec.dst.length() == 0 {
       bare_oid_fetches.push(object_id)
+      fetch_head_entries.push(
+        {
+          id: object_id,
+          source_refname: None,
+          for_merge: false,
+        },
+      )
       continue
     }
     let normalized_dst = normalize_fetch_destination_ref(spec.dst, None)
@@ -2260,6 +2565,13 @@ async fn fetch_local_repo(
           if refname.has_prefix("refs/heads/") {
             fetched_heads.push(id)
           }
+          fetch_head_entries.push(
+            {
+              id,
+              source_refname: Some(refname),
+              for_merge: fetch_head_merge_refs.contains(refname),
+            },
+          )
         }
         None => ()
       }
@@ -2295,6 +2607,23 @@ async fn fetch_local_repo(
   } else {
     "fetch " + remote_url + ": storing head"
   }
+  fs.write_string(
+    git_dir + "/FETCH_HEAD",
+    render_fetch_head_content(fetch_head_entries, remote_url),
+  )
+  if explicit_refspecs.length() == 0 && not(mirror_fetch) {
+    match @gitlib.read_remote_head_branch(fs, src_git_dir) {
+      Some(remote_head_branch) =>
+        update_remote_tracking_head_ref(
+          fs,
+          git_dir,
+          remote_name,
+          remote_head_branch,
+          quiet,
+        )
+      None => ()
+    }
+  }
   for dst, id in mapped_refs {
     if not(update_head_ok) && dst.has_prefix("refs/heads/") {
       let branch_name = String::unsafe_substring(
@@ -2319,18 +2648,6 @@ async fn fetch_local_repo(
         fs, fs, git_dir, dst, old_id, id, fetch_name, fetch_email, fetch_timestamp,
         fetch_timezone, fetch_message,
       )
-    }
-  }
-  if explicit_refspecs.length() == 0 && not(mirror_fetch) {
-    match @gitlib.read_remote_head_branch(fs, src_git_dir) {
-      Some(name) =>
-        write_symref_file(
-          fs,
-          git_dir,
-          "refs/remotes/" + remote_name + "/HEAD",
-          "refs/remotes/" + remote_name + "/" + name,
-        )
-      None => ()
     }
   }
   let tagopt = rc.tagopt
@@ -2391,6 +2708,7 @@ async fn fetch_from_remote(
   update_head_ok? : Bool = false,
   filter? : @protocol.FilterSpec = @protocol.FilterSpec::NoFilter,
   force_transport? : Bool = false,
+  quiet? : Bool = false,
 ) -> Unit raise Error {
   let local_root = match @sys.get_env_var("GIT_SHIM_CWD") {
     Some(dir) => dir
@@ -2408,6 +2726,7 @@ async fn fetch_from_remote(
           remote_url,
           explicit_refspecs,
           update_head_ok~,
+          quiet~,
         )
         return ()
       }

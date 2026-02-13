@@ -1,5 +1,8 @@
 ///|
 async fn handle_checkout(args : Array[String]) -> Unit raise Error {
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("checkout", args)
+  }
   let root = get_work_root()
   let fs = OsFs::new()
   let rfs : &@git.RepoFileSystem = fs

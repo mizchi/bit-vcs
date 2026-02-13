@@ -1,5 +1,8 @@
 ///|
 async fn handle_tag(args : Array[String]) -> Unit raise Error {
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("tag", args)
+  }
   let root = get_work_root()
   let git_dir = root + "/.git"
   let fs = OsFs::new()

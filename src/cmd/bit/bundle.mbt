@@ -1,5 +1,8 @@
 ///|
 async fn handle_bundle(args : Array[String]) -> Unit raise Error {
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("bundle", args)
+  }
   if args.length() == 0 {
     print_line("usage: git bundle <command> [<args>]")
     print_line("")

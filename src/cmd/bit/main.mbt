@@ -834,8 +834,8 @@ fn parse_global_options(args : Array[String]) -> GlobalOptions {
           config_overrides.push((key, value))
         }
         None =>
-          // Key without value (treated as empty string in git)
-          config_overrides.push((kv, ""))
+          // `-c key` is interpreted as boolean true by git.
+          config_overrides.push((kv, "true"))
       }
       i += 2
       continue

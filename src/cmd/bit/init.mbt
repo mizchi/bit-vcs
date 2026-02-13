@@ -10,6 +10,9 @@ async fn show_init_command_help() -> Unit {
 
 ///|
 async fn handle_init(args : Array[String]) -> Unit raise Error {
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("init", args)
+  }
   let root = match @sys.get_env_var("GIT_SHIM_CWD") {
     Some(dir) => dir
     None =>

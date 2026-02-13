@@ -1,5 +1,8 @@
 ///|
 async fn handle_push(args : Array[String]) -> Unit raise Error {
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("push", args)
+  }
   let root = get_work_root()
   let fs = OsFs::new()
   let git_dir = resolve_git_dir(fs, root)

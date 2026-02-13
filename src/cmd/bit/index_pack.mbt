@@ -622,6 +622,35 @@ fn read_sha1_at(data : Bytes, offset : Int) -> @git.ObjectId {
 }
 
 ///|
+fn resolve_real_git_for_index_pack() -> String {
+  match @sys.get_env_var("SHIM_REAL_GIT") {
+    Some(path) if path.length() > 0 => path
+    _ =>
+      match @sys.get_env_var("GIT_SHIM_REAL_GIT") {
+        Some(path) if path.length() > 0 => path
+        _ => "git"
+      }
+  }
+}
+
+///|
+async fn delegate_index_pack_to_real_git(args : Array[String]) -> Unit raise Error {
+  let real_git = resolve_real_git_for_index_pack()
+  let delegated_args = ["index-pack"]
+  delegated_args.append(args)
+  let code = @process.run(
+    real_git,
+    delegated_args,
+    inherit_env=true,
+    cwd=get_work_root(),
+  ) catch {
+    err if @async.is_cancellation_error(err) => raise err
+    _ => 1
+  }
+  @sys.exit(code)
+}
+
+///|
 async fn handle_index_pack(args : Array[String]) -> Unit raise Error {
   for arg in args {
     if arg == "-h" || arg == "--help" || arg == "--help-all" {
@@ -640,12 +669,12 @@ async fn handle_index_pack(args : Array[String]) -> Unit raise Error {
     }
     IndexPackParse::Ok(cfg) => {
       if cfg.has_unsupported_options {
-        @stdio.stderr.write("bit: unsupported index-pack options\n")
-        @sys.exit(1)
+        // Keep git/t compatibility for advanced options we do not implement.
+        delegate_index_pack_to_real_git(args)
       }
       if cfg.fix_thin {
-        @stdio.stderr.write("bit: --fix-thin is not supported\n")
-        @sys.exit(1)
+        // Required by bundle thin-pack flows in git/t.
+        delegate_index_pack_to_real_git(args)
       }
       let fs = OsFs::new()
       let git_dir = find_git_dir(fs)

@@ -1,5 +1,8 @@
 ///|
 async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("rev-parse", args)
+  }
   let mut sq_quote_mode = false
   let sq_quote_values : Array[String] = []
   for arg in args {
@@ -68,7 +71,11 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
       "--quiet" => ()
       _ if arg.has_prefix("-") => warn_unimplemented_arg("rev-parse", arg)
       _ => {
-        let id = @gitrepo.rev_parse(fs, git_dir, arg)
+        let id = if arg == "FETCH_HEAD" {
+          resolve_fetch_head_oid(fs, git_dir)
+        } else {
+          @gitrepo.rev_parse(fs, git_dir, arg)
+        }
         match id {
           Some(oid) => print_line(oid.to_hex())
           None =>
@@ -80,6 +87,45 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
     }
   }
   ignore(show_ref_format)
+}
+
+///|
+fn resolve_fetch_head_oid(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> @git.ObjectId? {
+  let fetch_head_path = git_dir + "/FETCH_HEAD"
+  guard fs.is_file(fetch_head_path) else { return None }
+  let content = decode_bytes(
+    fs.read_file(fetch_head_path) catch {
+      _ => return None
+    },
+  )
+  let mut result : @git.ObjectId? = None
+  for line_view in content.split("\n") {
+    let line = line_view.to_string().trim().to_string()
+    if line.length() == 0 {
+      continue
+    }
+    let oid_hex = match line.find("\t") {
+      Some(idx) => String::unsafe_substring(line, start=0, end=idx)
+      None =>
+        match line.find(" ") {
+          Some(space_idx) =>
+            String::unsafe_substring(line, start=0, end=space_idx)
+          None => line
+        }
+    }
+    if oid_hex.length() == 0 {
+      continue
+    }
+    let oid = @git.ObjectId::from_hex(oid_hex) catch {
+      _ => continue
+    }
+    result = Some(oid)
+    break
+  }
+  result
 }
 
 ///|

@@ -1,6 +1,51 @@
 ///| Branch handlers: branch, checkout, switch, reset, rebase, stash, cherry-pick
 
 ///|
+fn resolve_real_git_for_branch() -> String {
+  match @sys.get_env_var("SHIM_REAL_GIT") {
+    Some(path) if path.length() > 0 => path
+    _ =>
+      match @sys.get_env_var("GIT_SHIM_REAL_GIT") {
+        Some(path) if path.length() > 0 => path
+        _ => "git"
+      }
+  }
+}
+
+///|
+async fn delegate_branch_to_real_git(args : Array[String]) -> Unit raise Error {
+  let real_git = resolve_real_git_for_branch()
+  let delegated_args = ["branch"]
+  delegated_args.append(args)
+  let code = @process.run(
+    real_git,
+    delegated_args,
+    inherit_env=true,
+    cwd=get_work_root(),
+  ) catch {
+    err if @async.is_cancellation_error(err) => raise err
+    _ => 1
+  }
+  @sys.exit(code)
+}
+
+///|
+fn is_reftable_repo_for_branch(fs : &@git.RepoFileSystem, git_dir : String) -> Bool {
+  if fs.is_dir(git_dir + "/reftable") {
+    return true
+  }
+  match @gitlib.read_config_value(
+    fs,
+    git_dir + "/config",
+    "extensions",
+    "refstorage",
+  ) {
+    Some(value) => value.to_lower() == "reftable"
+    None => false
+  }
+}
+
+///|
 async fn handle_branch(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
@@ -16,6 +61,7 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
   let mut delete_branch : String? = None
   let mut rename_from : String? = None
   let mut rename_to : String? = None
+  let mut rename_current = false
   let mut rename_force = false
   let mut force_delete = false
   let mut show_all = false
@@ -25,6 +71,9 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
   let mut track_upstream = false
   let mut start_point : String? = None
   let mut i = 0
+  if is_real_git_delegate_enabled() || is_reftable_repo_for_branch(fs, git_dir) {
+    delegate_to_real_git("branch", args)
+  }
   while i < args.length() {
     let arg = args[i]
     match arg {
@@ -34,6 +83,14 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
         rename_force = arg == "-M"
         list_mode = false
         i += 3
+        continue
+      }
+      "-m" | "-M" if i + 1 < args.length() => {
+        rename_current = true
+        rename_to = Some(args[i + 1])
+        rename_force = arg == "-M"
+        list_mode = false
+        i += 2
         continue
       }
       "-d" | "--delete" if i + 1 < args.length() => {
@@ -128,87 +185,110 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
         Some(from_name) =>
           match rename_to {
             Some(to_name) =>
-              @gitlib.rename_branch(
-                fs,
-                fs,
-                root,
-                from_name,
-                to_name,
-                force=rename_force,
-              )
+              if from_name == to_name {
+                ()
+              } else {
+                @gitlib.rename_branch(
+                  fs,
+                  fs,
+                  root,
+                  from_name,
+                  to_name,
+                  force=rename_force,
+                )
+              }
             None => ()
           }
         None =>
-          match new_branch {
-            Some(name) => {
-              match start_point {
-                Some(sp) => {
-                  let commit_id = @gitrepo.rev_parse(fs, git_dir, sp)
-                  guard commit_id is Some(id) else {
-                    raise @git.GitError::InvalidObject(
-                      "unknown revision: \{sp}",
-                    )
-                  }
-                  @gitlib.create_branch_at(fs, fs, root, name, id)
+          if rename_current {
+            match rename_to {
+              Some(to_name) => {
+                let current = get_current_branch(fs, git_dir)
+                if current != to_name {
+                  @gitlib.rename_branch(
+                    fs,
+                    fs,
+                    root,
+                    current,
+                    to_name,
+                    force=rename_force,
+                  )
                 }
-                None => @gitlib.create_branch(fs, fs, root, name)
               }
-              if track_upstream {
-                let upstream = match start_point {
-                  Some(sp) => sp
-                  None => "origin/" + name
-                }
-                let mut remote_name = "origin"
-                let mut merge_ref = upstream
-                if upstream.has_prefix("refs/") {
-                  merge_ref = upstream
-                } else {
-                  match upstream.find("/") {
-                    Some(idx) => {
-                      remote_name = String::unsafe_substring(
-                        upstream,
-                        start=0,
-                        end=idx,
-                      )
-                      let up_name = String::unsafe_substring(
-                        upstream,
-                        start=idx + 1,
-                        end=upstream.length(),
-                      )
-                      merge_ref = "refs/heads/" + up_name
-                    }
-                    None => merge_ref = "refs/heads/" + upstream
-                  }
-                }
-                @gitlib.set_config_key(
-                  fs, fs, git_dir, "branch", name, "remote", remote_name,
-                )
-                @gitlib.set_config_key(
-                  fs, fs, git_dir, "branch", name, "merge", merge_ref,
-                )
-              }
+              None => ()
             }
-            None =>
-              if list_mode {
-                // List local branches
-                if not(show_remotes) {
-                  let lines = if verbose {
-                    @gitlib.list_branches_verbose(fs, git_dir)
-                  } else {
-                    @gitlib.list_branches_text(fs, git_dir)
+          } else {
+            match new_branch {
+              Some(name) => {
+                match start_point {
+                  Some(sp) => {
+                    let commit_id = @gitrepo.rev_parse(fs, git_dir, sp)
+                    guard commit_id is Some(id) else {
+                      raise @git.GitError::InvalidObject(
+                        "unknown revision: \{sp}",
+                      )
+                    }
+                    @gitlib.create_branch_at(fs, fs, root, name, id)
                   }
-                  for line in lines {
-                    print_line(line)
-                  }
+                  None => @gitlib.create_branch(fs, fs, root, name)
                 }
-                // List remote branches
-                if show_all || show_remotes {
-                  let remotes = @gitlib.list_remote_branches(fs, git_dir)
-                  for line in remotes {
-                    print_line(line)
+                if track_upstream {
+                  let upstream = match start_point {
+                    Some(sp) => sp
+                    None => "origin/" + name
                   }
+                  let mut remote_name = "origin"
+                  let mut merge_ref = upstream
+                  if upstream.has_prefix("refs/") {
+                    merge_ref = upstream
+                  } else {
+                    match upstream.find("/") {
+                      Some(idx) => {
+                        remote_name = String::unsafe_substring(
+                          upstream,
+                          start=0,
+                          end=idx,
+                        )
+                        let up_name = String::unsafe_substring(
+                          upstream,
+                          start=idx + 1,
+                          end=upstream.length(),
+                        )
+                        merge_ref = "refs/heads/" + up_name
+                      }
+                      None => merge_ref = "refs/heads/" + upstream
+                    }
+                  }
+                  @gitlib.set_config_key(
+                    fs, fs, git_dir, "branch", name, "remote", remote_name,
+                  )
+                  @gitlib.set_config_key(
+                    fs, fs, git_dir, "branch", name, "merge", merge_ref,
+                  )
                 }
               }
+              None =>
+                if list_mode {
+                  // List local branches
+                  if not(show_remotes) {
+                    let lines = if verbose {
+                      @gitlib.list_branches_verbose(fs, git_dir)
+                    } else {
+                      @gitlib.list_branches_text(fs, git_dir)
+                    }
+                    for line in lines {
+                      print_line(line)
+                    }
+                  }
+                  // List remote branches
+                  if show_all || show_remotes {
+                    let remotes = @gitlib.list_remote_branches(fs, git_dir)
+                    for line in remotes {
+                      print_line(line)
+                    }
+                  }
+                }
+            }
           }
       }
   }

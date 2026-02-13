@@ -1,6 +1,10 @@
 ///|
 async fn handle_config(args : Array[String]) -> Unit raise Error {
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("config", args)
+  }
   let fs = OsFs::new()
+  let normalized_args = normalize_config_args(args)
   // Parse arguments
   let mut get_mode = false
   let mut get_all_mode = false
@@ -18,7 +22,7 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
   let mut expect_config_path = false
   let mut key : String? = None
   let mut value : String? = None
-  for arg in args {
+  for arg in normalized_args {
     if expect_config_path {
       config_path_override = Some(arg)
       expect_config_path = false
@@ -147,6 +151,28 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
     guard value is Some(v) else { return }
     set_config(fs, config_path, k, v, add_mode)
   }
+}
+
+///|
+fn normalize_config_args(args : Array[String]) -> Array[String] {
+  if args.length() == 0 {
+    return args
+  }
+  // Support modern "git config set ..." by mapping it to the legacy form
+  // that this handler already implements.
+  if args[0] != "set" {
+    return args
+  }
+  let normalized : Array[String] = []
+  for i in 1..<args.length() {
+    let arg = args[i]
+    if arg == "--append" {
+      normalized.push("--add")
+    } else {
+      normalized.push(arg)
+    }
+  }
+  normalized
 }
 
 ///|

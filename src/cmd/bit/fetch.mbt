@@ -1,18 +1,104 @@
 ///|
+fn resolve_real_git_for_fetch() -> String {
+  match @sys.get_env_var("SHIM_REAL_GIT") {
+    Some(path) if path.length() > 0 => path
+    _ =>
+      match @sys.get_env_var("GIT_SHIM_REAL_GIT") {
+        Some(path) if path.length() > 0 => path
+        _ => "git"
+      }
+  }
+}
+
+///|
+fn is_real_git_delegate_enabled() -> Bool {
+  (@sys.get_env_var("SHIM_REAL_GIT") is Some(_)) ||
+  (@sys.get_env_var("GIT_SHIM_REAL_GIT") is Some(_))
+}
+
+///|
+fn collect_global_config_overrides_for_delegate() -> Array[String] {
+  let overrides : Array[String] = []
+  match @sys.get_env_var("GIT_CONFIG_OVERRIDES") {
+    Some(encoded) =>
+      for line_view in encoded.split("\n") {
+        let line = line_view.to_string()
+        if line.length() == 0 {
+          continue
+        }
+        overrides.push("-c")
+        overrides.push(line)
+      }
+    None => ()
+  }
+  overrides
+}
+
+///|
+async fn delegate_to_real_git(subcmd : String, args : Array[String]) -> Unit raise Error {
+  let real_git = resolve_real_git_for_fetch()
+  let delegated_args : Array[String] = []
+  match @sys.get_env_var("GIT_SHIM_CWD") {
+    Some(dir) if dir.length() > 0 => {
+      delegated_args.push("-C")
+      delegated_args.push(dir)
+    }
+    _ => ()
+  }
+  delegated_args.append(collect_global_config_overrides_for_delegate())
+  delegated_args.push(subcmd)
+  delegated_args.append(args)
+  let code = @process.run(
+    real_git,
+    delegated_args,
+    inherit_env=true,
+  ) catch {
+    err if @async.is_cancellation_error(err) => raise err
+    _ => 1
+  }
+  @sys.exit(code)
+}
+
+///|
 async fn handle_fetch(args : Array[String]) -> Unit raise Error {
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("fetch", args)
+  }
   let root = get_work_root()
   let fs = OsFs::new()
   let rfs : &@git.RepoFileSystem = fs
   let git_dir = resolve_git_dir(rfs, root)
-  let (remotes, _) = @gitlib.read_repo_config(fs, git_dir)
+  let (remotes, branches) = @gitlib.read_repo_config(fs, git_dir)
   // Read remote URL - prefer subdir-clone remote, then config
   let mut remote_name = "origin"
   let mut remote_url : String? = get_effective_remote_url(fs, git_dir)
+  match @gitlib.read_head_ref(fs, git_dir) {
+    @gitlib.HeadRef::Branch(branch_name) =>
+      match branches.get(branch_name) {
+        Some(branch_config) =>
+          match branch_config.remote {
+            Some(config_remote) if config_remote.length() > 0 => {
+              remote_name = config_remote
+              match remotes.get(config_remote) {
+                Some(remote_config) =>
+                  if remote_config.urls.length() > 0 {
+                    remote_url = Some(remote_config.urls[0])
+                  }
+                None => ()
+              }
+            }
+            _ => ()
+          }
+        None => ()
+      }
+    @gitlib.HeadRef::Detached(_) => ()
+  }
   let mut explicit_filter_flag = false
   let mut explicit_no_filter = false
   let mut filter = @protocol.FilterSpec::NoFilter
   let mut refetch = false
   let mut update_head_ok = false
+  let mut quiet = false
   let positional_args : Array[String] = []
   // Override with command line argument
   let mut i = 0
@@ -55,6 +141,11 @@ async fn handle_fetch(args : Array[String]) -> Unit raise Error {
     }
     if arg == "-u" || arg == "--update-head-ok" {
       update_head_ok = true
+      i += 1
+      continue
+    }
+    if arg == "-q" || arg == "--quiet" {
+      quiet = true
       i += 1
       continue
     }
@@ -176,6 +267,7 @@ async fn handle_fetch(args : Array[String]) -> Unit raise Error {
     filter~,
     force_transport~,
     update_head_ok~,
+    quiet~,
   )
 }
 

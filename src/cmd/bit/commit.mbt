@@ -10,6 +10,9 @@ async fn show_commit_command_help() -> Unit {
 
 ///|
 async fn handle_commit(args : Array[String]) -> Unit raise Error {
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("commit", args)
+  }
   let root = get_work_root()
   let fs = OsFs::new()
   let mut message : String? = None

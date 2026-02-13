@@ -32,6 +32,8 @@ fn format_log_oneline(
   match fmt {
     "%h %s" => short + " " + subject
     "%h" => short
+    "%H" => id.to_hex()
+    "%H %s" => id.to_hex() + " " + subject
     "%s" => subject
     _ => short + " " + subject
   }
@@ -125,6 +127,9 @@ fn get_head_commit_message(fs : &@git.RepoFileSystem, root : String) -> String? 
 
 ///|
 async fn handle_log(args : Array[String]) -> Unit raise Error {
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("log", args)
+  }
   let root = get_work_root()
   let fs = OsFs::new()
   let rfs : &@git.RepoFileSystem = fs
@@ -158,7 +163,15 @@ async fn handle_log(args : Array[String]) -> Unit raise Error {
         format = Some(args[i + 1])
         i += 1
       }
+      "--pretty" if i + 1 < args.length() => {
+        format = Some(args[i + 1])
+        i += 1
+      }
       _ if arg.has_prefix("--format=") => {
+        let value = String::unsafe_substring(arg, start=9, end=arg.length())
+        format = Some(value)
+      }
+      _ if arg.has_prefix("--pretty=") => {
         let value = String::unsafe_substring(arg, start=9, end=arg.length())
         format = Some(value)
       }

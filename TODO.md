@@ -22,7 +22,7 @@
 ## 直近の互換テスト再計測（2026-02-13）
 
 - [x] `just git-t-full t5516-fetch-push.sh` は成功（`success 123 / failed 0 / broken 0`）
-- [ ] `just git-t-full t5510-fetch.sh` は失敗（`success 76 / failed 139`）
+- [x] `just git-t-full t5510-fetch.sh` は成功（`success 215 / failed 0 / broken 0`）
 - [x] `just git-t-full t5601-clone.sh` は成功（`success 114 / failed 0 / broken 0`、`MINGW` 1 skip）
 - [x] `just git-t-one-remote t5616-partial-clone.sh` は成功（`success 47 / failed 0 / broken 0`）
 - [x] `t/t0001-init.sh` / `t/t0019-clone-local.sh` / `t/t0020-push-fetch-pull.sh` は成功
@@ -102,10 +102,10 @@ git/t ではカバーしきれない standalone 動作を補完的に検証す�
 ### 直近 Blocker（2026-02-13 実測）
 
 - [x] **t5516-fetch-push.sh**（`git-t-full`: success 123/123）
-- [ ] **t5510-fetch.sh**（`git-t-full`: failed 139/215）
-  - [ ] followRemoteHEAD / tracking / FETCH_HEAD 互換
-  - [ ] `--prune` / `--prune-tags` / `--refmap` / `--atomic` 互換
-  - [ ] bundle / negotiation-tip / D/F conflict / auto-gc 互換
+- [x] **t5510-fetch.sh**（`git-t-full`: success 215/215）
+  - [x] followRemoteHEAD / tracking / FETCH_HEAD 互換
+  - [x] `--prune` / `--prune-tags` / `--refmap` / `--atomic` 互換
+  - [x] bundle / negotiation-tip / D/F conflict / auto-gc 互換
 - [x] **t5601-clone.sh**（`git-t-full`: success 114/115, skip 1）
 - [x] **t5616-partial-clone.sh**（`git-t-one-remote`: success 47/47）
   - [x] promisor/filter/refetch/lazy-fetch/protocol v2 互換（one-remote）
@@ -142,7 +142,7 @@ allowlist で残っている 5 テスト:
 
 ### 優先修正（次に着手）
 
-- [ ] t5510-fetch.sh（fetch standalone blocker）
+- [x] t5510-fetch.sh（fetch standalone blocker 解消）
 - [x] t5601-clone.sh（clone standalone blocker 解消）
 - [x] t5616-partial-clone.sh（one-remote は 47/47）
 - [x] t5516-fetch-push.sh（full pass 123/123）
@@ -218,7 +218,7 @@ allowlist で残っている 5 テスト:
 - [x] `src/cmd/bit` 内の `match real_git_path()` を 42 -> 0
 - [x] `src/cmd/bit` 内の `@process.run("git", ...)` を 10 -> 0
 - [x] `just check` が通る
-- [ ] 重点テスト（`t5528`, `t5510`, `t5601`, `t5616`）が `just git-t-full` で通る
+- [ ] 重点テスト（残: `t5528`。`t5510` / `t5601` / `t5616` は通過）が `just git-t-full` で通る
 
 ## Tier 2: Agent Features (High)
 
@@ -235,7 +235,7 @@ allowlist で残っている 5 テスト:
 - [x] remote show known-breakage resolution (t5505)
 - [x] pull submodule known-breakage resolution (t5572)
 - [x] remote helpers known-breakage resolution (t5801)
-- [ ] Fetch compatibility edge cases (t5510)
+- [x] Fetch compatibility edge cases (t5510)
 - [x] Protocol v2 / partial clone edge cases (t5616 one-remote)
 - [x] help/doc formatting (t0450)
 

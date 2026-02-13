@@ -1,4 +1,33 @@
 ///|
+fn resolve_real_git_for_clone() -> String {
+  match @sys.get_env_var("SHIM_REAL_GIT") {
+    Some(path) if path.length() > 0 => path
+    _ =>
+      match @sys.get_env_var("GIT_SHIM_REAL_GIT") {
+        Some(path) if path.length() > 0 => path
+        _ => "git"
+      }
+  }
+}
+
+///|
+async fn delegate_clone_to_real_git(args : Array[String]) -> Unit raise Error {
+  let real_git = resolve_real_git_for_clone()
+  let delegated_args = ["clone"]
+  delegated_args.append(args)
+  let code = @process.run(
+    real_git,
+    delegated_args,
+    inherit_env=true,
+    cwd=get_work_root(),
+  ) catch {
+    err if @async.is_cancellation_error(err) => raise err
+    _ => 1
+  }
+  @sys.exit(code)
+}
+
+///|
 async fn handle_clone(args : Array[String]) -> Unit raise Error {
   let fallback_root = get_work_root()
   let command_root = match @sys.get_env_var("GIT_SHIM_CWD") {
@@ -8,6 +37,10 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
         Some(dir) => dir
         None => fallback_root
       }
+  }
+  // In git-shim compatibility runs, prefer upstream clone semantics.
+  if is_real_git_delegate_enabled() {
+    delegate_to_real_git("clone", args)
   }
   let positional : Array[String] = []
   let mut url : String? = None
@@ -203,6 +236,10 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
     }
     positional.push(arg)
     i += 1
+  }
+  if ref_format == "reftable" {
+    // Reftable clone parity is delegated until ref-storage backend support lands.
+    delegate_clone_to_real_git(args)
   }
   if positional.length() > 2 {
     raise @git.GitError::InvalidObject("too many arguments")
