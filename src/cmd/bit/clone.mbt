@@ -760,19 +760,29 @@ fn clone_remote_supports_filter(
 
 ///|
 fn clone_caps_contain_token(caps : Array[String], token : String) -> Bool {
+  let token_with_eq = token + "="
   for cap in caps {
-    if cap == token || cap.has_prefix(token + "=") {
+    if cap == token || cap.has_prefix(token_with_eq) {
       return true
     }
-    for word in clone_split_words(cap) {
-      if word == token || word.has_prefix(token + "=") {
+    let words = clone_split_words(cap)
+    if words.length() == 0 {
+      continue
+    }
+    for word in words {
+      if word == token || word.has_prefix(token_with_eq) {
         return true
       }
     }
     if cap.has_prefix("fetch=") {
-      let fetch_caps = String::unsafe_substring(cap, start=6, end=cap.length())
-      for word in clone_split_words(fetch_caps) {
-        if word == token || word.has_prefix(token + "=") {
+      let first_word = words[0]
+      if first_word.has_prefix("fetch=") {
+        let fetch_word = String::unsafe_substring(
+          first_word,
+          start=6,
+          end=first_word.length(),
+        )
+        if fetch_word == token || fetch_word.has_prefix(token_with_eq) {
           return true
         }
       }

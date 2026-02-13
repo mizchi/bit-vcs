@@ -276,6 +276,9 @@ bench-lib:
 bench-init:
     moon bench --target native -p mizchi/bit/cmd/bit -f bench_init_wbtest.mbt
 
+bench-midx-clone:
+    moon bench --target native -p mizchi/bit/cmd/bit -f bench_midx_clone_wbtest.mbt
+
 bench-status:
     moon bench --target native -p mizchi/bit/lib -f bench_status_test.mbt
 

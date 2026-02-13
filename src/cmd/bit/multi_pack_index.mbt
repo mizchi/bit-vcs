@@ -1117,12 +1117,18 @@ fn midx_select_pack_files_from_stdin(
   include_names : Array[String],
   exclude_names : Array[String],
 ) -> Array[String] {
+  let all_pack_set : Map[String, Bool] = {}
+  for pack_name in all_pack_files {
+    all_pack_set[pack_name] = true
+  }
   let selected : Array[String] = []
+  let selected_set : Map[String, Bool] = {}
   for name in include_names {
     match midx_normalize_stdin_pack_name(name) {
       Some(pack_name) =>
-        if midx_array_has_string(all_pack_files, pack_name) &&
-          not(midx_array_has_string(selected, pack_name)) {
+        if all_pack_set.contains(pack_name) &&
+          not(selected_set.contains(pack_name)) {
+          selected_set[pack_name] = true
           selected.push(pack_name)
         }
       None => ()
@@ -1131,22 +1137,19 @@ fn midx_select_pack_files_from_stdin(
   if exclude_names.length() == 0 {
     return selected
   }
-  let excluded : Array[String] = []
+  let excluded_set : Map[String, Bool] = {}
   for name in exclude_names {
     match midx_normalize_stdin_pack_name(name) {
-      Some(pack_name) =>
-        if not(midx_array_has_string(excluded, pack_name)) {
-          excluded.push(pack_name)
-        }
+      Some(pack_name) => excluded_set[pack_name] = true
       None => ()
     }
   }
-  if excluded.length() == 0 {
+  if excluded_set.length() == 0 {
     return selected
   }
   let filtered : Array[String] = []
   for name in selected {
-    if not(midx_array_has_string(excluded, name)) {
+    if not(excluded_set.contains(name)) {
       filtered.push(name)
     }
   }
