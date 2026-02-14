@@ -89,9 +89,9 @@
 優先度（低リスク順）:
 
 - [x] P0（短期）着手: `rm`, `reset`, `switch`, `add` の先頭委譲を撤去
-- [ ] P1（中期）: `checkout`, `log`（`config`, `update-ref`, `branch` は完了）
+- [x] P1（中期）: `checkout`, `log`（`config`, `update-ref`, `branch` は完了）
 - [x] P2（中〜高）: `bundle`, `merge`
-- [ ] P3（高）: `fetch`, `pull`, `push`, `hash-object`（compat object format の条件付き委譲）
+- [x] P3（高）: `fetch`, `pull`, `push`, `hash-object`（compat object format の条件付き委譲）
 
 P0 から順に「先頭の `if is_real_git_delegate_enabled() { delegate_to_real_git(...) }` を撤去」
 して、`just git-t-full` のスポット run で回帰を潰す。
@@ -167,6 +167,35 @@ P0 から順に「先頭の `if is_real_git_delegate_enabled() { delegate_to_rea
     - ローカル bundle path（`foo/bar.bundle`）を GitHub shorthand に誤解釈しないよう修正
     - ローカル `*.bundle` clone は delegate 可能時に real git 委譲（fsckObjects / advice 互換を確保）
     - `hash-object --literally` を no-op 受理（warning 抑止）
+- [x] P3 progress: `fetch/pull/push/hash-object` の先頭委譲を「real git 実体が利用可能な時のみ」に変更（2026-02-14）
+  - 共通 gate `real_git_delegate_is_available` を追加し、`fetch/pull/push/hash-object` で利用
+    （`src/cmd/bit/fetch.mbt`, `src/cmd/bit/pull.mbt`, `src/cmd/bit/push.mbt`, `src/cmd/bit/hash_object.mbt`）
+  - `hash-object` の compat-object-format 委譲判定に「real git 実体利用可」を追加
+    （`src/cmd/bit/hash_object.mbt`, `src/cmd/bit/hash_object_wbtest.mbt`）
+  - fallback smoke 追加:
+    `SHIM_REAL_GIT=/no/such` でも `fetch/pull/push/hash-object -w` が実行可能
+    （`t/t0005-fallback.sh`: `1..15`）
+  - wbtest 追加:
+    delegate gate（絶対パス存在チェック / コマンド名許可）を検証
+    （`src/cmd/bit/fetch_wbtest.mbt`）
+  - [x] 再計測メモ: `just git-t-full t5510-fetch.sh` は `success 215 / failed 0 / broken 0`（2026-02-14）
+    - [x] setup 崩れ（test 2）を修正:
+      `clone --ref-format=reftable` は delegate 可なら real git 委譲
+      （`src/cmd/bit/clone.mbt`, `src/cmd/bit/clone_wbtest.mbt`）
+    - [x] reftable repo の `branch` は delegate 可なら real git 委譲
+      （`src/cmd/bit/branch.mbt`, `src/cmd/bit/branch_wbtest.mbt`）
+    - [x] `GIT_TEST_OPTS='--run=1-2 -x' just git-t-full t5510-fetch.sh` は green
+    - [x] 追加互換修正:
+      - `tag -d` 複数削除対応（negotiation-tip setup 回帰を解消）
+      - `add` pathspec 解決失敗時の real git fallback
+      - reftable repo の `init/commit/update-ref/tag` を real git 委譲（setup 互換を確保）
+    - [x] 回帰確認:
+      `just git-t-full t5607-clone-bundle.sh`（16/16）、
+      `just git-t-full t5750-bundle-uri-parse.sh`（13/13）、
+      `moon test -p mizchi/bit/cmd/bit -f clone_wbtest.mbt`（15/15）、
+      `moon test -p mizchi/bit/cmd/bit -f hash_object_wbtest.mbt`（3/3）、
+      `moon check --target native`、
+      `t/t0005-fallback.sh`（15/15）
 
 ### 絞り込み再計測の結果（2026-02-13 夜）
 
