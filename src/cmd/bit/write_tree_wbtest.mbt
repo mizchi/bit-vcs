@@ -26,6 +26,7 @@ test "write-tree: compatobjectformat=sha256 requires real-git delegation when av
   assert_false(write_tree_repo_requires_real_git_delegate(fs, "/repo/.git"))
 
   restore_env_var_for_write_tree_wbtest("SHIM_REAL_GIT", prev_shim_real_git)
-  restore_env_var_for_write_tree_wbtest("GIT_SHIM_REAL_GIT", prev_legacy_real_git)
+  restore_env_var_for_write_tree_wbtest(
+    "GIT_SHIM_REAL_GIT", prev_legacy_real_git,
+  )
 }
-

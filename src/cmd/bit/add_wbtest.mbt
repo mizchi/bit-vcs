@@ -21,8 +21,7 @@ test "add: sha256 repository requires real-git delegation when available" {
   assert_true(add_repo_requires_real_git_delegate(fs, "/repo/.git"))
 
   fs.write_string(
-    "/repo/.git/config",
-    "[core]\n\trepositoryformatversion = 0\n",
+    "/repo/.git/config", "[core]\n\trepositoryformatversion = 0\n",
   )
   assert_false(add_repo_requires_real_git_delegate(fs, "/repo/.git"))
 

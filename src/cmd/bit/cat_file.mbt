@@ -23,6 +23,11 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
   let git_dir = resolve_git_dir(fs, root)
+  if real_git_delegate_is_available(fs) &&
+    cat_file_has_incremental_midx_chain(fs, git_dir) {
+    delegate_to_real_git("cat-file", args)
+    return ()
+  }
   let mut show_type = false
   let mut show_size = false
   let mut pretty_print = false
@@ -284,7 +289,9 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
           if sort_batch_check_output {
             deferred_batch_check_lines.push(line + batch_output_separator)
           } else {
-            @stdio.stdout.write(cat_file_string_to_bytes(line + batch_output_separator))
+            @stdio.stdout.write(
+              cat_file_string_to_bytes(line + batch_output_separator),
+            )
           }
           object_index += 1
           continue
@@ -338,7 +345,9 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
           if sort_batch_check_output {
             deferred_batch_check_lines.push(line + batch_output_separator)
           } else {
-            @stdio.stdout.write(cat_file_string_to_bytes(line + batch_output_separator))
+            @stdio.stdout.write(
+              cat_file_string_to_bytes(line + batch_output_separator),
+            )
           }
           object_index += 1
           continue
@@ -1224,12 +1233,12 @@ fn cat_file_collect_batch_all_object_disk_records(
     }
   }
   if not(unordered) {
-    out.sort_by((a, b) =>
+    out.sort_by((a, b) => {
       String::compare(
         a.id.to_hex() + " " + a.disk_size.to_string(),
         b.id.to_hex() + " " + b.disk_size.to_string(),
       )
-    )
+    })
   }
   out
 }
@@ -1247,7 +1256,11 @@ fn cat_file_append_pack_disk_records(
   let pack_end = (pack_data.length() - 20).to_int64()
   for i in 0..<pack.ids.length() {
     let offset = pack.offsets[i]
-    let size = cat_file_compute_pack_entry_disk_size(pack.offsets, offset, pack_end)
+    let size = cat_file_compute_pack_entry_disk_size(
+      pack.offsets,
+      offset,
+      pack_end,
+    )
     guard size is Some(entry_size) else { continue }
     let id = @git.ObjectId::from_hex(pack.ids[i]) catch { _ => continue }
     out.push(CatFileBatchAllObjectDiskRecord::{ id, disk_size: entry_size })
@@ -1616,6 +1629,16 @@ fn cat_file_zero_oid(length : Int) -> String {
     i += 1
   }
   out
+}
+
+///|
+fn cat_file_has_incremental_midx_chain(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> Bool {
+  let chain_path = git_dir +
+    "/objects/pack/multi-pack-index.d/multi-pack-index-chain"
+  fs.is_file(chain_path)
 }
 
 ///|

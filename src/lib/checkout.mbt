@@ -116,7 +116,10 @@ pub fn checkout(
       let resolved = rev_parse(rfs, actual_git_dir, spec)
       match resolved {
         None => raise @git.GitError::InvalidObject("Invalid ref: \{spec}")
-        Some(id) => target = Some(id)
+        Some(id) => {
+          let peeled_commit = rev_parse(rfs, actual_git_dir, spec + "^{commit}")
+          target = Some(peeled_commit.unwrap_or(id))
+        }
       }
     }
     Some(_) => ()

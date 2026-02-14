@@ -50,6 +50,8 @@ type BlameLine
 
 type BlameOptions
 
+type CatFileBatchAllObjectDiskRecord
+
 type CatFileFollowResolution
 
 type CatFileObjectFilter

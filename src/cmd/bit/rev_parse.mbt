@@ -58,9 +58,7 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
       "--output-object-format" => {
         output_object_format_arg_indices[arg_index] = true
         if arg_index + 1 >= args.length() {
-          eprint_line(
-            "fatal: option '--output-object-format' requires a value",
-          )
+          eprint_line("fatal: option '--output-object-format' requires a value")
           @sys.exit(128)
         }
         output_object_format = Some(args[arg_index + 1])
@@ -90,11 +88,7 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
   }
   if output_object_format is Some(raw_output_format) {
     let requested_format = @gitlib.config_strip_quotes(raw_output_format).to_lower()
-    if !rev_parse_output_object_format_supported(
-      fs,
-      git_dir,
-      requested_format,
-    ) {
+    if !rev_parse_output_object_format_supported(fs, git_dir, requested_format) {
       eprint_line("fatal: unsupported object format: \{requested_format}")
       @sys.exit(128)
     }
@@ -198,13 +192,11 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
           match id {
             Some(oid) => {
               let output_oid_hex = rev_parse_resolve_output_oid_hex(
-                fs,
-                git_dir,
-                oid,
-                output_object_format,
+                fs, git_dir, oid, output_object_format,
               )
               match short_length {
-                Some(length) => print_line(shorten_oid_hex(output_oid_hex, length))
+                Some(length) =>
+                  print_line(shorten_oid_hex(output_oid_hex, length))
                 None => print_line(output_oid_hex)
               }
             }
@@ -279,7 +271,9 @@ fn rev_parse_resolve_output_oid_hex(
   output_object_format : String?,
 ) -> String {
   let oid_hex = oid.to_hex()
-  guard output_object_format is Some(raw_requested_format) else { return oid_hex }
+  guard output_object_format is Some(raw_requested_format) else {
+    return oid_hex
+  }
   let requested_format = @gitlib.config_strip_quotes(raw_requested_format).to_lower()
   let storage_format = repo_object_format(fs, git_dir)
   if requested_format == storage_format {

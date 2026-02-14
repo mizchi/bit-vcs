@@ -11,6 +11,7 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
   let mut delete_mode = false
   let mut create_reflog = false
   let mut no_deref = false
+  let mut stdin_mode = false
   let mut message : String? = None
   let positional : Array[String] = []
   let mut i = 0
@@ -20,6 +21,7 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
       "-d" | "--delete" => delete_mode = true
       "--create-reflog" => create_reflog = true
       "--no-deref" => no_deref = true
+      "--stdin" => stdin_mode = true
       "-m" if i + 1 < args.length() => {
         message = Some(args[i + 1])
         i += 1
@@ -37,6 +39,118 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
   let timestamp = get_current_timestamp()
   let timezone = "+0000"
   let (author, email) = get_author_info(fs, actual_git_dir)
+  if stdin_mode {
+    let input = decode_bytes(read_all_stdin())
+    let mut stdin_no_deref = no_deref
+    let mut stdin_create_reflog = create_reflog
+    for line_view in input.split("\n") {
+      let line = trim_chars(line_view.to_string(), " \t\r\n")
+      if line.length() == 0 {
+        continue
+      }
+      let tokens = update_ref_split_stdin_tokens(line)
+      if tokens.length() == 0 {
+        continue
+      }
+      let cmd = tokens[0]
+      match cmd {
+        "option" => {
+          if tokens.length() != 2 {
+            eprint_line("fatal: update-ref: option requires one argument")
+            @sys.exit(128)
+          }
+          match tokens[1] {
+            "no-deref" => stdin_no_deref = true
+            "create-reflog" => stdin_create_reflog = true
+            _ => {
+              eprint_line("fatal: update-ref: unknown option: " + tokens[1])
+              @sys.exit(128)
+            }
+          }
+        }
+        "start" | "prepare" | "commit" | "abort" => ()
+        "create" => {
+          if tokens.length() != 3 {
+            eprint_line("fatal: update-ref: create requires <ref> <newvalue>")
+            @sys.exit(128)
+          }
+          let cmd_args = update_ref_stdin_base_args(
+            stdin_no_deref, stdin_create_reflog, message,
+          )
+          cmd_args.push(tokens[1])
+          cmd_args.push(tokens[2])
+          cmd_args.push(@git.ObjectId::zero().to_hex())
+          handle_update_ref(cmd_args)
+        }
+        "update" => {
+          if tokens.length() != 3 && tokens.length() != 4 {
+            eprint_line(
+              "fatal: update-ref: update requires <ref> <newvalue> [<oldvalue>]",
+            )
+            @sys.exit(128)
+          }
+          let cmd_args = update_ref_stdin_base_args(
+            stdin_no_deref, stdin_create_reflog, message,
+          )
+          cmd_args.push(tokens[1])
+          cmd_args.push(tokens[2])
+          if tokens.length() == 4 {
+            cmd_args.push(tokens[3])
+          }
+          handle_update_ref(cmd_args)
+        }
+        "delete" => {
+          if tokens.length() != 2 && tokens.length() != 3 {
+            eprint_line("fatal: update-ref: delete requires <ref> [<oldvalue>]")
+            @sys.exit(128)
+          }
+          let cmd_args = update_ref_stdin_base_args(
+            stdin_no_deref, stdin_create_reflog, message,
+          )
+          cmd_args.push("-d")
+          cmd_args.push(tokens[1])
+          if tokens.length() == 3 {
+            cmd_args.push(tokens[2])
+          }
+          handle_update_ref(cmd_args)
+        }
+        "verify" => {
+          if tokens.length() != 2 && tokens.length() != 3 {
+            eprint_line("fatal: update-ref: verify requires <ref> [<oldvalue>]")
+            @sys.exit(128)
+          }
+          let refname = resolve_update_target_ref(
+            fs,
+            actual_git_dir,
+            tokens[1],
+            stdin_no_deref,
+          )
+          let current_id = read_ref_value(fs, actual_git_dir, refname)
+          let ok = match tokens.length() {
+            2 => current_id is Some(_)
+            _ => {
+              let expected_id = @git.ObjectId::from_hex(tokens[2]) catch {
+                _ => @git.ObjectId::zero()
+              }
+              match current_id {
+                Some(cur_id) => cur_id.to_hex() == expected_id.to_hex()
+                None => expected_id.to_hex() == @git.ObjectId::zero().to_hex()
+              }
+            }
+          }
+          if not(ok) {
+            eprint_line("fatal: update-ref: verify failed for " + tokens[1])
+            @sys.exit(1)
+          }
+        }
+        _ => {
+          eprint_line("fatal: update-ref: unknown command: " + cmd)
+          @sys.exit(128)
+        }
+      }
+    }
+    return ()
+  }
   if delete_mode {
     if positional.length() < 1 {
       raise @git.GitError::InvalidObject("usage: git update-ref -d <refname>")
@@ -485,6 +599,41 @@ fn get_author_info(
     }
   }
   (name, email)
+}
+
+///|
+fn update_ref_split_stdin_tokens(line : String) -> Array[String] {
+  let tokens : Array[String] = []
+  for token_view in line.split(" ") {
+    let token = trim_string(token_view.to_string())
+    if token.length() > 0 {
+      tokens.push(token)
+    }
+  }
+  tokens
+}
+
+///|
+fn update_ref_stdin_base_args(
+  no_deref : Bool,
+  create_reflog : Bool,
+  message : String?,
+) -> Array[String] {
+  let args : Array[String] = []
+  if no_deref {
+    args.push("--no-deref")
+  }
+  if create_reflog {
+    args.push("--create-reflog")
+  }
+  match message {
+    Some(msg) => {
+      args.push("-m")
+      args.push(msg)
+    }
+    None => ()
+  }
+  args
 }
 
 ///|

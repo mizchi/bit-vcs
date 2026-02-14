@@ -150,6 +150,7 @@ options(
     "unpack_objects.mbt": [ "native" ],
     "update_index.mbt": [ "native" ],
     "update_ref.mbt": [ "native" ],
+    "update_ref_wbtest.mbt": [ "native" ],
     "upload_pack.mbt": [ "native" ],
     "verify_pack.mbt": [ "native" ],
     "workspace.mbt": [ "native" ],

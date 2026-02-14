@@ -1,0 +1,27 @@
+diff --git a/t/t1006-cat-file.sh b/t/t1006-cat-file.sh
+index 0eee3bb878..1eeaa085d3 100755
+--- a/t/t1006-cat-file.sh
++++ b/t/t1006-cat-file.sh
+@@ -194,18 +194,14 @@ $content"
+ 	test_cmp expect actual
+     '
+ 
+-    # FIXME: %(rest) is incompatible with object names that include whitespace,
+-    # e.g. HEAD:path/to/a/file with spaces. Use the resolved OID as input to
+-    # test this instead of the raw object name.
++    rest_object_name="$object_name"
+     if echo "$object_name" | grep -q " "; then
+-	test_rest=test_expect_failure
+-    else
+-	test_rest=test_expect_success
++	rest_object_name="$oid"
+     fi
+ 
+-    $test_rest '--batch-check with %(rest)' '
++    test_expect_success '--batch-check with %(rest)' '
+ 	echo "$type this is some extra content" >expect &&
+-	echo "$object_name    this is some extra content" |
++	echo "$rest_object_name    this is some extra content" |
+ 		git cat-file --batch-check="%(objecttype) %(rest)" >actual &&
+ 	test_cmp expect actual
+     '

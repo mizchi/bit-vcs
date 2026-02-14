@@ -1,6 +1,7 @@
 ///|
 async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
   let fs = OsFs::new()
+  let rfs : &@git.RepoFileSystem = fs
   let git_dir = find_git_dir(fs)
   let pack_dir = git_dir + "/objects/pack"
   let mut subcommand : String? = None
@@ -18,6 +19,9 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
   let mut preferred_pack : String? = None
   let mut stdin_packs = false
   let mut bitmap = false
+  let mut no_bitmap = false
+  let mut incremental = false
+  let mut refs_snapshot : String? = None
   let mut batch_size = 0
   let mut unsupported_opt : String? = None
   let mut i = 0
@@ -54,9 +58,22 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
       _ if arg.has_prefix("--preferred-pack=") =>
         preferred_pack = Some(arg[17:].to_string())
       "--stdin-packs" => stdin_packs = true
-      "--bitmap" => bitmap = true
-      "--incremental" => unsupported_opt = Some(arg)
-      _ if arg.has_prefix("--refs-snapshot") => unsupported_opt = Some(arg)
+      "--bitmap" => {
+        bitmap = true
+        no_bitmap = false
+      }
+      "--no-bitmap" => {
+        bitmap = false
+        no_bitmap = true
+      }
+      "--incremental" => incremental = true
+      "--refs-snapshot" if i + 1 < args.length() => {
+        refs_snapshot = Some(resolve_in_cwd(args[i + 1]))
+        i += 2
+        continue
+      }
+      _ if arg.has_prefix("--refs-snapshot=") =>
+        refs_snapshot = Some(resolve_in_cwd(arg[16:].to_string()))
       "write" | "verify" | "expire" | "repack" => subcommand = Some(arg)
       _ if arg.has_prefix("-") => {
         warn_unimplemented_arg("multi-pack-index", arg)
@@ -72,6 +89,37 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
       @sys.exit(1)
     }
     None => ()
+  }
+  let incremental_chain_path = pack_dir +
+    "/multi-pack-index.d/multi-pack-index-chain"
+  let has_incremental_chain = fs.is_file(incremental_chain_path)
+  if real_git_delegate_is_available(rfs) {
+    if subcommand == Some("write") &&
+      (
+        incremental ||
+        refs_snapshot is Some(_) ||
+        bitmap ||
+        no_bitmap ||
+        has_incremental_chain
+      ) {
+      delegate_to_real_git("multi-pack-index", args)
+      return ()
+    }
+    if subcommand == Some("verify") && has_incremental_chain {
+      delegate_to_real_git("multi-pack-index", args)
+      return ()
+    }
+  } else if subcommand == Some("write") &&
+    (incremental || refs_snapshot is Some(_)) {
+    let delegated_opt = if incremental {
+      "--incremental"
+    } else {
+      "--refs-snapshot"
+    }
+    eprint_line(
+      "error: unsupported option for multi-pack-index: " + delegated_opt,
+    )
+    @sys.exit(1)
   }
   match subcommand {
     Some("write") | Some("verify") =>

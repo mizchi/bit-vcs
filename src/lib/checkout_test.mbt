@@ -28,3 +28,20 @@ test "checkout: switch back to main" {
   let content = fs.read_string("/repo/a.txt")
   assert_true(content == "one\n")
 }
+
+///|
+test "checkout: annotated tag peels to commit" {
+  let fs = setup_repo_checkout()
+  fs.write_string("/repo/a.txt", "base\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let base = commit(
+    fs, fs, "/repo", "base\n", "Test <t@example.com>", 1700000100L,
+  )
+  create_annotated_tag(
+    fs, fs, "/repo/.git", "base", base, "base", "Test <t@example.com>", 1700000101L,
+  )
+  let target = checkout(fs, fs, "/repo", "base")
+  assert_true(target == base)
+  let head = fs.read_string("/repo/.git/HEAD")
+  assert_true(head.has_prefix(base.to_hex()))
+}
