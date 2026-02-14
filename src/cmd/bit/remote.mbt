@@ -1633,6 +1633,29 @@ fn upsert_packed_refs(
 }
 
 ///|
+fn pack_remote_tracking_refs(
+  fs : OsFs,
+  git_dir : String,
+  remote_name : String,
+) -> Unit raise @git.GitError {
+  let prefix = "refs/remotes/" + remote_name + "/"
+  let refs = @gitlib.list_refs_with_ids(fs, git_dir, Some(prefix))
+  let entries : Array[(String, @git.ObjectId)] = []
+  for refname, oid in refs {
+    if refname != prefix + "HEAD" {
+      entries.push((refname, oid))
+    }
+  }
+  if entries.length() == 0 {
+    return
+  }
+  upsert_packed_refs(fs, git_dir, entries)
+  for entry in entries {
+    @gitlib.remove_ref_path(fs, fs, git_dir + "/" + entry.0)
+  }
+}
+
+///|
 fn update_testgit_push_tracking(
   fs : OsFs,
   git_dir : String,
@@ -1683,29 +1706,6 @@ fn update_local_push_tracking(
       }
     }
     None => ()
-  }
-}
-
-///|
-fn pack_remote_tracking_refs(
-  fs : OsFs,
-  git_dir : String,
-  remote_name : String,
-) -> Unit raise @git.GitError {
-  let prefix = "refs/remotes/" + remote_name + "/"
-  let refs = @gitlib.list_refs_with_ids(fs, git_dir, Some(prefix))
-  let entries : Array[(String, @git.ObjectId)] = []
-  for refname, oid in refs {
-    if refname != prefix + "HEAD" {
-      entries.push((refname, oid))
-    }
-  }
-  if entries.length() == 0 {
-    return
-  }
-  upsert_packed_refs(fs, git_dir, entries)
-  for entry in entries {
-    @gitlib.remove_ref_path(fs, fs, git_dir + "/" + entry.0)
   }
 }
 
@@ -1994,7 +1994,7 @@ fn clone_local_repo(
       None => ()
     }
   }
-  // Initialize remote-tracking refs as loose refs so fetch --prune can remove them.
+  // Initialize remote-tracking refs and pack non-HEAD entries to match git clone layout.
   if not(mirror) {
     for b in branches {
       write_ref_file(
@@ -2012,6 +2012,9 @@ fn clone_local_repo(
       "refs/remotes/" + remote_name + "/HEAD",
       "refs/remotes/" + remote_name + "/" + default_branch,
     )
+  }
+  if not(mirror) {
+    pack_remote_tracking_refs(fs, dest_git_dir, remote_name)
   }
   // Partial clone markers
   if filter.is_partial() {
