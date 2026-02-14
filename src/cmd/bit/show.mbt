@@ -65,20 +65,40 @@ fn parse_show_commit(data : Bytes) -> ShowCommitInfo {
 }
 
 ///|
+fn show_first_message_line(message : String) -> String {
+  match message.find("\n") {
+    Some(idx) => String::unsafe_substring(message, start=0, end=idx)
+    None => message
+  }
+}
+
+///|
 async fn handle_show(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
   let git_dir = resolve_git_dir(fs, root)
   // Parse: git show [--pretty=<format>] [<commit>]
   let mut rev = "HEAD"
+  let revs : Array[String] = []
   let mut pretty_raw = false
   let mut pretty_format : String? = None
   let mut quiet = false
-  for arg in args {
+  let mut oneline = false
+  let grep_patterns : Array[String] = []
+  let mut grep_pattern_type_override : GrepPatternType? = None
+  let mut grep_ignore_case = false
+  let mut i = 0
+  while i < args.length() {
+    let arg = args[i]
     if arg == "--pretty=raw" || arg == "--format=raw" {
       pretty_raw = true
-    } else if arg == "-q" || arg == "--quiet" {
+    } else if arg == "-q" ||
+      arg == "--quiet" ||
+      arg == "-s" ||
+      arg == "--no-patch" {
       quiet = true
+    } else if arg == "--oneline" {
+      oneline = true
     } else if arg.has_prefix("--pretty=format:") {
       pretty_format = Some(
         String::unsafe_substring(arg, start=16, end=arg.length()),
@@ -87,11 +107,70 @@ async fn handle_show(args : Array[String]) -> Unit raise Error {
       pretty_format = Some(
         String::unsafe_substring(arg, start=9, end=arg.length()),
       )
+    } else if arg == "--grep" && i + 1 < args.length() {
+      grep_patterns.push(args[i + 1])
+      i += 1
+    } else if arg.has_prefix("--grep=") {
+      grep_patterns.push(String::unsafe_substring(arg, start=7, end=arg.length()))
+    } else if arg == "-i" || arg == "--regexp-ignore-case" {
+      grep_ignore_case = true
+    } else if arg == "-F" || arg == "--fixed-strings" {
+      grep_pattern_type_override = Some(GrepPatternType::Fixed)
+    } else if arg == "-E" || arg == "--extended-regexp" {
+      grep_pattern_type_override = Some(GrepPatternType::Extended)
+    } else if arg == "-P" || arg == "--perl-regexp" {
+      grep_pattern_type_override = Some(GrepPatternType::Perl)
+    } else if arg == "--basic-regexp" {
+      grep_pattern_type_override = Some(GrepPatternType::Basic)
     } else if not(arg.has_prefix("-")) {
       rev = arg
+      revs.push(arg)
     } else {
       warn_unimplemented_arg("show", arg)
     }
+    i += 1
+  }
+  let grep_pattern_type = resolve_grep_pattern_type(
+    fs,
+    git_dir,
+    grep_pattern_type_override,
+  )
+  if oneline && quiet {
+    let targets : Array[String] = if revs.length() > 0 {
+      revs
+    } else {
+      ["HEAD"]
+    }
+    let db = @gitlib.ObjectDb::load(fs, git_dir)
+    for target in targets {
+      let id = @gitrepo.rev_parse(fs, git_dir, target)
+      guard id is Some(commit_id) else {
+        raise @git.GitError::InvalidObject("unknown revision: \{target}")
+      }
+      let obj = db.get(fs, commit_id)
+      guard obj is Some(o) else {
+        raise @git.GitError::InvalidObject(
+          "Object not found: \{commit_id.to_hex()}",
+        )
+      }
+      if o.obj_type != @git.ObjectType::Commit {
+        continue
+      }
+      let info = parse_show_commit(o.data)
+      if not(
+        grep_patterns_match_message(
+          info.message,
+          grep_patterns,
+          grep_pattern_type,
+          grep_ignore_case,
+        ),
+      ) {
+        continue
+      }
+      let short = String::unsafe_substring(commit_id.to_hex(), start=0, end=7)
+      print_line(short + " " + show_first_message_line(info.message))
+    }
+    return ()
   }
   // Resolve revision
   let id = @gitrepo.rev_parse(fs, git_dir, rev)
@@ -143,6 +222,16 @@ async fn handle_show(args : Array[String]) -> Unit raise Error {
   }
   // Parse full commit details
   let show_info = parse_show_commit(o.data)
+  if not(
+    grep_patterns_match_message(
+      show_info.message,
+      grep_patterns,
+      grep_pattern_type,
+      grep_ignore_case,
+    ),
+  ) {
+    return ()
+  }
   // Print commit info
   print_line("commit \{commit_id.to_hex()}")
   print_line("Author: \{show_info.author}")

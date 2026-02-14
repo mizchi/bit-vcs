@@ -154,6 +154,40 @@ test "rev-parse: tag^{commit} peels annotated tag" {
 }
 
 ///|
+test "rev-parse: :/message finds commit from HEAD history" {
+  let fs = setup_rev_repo()
+  fs.write_string("/repo/a.txt", "first\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  ignore(
+    commit(fs, fs, "/repo", "initial\n", "Test <test@example.com>", 1700000000L),
+  )
+  fs.write_string("/repo/a.txt", "second\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let target = commit(
+    fs, fs, "/repo", "needle message\n", "Test <test@example.com>", 1700000001L,
+  )
+  let parsed = rev_parse(fs, "/repo/.git", ":/needle")
+  assert_eq(parsed.unwrap().to_hex(), target.to_hex())
+}
+
+///|
+test "rev-parse: base^{/message} finds reachable commit" {
+  let fs = setup_rev_repo()
+  fs.write_string("/repo/a.txt", "first\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let first = commit(
+    fs, fs, "/repo", "first target\n", "Test <test@example.com>", 1700000000L,
+  )
+  fs.write_string("/repo/a.txt", "second\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  ignore(
+    commit(fs, fs, "/repo", "second\n", "Test <test@example.com>", 1700000001L),
+  )
+  let parsed = rev_parse(fs, "/repo/.git", "HEAD^{/first target}")
+  assert_eq(parsed.unwrap().to_hex(), first.to_hex())
+}
+
+///|
 async test "status porcelain + diff" {
   let fs = setup_rev_repo()
   fs.write_string("/repo/a.txt", "hello\n")

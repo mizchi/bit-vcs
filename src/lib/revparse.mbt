@@ -6,6 +6,15 @@ pub fn rev_parse(
   git_dir : String,
   spec : String,
 ) -> @git.ObjectId? raise @git.GitError {
+  if spec.has_prefix(":/") && spec.length() > 2 {
+    let needle = substring_revparse(spec, 2, spec.length())
+    return resolve_commit_message_search(fs, git_dir, "HEAD", needle)
+  }
+  match parse_commit_message_search_spec(spec) {
+    Some((base_spec, needle)) =>
+      return resolve_commit_message_search(fs, git_dir, base_spec, needle)
+    None => ()
+  }
   match spec.find(":") {
     Some(idx) =>
       if idx > 0 && idx + 1 < spec.length() {
@@ -45,6 +54,84 @@ pub fn rev_parse(
     return Some(base_id)
   }
   walk_ancestors(fs, git_dir, base_id, ancestor_count)
+}
+
+///|
+fn parse_commit_message_search_spec(spec : String) -> (String, String)? {
+  let marker = "^{/"
+  match spec.find(marker) {
+    Some(idx) if idx > 0 &&
+      spec.has_suffix("}") &&
+      idx + marker.length() < spec.length() - 1 =>
+      Some(
+        (
+          substring_revparse(spec, 0, idx),
+          substring_revparse(spec, idx + marker.length(), spec.length() - 1),
+        ),
+      )
+    _ => None
+  }
+}
+
+///|
+fn resolve_commit_message_search(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+  base_spec : String,
+  needle : String,
+) -> @git.ObjectId? raise @git.GitError {
+  if needle.length() == 0 {
+    return None
+  }
+  let base = rev_parse(fs, git_dir, base_spec)
+  guard base is Some(base_id) else { return None }
+  find_reachable_commit_by_message(fs, git_dir, base_id, needle)
+}
+
+///|
+fn find_reachable_commit_by_message(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+  start : @git.ObjectId,
+  needle : String,
+) -> @git.ObjectId? raise @git.GitError {
+  let db = ObjectDb::load(fs, git_dir)
+  let queue : Array[@git.ObjectId] = [start]
+  let seen : Map[String, Bool] = {}
+  while queue.length() > 0 {
+    let current = queue.unsafe_pop()
+    let hex = current.to_hex()
+    if seen.contains(hex) {
+      continue
+    }
+    seen[hex] = true
+    match db.get(fs, current) {
+      Some(obj) =>
+        if obj.obj_type == @git.ObjectType::Commit {
+          if commit_message_contains(obj.data, needle) {
+            return Some(current)
+          }
+          let info = @git.parse_commit(obj.data)
+          for parent in info.parents {
+            if not(seen.contains(parent.to_hex())) {
+              queue.push(parent)
+            }
+          }
+        }
+      None => ()
+    }
+  }
+  None
+}
+
+///|
+fn commit_message_contains(data : Bytes, needle : String) -> Bool {
+  let text = @utf8.decode_lossy(data[:])
+  match text.find("\n\n") {
+    Some(idx) =>
+      substring_revparse(text, idx + 2, text.length()).find(needle) is Some(_)
+    None => false
+  }
 }
 
 ///|

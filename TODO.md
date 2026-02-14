@@ -115,7 +115,20 @@ P0 から順に「先頭の `if is_real_git_delegate_enabled() { delegate_to_rea
   - `GIT_TEST_OPTS='--run=1-30' just git-t-full t3200-branch.sh` が green
   - 互換修正: `branch -h`（broken repo 129）、`--create-reflog` + reflog 出力、
     `rev-parse --abbrev-ref`, `name@{N}` を実装して `t3200` 初段回帰を解消
-  - [ ] `just git-t-full t3200-branch.sh` 全量は未完（現状 `failed 27 / 167`）
+  - [x] `just git-t-full t3200-branch.sh` 全量 green（`success 167 / failed 0 / broken 0`）
+- [x] P1 progress: `log` の無条件先頭委譲を条件付き化（2026-02-14）
+  - `--oneline` + 件数指定のみ pure 実行し、それ以外は real git 委譲（互換優先）
+  - fallback smoke 追加: `SHIM_REAL_GIT=/no/such` でも `git log --oneline -1` が実行可能
+    （`t/t0005-fallback.sh`）
+  - [x] `t4202-log.sh` の fail 6件クラスタ（test 8, 23-27）を解消
+    - `rev-parse :/<message>` と `HEAD^{/<message>}` を実装
+    - `show --oneline -s <multiple commits>` を実装
+    - `GIT_TEST_OPTS='--run=1-27' just git-t-full t4202-log.sh` が green
+  - [x] `t4202-log.sh` の fail 3件クラスタ（test 42-44）を解消
+    - `show` / `reflog` / `format-patch` で `--grep` + `grep.patternType`（fixed/basic）を実装
+    - `reflog` は logs が未生成なケースで `HEAD` 履歴へフォールバックして grep 判定
+    - `GIT_TEST_OPTS='--run=42-44' just git-t-full t4202-log.sh` が green
+  - [ ] `t4202-log.sh` 残り 8 fail（47, 115, 118, 121, 141, 142, 143, 145）
 
 ### 絞り込み再計測の結果（2026-02-13 夜）
 

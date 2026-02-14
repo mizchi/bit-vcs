@@ -126,8 +126,46 @@ fn get_head_commit_message(fs : &@git.RepoFileSystem, root : String) -> String? 
 }
 
 ///|
+fn log_should_delegate_to_real_git(args : Array[String]) -> Bool {
+  guard is_real_git_delegate_enabled() else { return false }
+  log_args_require_real_git(args)
+}
+
+///|
+fn log_args_require_real_git(args : Array[String]) -> Bool {
+  let mut oneline = false
+  let mut has_count = false
+  let mut i = 0
+  while i < args.length() {
+    let arg = args[i]
+    match arg {
+      "--oneline" => oneline = true
+      "-n" | "--max-count" | "--since" | "--until" =>
+        if i + 1 < args.length() {
+          if arg == "-n" || arg == "--max-count" {
+            has_count = true
+          }
+          i += 1
+        } else {
+          return true
+        }
+      _ if arg.has_prefix("-n") && arg.length() > 2 => has_count = true
+      _ if is_short_count_flag(arg) => has_count = true
+      _ if arg.has_prefix("--max-count=") => has_count = true
+      _ if arg.has_prefix("--since=") => ()
+      _ if arg.has_prefix("--until=") => ()
+      "--" => return true
+      _ if arg.has_prefix("-") => return true
+      _ => return true
+    }
+    i += 1
+  }
+  not(oneline && has_count)
+}
+
+///|
 async fn handle_log(args : Array[String]) -> Unit raise Error {
-  if is_real_git_delegate_enabled() {
+  if log_should_delegate_to_real_git(args) {
     delegate_to_real_git("log", args)
   }
   let root = get_work_root()
@@ -165,6 +203,24 @@ async fn handle_log(args : Array[String]) -> Unit raise Error {
       }
       "--pretty" if i + 1 < args.length() => {
         format = Some(args[i + 1])
+        i += 1
+      }
+      "-n" if i + 1 < args.length() => {
+        max_count = @strconv.parse_int(args[i + 1])
+        i += 1
+      }
+      "--max-count" if i + 1 < args.length() => {
+        max_count = @strconv.parse_int(args[i + 1])
+        i += 1
+      }
+      "--since" if i + 1 < args.length() => {
+        since_ts = @strconv.parse_int64(args[i + 1]) catch { _ => 0L }
+        i += 1
+      }
+      "--until" if i + 1 < args.length() => {
+        until_ts = @strconv.parse_int64(args[i + 1]) catch {
+          _ => 9223372036854775807L
+        }
         i += 1
       }
       _ if arg.has_prefix("--format=") => {

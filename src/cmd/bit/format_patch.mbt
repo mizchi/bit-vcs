@@ -12,6 +12,9 @@ async fn handle_format_patch(args : Array[String]) -> Unit raise Error {
   let mut stdout_mode = false
   let mut cover_letter = false
   let revisions : Array[String] = []
+  let grep_patterns : Array[String] = []
+  let mut grep_pattern_type_override : GrepPatternType? = None
+  let mut grep_ignore_case = false
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -36,6 +39,34 @@ async fn handle_format_patch(args : Array[String]) -> Unit raise Error {
         cover_letter = true
         i += 1
       }
+      "--grep" if i + 1 < args.length() => {
+        grep_patterns.push(args[i + 1])
+        i += 2
+      }
+      _ if arg.has_prefix("--grep=") => {
+        grep_patterns.push(String::unsafe_substring(arg, start=7, end=arg.length()))
+        i += 1
+      }
+      "-i" | "--regexp-ignore-case" => {
+        grep_ignore_case = true
+        i += 1
+      }
+      "-F" | "--fixed-strings" => {
+        grep_pattern_type_override = Some(GrepPatternType::Fixed)
+        i += 1
+      }
+      "-E" | "--extended-regexp" => {
+        grep_pattern_type_override = Some(GrepPatternType::Extended)
+        i += 1
+      }
+      "-P" | "--perl-regexp" => {
+        grep_pattern_type_override = Some(GrepPatternType::Perl)
+        i += 1
+      }
+      "--basic-regexp" => {
+        grep_pattern_type_override = Some(GrepPatternType::Basic)
+        i += 1
+      }
       _ if arg.has_prefix("-o") => {
         output_dir = String::unsafe_substring(arg, start=2, end=arg.length())
         i += 1
@@ -55,11 +86,27 @@ async fn handle_format_patch(args : Array[String]) -> Unit raise Error {
     @stdio.stderr.write("fatal: no commits specified")
     @sys.exit(128)
   }
+  let grep_pattern_type = resolve_grep_pattern_type(
+    rfs,
+    git_dir,
+    grep_pattern_type_override,
+  )
+  let db = @gitlib.ObjectDb::load(rfs, git_dir)
+  let commits = filter_format_patch_commits_by_grep(
+    db,
+    rfs,
+    commits,
+    grep_patterns,
+    grep_pattern_type,
+    grep_ignore_case,
+  )
+  if commits.length() == 0 {
+    return
+  }
   // Create output directory if needed
   if not(stdout_mode) && not(rfs.is_dir(output_dir)) {
     wfs.mkdir_p(output_dir)
   }
-  let db = @gitlib.ObjectDb::load(rfs, git_dir)
   let total = commits.length()
   // Generate cover letter if requested
   if cover_letter && not(stdout_mode) {
@@ -197,6 +244,40 @@ fn collect_last_n_commits(
   }
   result.rev_in_place()
   result
+}
+
+///|
+fn filter_format_patch_commits_by_grep(
+  db : @gitlib.ObjectDb,
+  rfs : &@git.RepoFileSystem,
+  commits : Array[@git.ObjectId],
+  grep_patterns : Array[String],
+  grep_pattern_type : GrepPatternType,
+  grep_ignore_case : Bool,
+) -> Array[@git.ObjectId] raise Error {
+  if grep_patterns.length() == 0 {
+    return commits
+  }
+  let filtered : Array[@git.ObjectId] = []
+  for commit_id in commits {
+    let obj = db.get(rfs, commit_id)
+    guard obj is Some(o) else {
+      continue
+    }
+    if o.obj_type != @git.ObjectType::Commit {
+      continue
+    }
+    let commit_message = extract_commit_message_from_raw(o.data)
+    if grep_patterns_match_message(
+      commit_message,
+      grep_patterns,
+      grep_pattern_type,
+      grep_ignore_case,
+    ) {
+      filtered.push(commit_id)
+    }
+  }
+  filtered
 }
 
 ///|

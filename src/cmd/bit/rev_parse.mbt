@@ -115,7 +115,9 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
         } else {
           let id = if arg == "FETCH_HEAD" {
             resolve_fetch_head_oid(fs, git_dir)
-          } else if arg.has_prefix(":") && arg.length() > 1 {
+          } else if arg.has_prefix(":") &&
+            arg.length() > 1 &&
+            not(arg.has_prefix(":/")) {
             resolve_index_path_oid(fs, git_dir, arg)
           } else if arg.find("@{") is Some(_) {
             resolve_reflog_selector(fs, git_dir, arg)
