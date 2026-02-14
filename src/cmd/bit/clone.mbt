@@ -1,33 +1,3 @@
-///|
-fn resolve_real_git_for_clone() -> String {
-  match @sys.get_env_var("SHIM_REAL_GIT") {
-    Some(path) if path.length() > 0 => path
-    _ =>
-      match @sys.get_env_var("GIT_SHIM_REAL_GIT") {
-        Some(path) if path.length() > 0 => path
-        _ => "git"
-      }
-  }
-}
-
-///|
-async fn delegate_clone_to_real_git(args : Array[String]) -> Unit raise Error {
-  let real_git = resolve_real_git_for_clone()
-  let delegated_args = ["clone"]
-  delegated_args.append(args)
-  let code = @process.run(
-    real_git,
-    delegated_args,
-    inherit_env=true,
-    cwd=get_work_root(),
-  ) catch {
-    err if @async.is_cancellation_error(err) => raise err
-    _ => 1
-  }
-  @sys.exit(code)
-}
-
-///|
 async fn handle_clone(args : Array[String]) -> Unit raise Error {
   let fallback_root = get_work_root()
   let command_root = match @sys.get_env_var("GIT_SHIM_CWD") {
@@ -37,10 +7,6 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
         Some(dir) => dir
         None => fallback_root
       }
-  }
-  // In git-shim compatibility runs, prefer upstream clone semantics.
-  if is_real_git_delegate_enabled() {
-    delegate_to_real_git("clone", args)
   }
   let positional : Array[String] = []
   let mut url : String? = None
@@ -58,7 +24,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
   let mut reject_shallow = false
   let mut remote_name = "origin"
   let mut ref_spec : String? = None
-  let mut ref_format = "files"
+  let mut ref_format = clone_default_ref_format()
   let mut ssh_ip_option : String? = None
   let mut i = 0
   while i < args.length() {
@@ -170,7 +136,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
       let value = args[i + 1]
       if value != "files" && value != "reftable" {
         @stdio.stderr.write("fatal: unknown ref storage format '\{value}'\n")
-        @sys.exit(1)
+        @sys.exit(128)
       }
       ref_format = value
       i += 2
@@ -180,7 +146,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
       let value = String::unsafe_substring(arg, start=13, end=arg.length())
       if value != "files" && value != "reftable" {
         @stdio.stderr.write("fatal: unknown ref storage format '\{value}'\n")
-        @sys.exit(1)
+        @sys.exit(128)
       }
       ref_format = value
       i += 1
@@ -219,10 +185,6 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
     positional.push(arg)
     i += 1
   }
-  if ref_format == "reftable" {
-    // Reftable clone parity is delegated until ref-storage backend support lands.
-    delegate_clone_to_real_git(args)
-  }
   if positional.length() > 2 {
     raise @git.GitError::InvalidObject("too many arguments")
   }
@@ -248,7 +210,6 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
   }
   ignore(has_filter_flag)
   ignore(mirror)
-  ignore(ref_format)
   if recursive {
     @stdio.stderr.write("fatal: --recursive is not supported yet\n")
     @sys.exit(1)
@@ -423,6 +384,9 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
         if bare {
           promote_transport_clone_to_bare_layout(fs, clone_root)
         }
+        if ref_format == "reftable" {
+          configure_reftable_ref_storage(fs, clone_git_dir)
+        }
         if refs.length() == 0 {
           raise @git.GitError::InvalidObject("Clone failed: no refs found")
         }
@@ -453,6 +417,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
           separate_git_dir~,
           remote_name~,
           reference_alternates=reference_object_dirs,
+          ref_format=ref_format,
         )
         if not(bare) && not(filter.is_partial()) {
           if not(no_checkout) {
@@ -535,6 +500,9 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
       )
       if bare {
         promote_transport_clone_to_bare_layout(fs, clone_root)
+      }
+      if ref_format == "reftable" {
+        configure_reftable_ref_storage(fs, clone_git_dir)
       }
       if clone_filter.is_partial() && not(no_checkout) && not(bare) {
         let checkout_spec = read_head_checkout_spec_for_clone(fs, clone_git_dir)
@@ -660,6 +628,37 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
     _ => []
   }
   emit_clone_bundle_trace_events(fs, bundle_uris)
+}
+
+///|
+fn clone_default_ref_format() -> String {
+  match @sys.get_env_var("GIT_TEST_DEFAULT_REF_FORMAT") {
+    Some(value) => {
+      let normalized = value.to_lower()
+      if normalized == "reftable" { "reftable" } else { "files" }
+    }
+    None => "files"
+  }
+}
+
+///|
+fn configure_reftable_ref_storage(
+  fs : OsFs,
+  git_dir : String,
+) -> Unit raise Error {
+  let reftable_dir = git_dir + "/reftable"
+  fs.mkdir_p(reftable_dir)
+  let tables_list_path = reftable_dir + "/tables.list"
+  if not(fs.is_file(tables_list_path)) {
+    fs.write_string(tables_list_path, "")
+  }
+  set_config(
+    fs,
+    git_dir + "/config",
+    "extensions.refStorage",
+    "reftable",
+    false,
+  )
 }
 
 ///|

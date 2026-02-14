@@ -6,6 +6,8 @@ pub(all) struct InitOptions {
   bare : Bool
   separate_git_dir : String?
   template_dir : String?
+  ref_format : String
+  object_format : String
 }
 
 ///|
@@ -15,6 +17,8 @@ pub fn InitOptions::new() -> InitOptions {
     bare: false,
     separate_git_dir: None,
     template_dir: None,
+    ref_format: "files",
+    object_format: "sha1",
   }
 }
 
@@ -33,6 +37,8 @@ pub fn init_repo(
     bare,
     separate_git_dir: None,
     template_dir: None,
+    ref_format: "files",
+    object_format: "sha1",
   })
 }
 
@@ -70,9 +76,30 @@ pub fn init_repo_with_options(
   fs.write_string(head_path, "ref: refs/heads/" + opts.default_branch + "\n")
   // Create/update config file with appropriate bare setting
   let bare_str = if bare { "true" } else { "false" }
-  let config = "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = " +
+  let mut repository_format_version = "0"
+  if opts.ref_format == "reftable" || opts.object_format != "sha1" {
+    repository_format_version = "1"
+  }
+  let mut config = "[core]\n\trepositoryformatversion = " +
+    repository_format_version +
+    "\n\tfilemode = true\n\tbare = " +
     bare_str +
     "\n"
+  if opts.ref_format == "reftable" {
+    fs.mkdir_p(join_path(git_dir, "reftable"))
+    let tables_list_path = join_path(git_dir, "reftable/tables.list")
+    fs.write_string(tables_list_path, "")
+  }
+  let extension_lines : Array[String] = []
+  if opts.ref_format == "reftable" {
+    extension_lines.push("\trefStorage = reftable")
+  }
+  if opts.object_format != "sha1" {
+    extension_lines.push("\tobjectFormat = " + opts.object_format)
+  }
+  if extension_lines.length() > 0 {
+    config += "[extensions]\n" + extension_lines.join("\n") + "\n"
+  }
   fs.write_string(join_path(git_dir, "config"), config)
   // Create description file
   fs.write_string(

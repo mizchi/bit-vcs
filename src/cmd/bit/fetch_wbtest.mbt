@@ -9,9 +9,11 @@ fn restore_env_var_for_fetch_wbtest(name : String, prev : String?) -> Unit {
 ///|
 test "fetch-delegate: collects global path overrides in deterministic order" {
   let prev_cwd = @sys.get_env_var("GIT_SHIM_CWD")
+  let prev_pwd = @sys.get_env_var("GIT_SHIM_PWD")
   let prev_git_dir = @sys.get_env_var("GIT_DIR")
   let prev_explicit_git_dir = @sys.get_env_var("GIT_SHIM_EXPLICIT_GIT_DIR")
   @sys.set_env_var("GIT_SHIM_CWD", "/tmp/bit-delegate-cwd")
+  @sys.set_env_var("GIT_SHIM_PWD", "/tmp/bit-delegate-pwd")
   @sys.set_env_var("GIT_DIR", "/tmp/bit-delegate-gitdir")
   @sys.set_env_var("GIT_SHIM_EXPLICIT_GIT_DIR", "1")
   let args = collect_global_path_overrides_for_delegate()
@@ -20,6 +22,29 @@ test "fetch-delegate: collects global path overrides in deterministic order" {
   assert_eq(args[1], "/tmp/bit-delegate-cwd")
   assert_eq(args[2], "--git-dir=/tmp/bit-delegate-gitdir")
   restore_env_var_for_fetch_wbtest("GIT_SHIM_CWD", prev_cwd)
+  restore_env_var_for_fetch_wbtest("GIT_SHIM_PWD", prev_pwd)
+  restore_env_var_for_fetch_wbtest("GIT_DIR", prev_git_dir)
+  restore_env_var_for_fetch_wbtest(
+    "GIT_SHIM_EXPLICIT_GIT_DIR", prev_explicit_git_dir,
+  )
+}
+
+///|
+test "fetch-delegate: falls back to GIT_SHIM_PWD when CWD is missing" {
+  let prev_cwd = @sys.get_env_var("GIT_SHIM_CWD")
+  let prev_pwd = @sys.get_env_var("GIT_SHIM_PWD")
+  let prev_git_dir = @sys.get_env_var("GIT_DIR")
+  let prev_explicit_git_dir = @sys.get_env_var("GIT_SHIM_EXPLICIT_GIT_DIR")
+  @sys.unset_env_var("GIT_SHIM_CWD")
+  @sys.set_env_var("GIT_SHIM_PWD", "/tmp/bit-delegate-pwd")
+  @sys.unset_env_var("GIT_DIR")
+  @sys.unset_env_var("GIT_SHIM_EXPLICIT_GIT_DIR")
+  let args = collect_global_path_overrides_for_delegate()
+  assert_eq(args.length(), 2)
+  assert_eq(args[0], "-C")
+  assert_eq(args[1], "/tmp/bit-delegate-pwd")
+  restore_env_var_for_fetch_wbtest("GIT_SHIM_CWD", prev_cwd)
+  restore_env_var_for_fetch_wbtest("GIT_SHIM_PWD", prev_pwd)
   restore_env_var_for_fetch_wbtest("GIT_DIR", prev_git_dir)
   restore_env_var_for_fetch_wbtest(
     "GIT_SHIM_EXPLICIT_GIT_DIR", prev_explicit_git_dir,
@@ -29,14 +54,17 @@ test "fetch-delegate: collects global path overrides in deterministic order" {
 ///|
 test "fetch-delegate: skips unset global path overrides" {
   let prev_cwd = @sys.get_env_var("GIT_SHIM_CWD")
+  let prev_pwd = @sys.get_env_var("GIT_SHIM_PWD")
   let prev_git_dir = @sys.get_env_var("GIT_DIR")
   let prev_explicit_git_dir = @sys.get_env_var("GIT_SHIM_EXPLICIT_GIT_DIR")
   @sys.unset_env_var("GIT_SHIM_CWD")
+  @sys.unset_env_var("GIT_SHIM_PWD")
   @sys.unset_env_var("GIT_DIR")
   @sys.unset_env_var("GIT_SHIM_EXPLICIT_GIT_DIR")
   let args = collect_global_path_overrides_for_delegate()
   assert_eq(args.length(), 0)
   restore_env_var_for_fetch_wbtest("GIT_SHIM_CWD", prev_cwd)
+  restore_env_var_for_fetch_wbtest("GIT_SHIM_PWD", prev_pwd)
   restore_env_var_for_fetch_wbtest("GIT_DIR", prev_git_dir)
   restore_env_var_for_fetch_wbtest(
     "GIT_SHIM_EXPLICIT_GIT_DIR", prev_explicit_git_dir,
@@ -46,9 +74,11 @@ test "fetch-delegate: skips unset global path overrides" {
 ///|
 test "fetch-delegate: does not append --git-dir without explicit marker" {
   let prev_cwd = @sys.get_env_var("GIT_SHIM_CWD")
+  let prev_pwd = @sys.get_env_var("GIT_SHIM_PWD")
   let prev_git_dir = @sys.get_env_var("GIT_DIR")
   let prev_explicit_git_dir = @sys.get_env_var("GIT_SHIM_EXPLICIT_GIT_DIR")
   @sys.set_env_var("GIT_SHIM_CWD", "/tmp/bit-delegate-cwd")
+  @sys.unset_env_var("GIT_SHIM_PWD")
   @sys.set_env_var("GIT_DIR", "/tmp/bit-delegate-gitdir")
   @sys.unset_env_var("GIT_SHIM_EXPLICIT_GIT_DIR")
   let args = collect_global_path_overrides_for_delegate()
@@ -56,6 +86,7 @@ test "fetch-delegate: does not append --git-dir without explicit marker" {
   assert_eq(args[0], "-C")
   assert_eq(args[1], "/tmp/bit-delegate-cwd")
   restore_env_var_for_fetch_wbtest("GIT_SHIM_CWD", prev_cwd)
+  restore_env_var_for_fetch_wbtest("GIT_SHIM_PWD", prev_pwd)
   restore_env_var_for_fetch_wbtest("GIT_DIR", prev_git_dir)
   restore_env_var_for_fetch_wbtest(
     "GIT_SHIM_EXPLICIT_GIT_DIR", prev_explicit_git_dir,

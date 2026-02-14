@@ -1,26 +1,5 @@
-///| Branch handlers: branch, checkout, switch, reset, rebase, stash, cherry-pick
-
 ///|
-fn is_reftable_repo_for_branch(
-  fs : &@git.RepoFileSystem,
-  git_dir : String,
-) -> Bool {
-  if fs.is_dir(git_dir + "/reftable") {
-    return true
-  }
-  match
-    @gitlib.read_config_value(
-      fs,
-      git_dir + "/config",
-      "extensions",
-      "refstorage",
-    ) {
-    Some(value) => value.to_lower() == "reftable"
-    None => false
-  }
-}
-
-///|
+/// Branch handlers: branch, checkout, switch, reset, rebase, stash, cherry-pick
 async fn handle_branch(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
@@ -46,7 +25,7 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
   let mut track_upstream = false
   let mut start_point : String? = None
   let mut i = 0
-  if is_real_git_delegate_enabled() || is_reftable_repo_for_branch(fs, git_dir) {
+  if is_real_git_delegate_enabled() {
     delegate_to_real_git("branch", args)
   }
   while i < args.length() {

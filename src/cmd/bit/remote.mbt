@@ -1843,21 +1843,54 @@ fn clone_local_repo(
   separate_git_dir? : String? = None,
   remote_name? : String = "origin",
   reference_alternates? : Array[String] = [],
+  ref_format? : String = "files",
 ) -> Unit raise Error {
   guard @gitlib.detect_git_dir(fs, src_path) is Some((src_git_dir, _)) else {
     raise @git.GitError::InvalidObject("Not a git repository: \{src_path}")
   }
+  let source_object_format = match
+    @gitlib.read_config_value(
+      fs,
+      src_git_dir + "/config",
+      "extensions",
+      "objectformat",
+    ) {
+    Some(value) => if value.to_lower() == "sha256" { "sha256" } else { "sha1" }
+    None => "sha1"
+  }
   let (head_ref, branches) = @gitlib.list_branches(fs, src_git_dir)
-  let (default_branch, head_id, detached_head) = match head_ref {
+  let mut default_branch = "main"
+  let mut head_id : @git.ObjectId? = None
+  let mut detached_head = false
+  match head_ref {
     @gitlib.HeadRef::Branch(name) => {
+      default_branch = name
       let refname = "refs/heads/" + name
-      let id = @gitlib.resolve_ref(fs, src_git_dir, refname)
-      (name, id, false)
+      head_id = @gitlib.resolve_ref(fs, src_git_dir, refname)
     }
-    @gitlib.HeadRef::Detached(id) => ("main", Some(id), true)
+    @gitlib.HeadRef::Detached(id) => {
+      head_id = Some(id)
+      detached_head = true
+    }
+  }
+  if head_id is None {
+    match read_clone_source_head_fallback(fs, src_git_dir) {
+      Some(id) => {
+        head_id = Some(id)
+        detached_head = true
+      }
+      None => ()
+    }
   }
   let dest_git_dir = if bare {
-    @gitrepo.init_repo(fs, dest_path, default_branch~, bare~)
+    @gitlib.init_repo_with_options(fs, dest_path, {
+      default_branch,
+      bare: true,
+      separate_git_dir: None,
+      template_dir: None,
+      ref_format,
+      object_format: source_object_format,
+    })
     dest_path
   } else {
     match separate_git_dir {
@@ -1868,11 +1901,20 @@ fn clone_local_repo(
           bare: false,
           separate_git_dir: Some(path),
           template_dir: None,
+          ref_format,
+          object_format: source_object_format,
         })
         path
       }
       None => {
-        @gitrepo.init_repo(fs, dest_path, default_branch~, bare~)
+        @gitlib.init_repo_with_options(fs, dest_path, {
+          default_branch,
+          bare: false,
+          separate_git_dir: None,
+          template_dir: None,
+          ref_format,
+          object_format: source_object_format,
+        })
         dest_path + "/.git"
       }
     }
@@ -2009,6 +2051,55 @@ fn clone_local_repo(
       None => ()
     }
   }
+}
+
+///|
+fn read_clone_source_head_fallback(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> @git.ObjectId? {
+  let head_path = git_dir + "/HEAD"
+  if fs.is_file(head_path) {
+    let head_content = decode_bytes(fs.read_file(head_path) catch { _ => str_to_bytes("") })
+    let head_line = trim_string(head_content)
+    if head_line.length() > 0 && not(head_line.has_prefix("ref: ")) {
+      let head_id : @git.ObjectId? = Some(@git.ObjectId::from_hex(head_line)) catch {
+        _ => None
+      }
+      if head_id is Some(id) {
+        return Some(id)
+      }
+    }
+  }
+  let reflog_path = git_dir + "/logs/HEAD"
+  guard fs.is_file(reflog_path) else { return None }
+  let reflog_content = decode_bytes(fs.read_file(reflog_path) catch { _ => str_to_bytes("") })
+  let mut latest_id : @git.ObjectId? = None
+  for line_view in reflog_content.split("\n") {
+    let line = trim_string(line_view.to_string())
+    if line.length() == 0 {
+      continue
+    }
+    match line.find(" ") {
+      Some(first_sep) => {
+        let rest = String::unsafe_substring(line, start=first_sep + 1, end=line.length())
+        match rest.find(" ") {
+          Some(second_sep) => {
+            let new_id_hex = String::unsafe_substring(rest, start=0, end=second_sep)
+            let parsed : @git.ObjectId? = Some(@git.ObjectId::from_hex(new_id_hex)) catch {
+              _ => None
+            }
+            if parsed is Some(id) {
+              latest_id = Some(id)
+            }
+          }
+          None => ()
+        }
+      }
+      None => ()
+    }
+  }
+  latest_id
 }
 
 ///|

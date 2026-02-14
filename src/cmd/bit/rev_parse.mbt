@@ -1,8 +1,5 @@
 ///|
 async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
-  if is_real_git_delegate_enabled() {
-    delegate_to_real_git("rev-parse", args)
-  }
   let mut sq_quote_mode = false
   let sq_quote_values : Array[String] = []
   for arg in args {
@@ -40,12 +37,15 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
   let mut verify = false
   let mut quiet = false
   let mut show_ref_format = false
+  let mut show_object_format = false
   for arg in args {
     match arg {
       "--revs-only" => revs_only = true
       "--verify" => verify = true
       "--quiet" => quiet = true
       "--show-ref-format" => show_ref_format = true
+      "--show-object-format" => show_object_format = true
+      _ if arg.has_prefix("--show-object-format=") => show_object_format = true
       _ => ()
     }
   }
@@ -63,7 +63,18 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
         }
         print_line(abs)
       }
-      "--show-ref-format" => print_line("files")
+      "--show-ref-format" =>
+        print_line(if is_reftable_repo(fs, git_dir) { "reftable" } else { "files" })
+      "--show-object-format" => print_line(repo_object_format(fs, git_dir))
+      _ if arg.has_prefix("--show-object-format=") => {
+        let mode = String::unsafe_substring(arg, start=21, end=arg.length())
+        if mode == "storage" || mode == "input" || mode == "output" {
+          print_line(repo_object_format(fs, git_dir))
+        } else {
+          eprint_line("fatal: unknown mode for --show-object-format: \{mode}")
+          @sys.exit(128)
+        }
+      }
       "--revs-only" => ()
       "--verify" => ()
       "--quiet" => ()
@@ -85,6 +96,7 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
     }
   }
   ignore(show_ref_format)
+  ignore(show_object_format)
 }
 
 ///|

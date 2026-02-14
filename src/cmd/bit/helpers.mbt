@@ -582,6 +582,36 @@ fn resolve_git_dir(fs : &@git.RepoFileSystem, root : String) -> String {
 }
 
 ///|
+fn is_reftable_repo(fs : &@git.RepoFileSystem, git_dir : String) -> Bool {
+  if fs.is_dir(git_dir + "/reftable") {
+    return true
+  }
+  match
+    @gitlib.read_config_value(
+      fs,
+      git_dir + "/config",
+      "extensions",
+      "refstorage",
+    ) {
+    Some(value) => value.to_lower() == "reftable"
+    None => false
+  }
+}
+
+///|
+fn repo_object_format(fs : &@git.RepoFileSystem, git_dir : String) -> String {
+  match
+    @gitlib.read_config_value(
+      fs,
+      git_dir + "/config",
+      "extensions",
+      "objectformat",
+    ) {
+    Some(value) => if value.to_lower() == "sha256" { "sha256" } else { "sha1" }
+    None => "sha1"
+  }
+}
+
 fn get_author_string() -> String {
   match @sys.get_env_var("GIT_AUTHOR_NAME") {
     Some(name) => {

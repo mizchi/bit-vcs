@@ -239,3 +239,66 @@ async test "main: show_command_help supports rebase-ai command" {
 test "main: normalize_dispatch_command maps ws to workspace" {
   assert_eq(normalize_dispatch_command("ws"), "workspace")
 }
+
+///|
+test "helpers: is_reftable_repo detects reftable directory" {
+  let fs = OsFs::new()
+  let root = "/tmp/bit-test-is-reftable-dir-" +
+    get_current_timestamp().to_string()
+  fs.mkdir_p(root + "/reftable")
+  fs.write_string(root + "/reftable/tables.list", "")
+  assert_true(is_reftable_repo(fs, root))
+  fs.remove_file(root + "/reftable/tables.list") catch {
+    _ => ()
+  }
+  fs.remove_dir(root + "/reftable") catch {
+    _ => ()
+  }
+  fs.remove_dir(root) catch {
+    _ => ()
+  }
+}
+
+///|
+test "helpers: is_reftable_repo detects extensions.refStorage=config" {
+  let fs = OsFs::new()
+  let root = "/tmp/bit-test-is-reftable-config-" +
+    get_current_timestamp().to_string()
+  fs.mkdir_p(root)
+  fs.write_string(root + "/config", "[extensions]\n\trefStorage = reftable\n")
+  assert_true(is_reftable_repo(fs, root))
+  fs.remove_file(root + "/config") catch {
+    _ => ()
+  }
+  fs.remove_dir(root) catch {
+    _ => ()
+  }
+}
+
+///|
+test "helpers: repo_object_format defaults to sha1" {
+  let fs = OsFs::new()
+  let root = "/tmp/bit-test-object-format-default-" +
+    get_current_timestamp().to_string()
+  fs.mkdir_p(root)
+  assert_eq(repo_object_format(fs, root), "sha1")
+  fs.remove_dir(root) catch {
+    _ => ()
+  }
+}
+
+///|
+test "helpers: repo_object_format reads extensions.objectFormat" {
+  let fs = OsFs::new()
+  let root = "/tmp/bit-test-object-format-config-" +
+    get_current_timestamp().to_string()
+  fs.mkdir_p(root)
+  fs.write_string(root + "/config", "[extensions]\n\tobjectFormat = sha256\n")
+  assert_eq(repo_object_format(fs, root), "sha256")
+  fs.remove_file(root + "/config") catch {
+    _ => ()
+  }
+  fs.remove_dir(root) catch {
+    _ => ()
+  }
+}

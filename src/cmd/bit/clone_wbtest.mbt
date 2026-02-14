@@ -27,3 +27,44 @@ test "clone caps contain token: missing token" {
   let caps = ["multi_ack thin-pack", "fetch=shallow deepen-since"]
   assert_false(clone_caps_contain_token(caps, "filter"))
 }
+
+///|
+fn cleanup_clone_wbtest_tree(fs : OsFs, path : String) -> Unit {
+  if fs.is_file(path) {
+    fs.remove_file(path) catch {
+      _ => ()
+    }
+    return
+  }
+  if not(fs.is_dir(path)) {
+    return
+  }
+  let entries = fs.readdir(path) catch { _ => [] }
+  for entry in entries {
+    if entry == "." || entry == ".." {
+      continue
+    }
+    cleanup_clone_wbtest_tree(fs, path + "/" + entry)
+  }
+  fs.remove_dir(path) catch {
+    _ => ()
+  }
+}
+
+///|
+test "clone: configure_reftable_ref_storage writes reftable metadata" {
+  let fs = OsFs::new()
+  let root = "/tmp/bit-clone-reftable-" + get_current_timestamp().to_string()
+  cleanup_clone_wbtest_tree(fs, root)
+  fs.mkdir_p(root)
+  fs.write_string(root + "/config", "[core]\n\trepositoryformatversion = 0\n")
+  configure_reftable_ref_storage(fs, root) catch {
+    err => fail("unexpected error: \{err}")
+  }
+  assert_true(fs.is_dir(root + "/reftable"))
+  assert_true(fs.is_file(root + "/reftable/tables.list"))
+  let config = decode_bytes(fs.read_file(root + "/config"))
+  assert_true(config.contains("[extensions]"))
+  assert_true(config.contains("refStorage = reftable"))
+  cleanup_clone_wbtest_tree(fs, root)
+}

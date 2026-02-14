@@ -43,12 +43,20 @@ fn collect_global_config_overrides_for_delegate() -> Array[String] {
 ///|
 fn collect_global_path_overrides_for_delegate() -> Array[String] {
   let overrides : Array[String] = []
-  match @sys.get_env_var("GIT_SHIM_CWD") {
-    Some(dir) if dir.length() > 0 => {
+  let delegate_cwd = match @sys.get_env_var("GIT_SHIM_CWD") {
+    Some(dir) if dir.length() > 0 => Some(dir)
+    _ =>
+      match @sys.get_env_var("GIT_SHIM_PWD") {
+        Some(dir) if dir.length() > 0 => Some(dir)
+        _ => None
+      }
+  }
+  match delegate_cwd {
+    Some(dir) => {
       overrides.push("-C")
       overrides.push(dir)
     }
-    _ => ()
+    None => ()
   }
   let explicit_git_dir = match @sys.get_env_var("GIT_SHIM_EXPLICIT_GIT_DIR") {
     Some(value) => value == "1"

@@ -10,9 +10,6 @@ async fn show_init_command_help() -> Unit {
 
 ///|
 async fn handle_init(args : Array[String]) -> Unit raise Error {
-  if is_real_git_delegate_enabled() {
-    delegate_to_real_git("init", args)
-  }
   let root = match @sys.get_env_var("GIT_SHIM_CWD") {
     Some(dir) => dir
     None =>
@@ -29,6 +26,17 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
   let mut target_dir : String? = None
   let mut separate_git_dir : String? = None
   let mut template_dir : String? = None
+  let default_ref_format = match @sys.get_env_var("GIT_TEST_DEFAULT_REF_FORMAT") {
+    Some(value) => {
+      let normalized = value.to_lower()
+      if normalized == "reftable" { "reftable" } else { "files" }
+    }
+    None => "files"
+  }
+  let mut ref_format = default_ref_format
+  let mut ref_format_explicit = false
+  let mut object_format : String? = None
+  let mut object_format_explicit = false
   let mut use_bit = false
   let mut i = 0
   while i < args.length() {
@@ -49,12 +57,50 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
         template_dir = Some(args[i + 1])
         i += 1
       }
+      "--ref-format" if i + 1 < args.length() => {
+        let value = args[i + 1].to_lower()
+        if value != "files" && value != "reftable" {
+          eprint_line("fatal: unknown ref storage format '\{value}'")
+          @sys.exit(128)
+        }
+        ref_format = value
+        ref_format_explicit = true
+        i += 1
+      }
+      "--object-format" if i + 1 < args.length() => {
+        let value = args[i + 1].to_lower()
+        if value != "sha1" && value != "sha256" {
+          eprint_line("fatal: unknown hash algorithm '\{value}'")
+          @sys.exit(128)
+        }
+        object_format = Some(value)
+        object_format_explicit = true
+        i += 1
+      }
       _ if arg.has_prefix("--initial-branch=") =>
         initial_branch = Some((try! arg[17:]).to_string())
       _ if arg.has_prefix("--separate-git-dir=") =>
         separate_git_dir = Some((try! arg[19:]).to_string())
       _ if arg.has_prefix("--template=") =>
         template_dir = Some((try! arg[11:]).to_string())
+      _ if arg.has_prefix("--ref-format=") => {
+        let value = (try! arg[13:]).to_string().to_lower()
+        if value != "files" && value != "reftable" {
+          eprint_line("fatal: unknown ref storage format '\{value}'")
+          @sys.exit(128)
+        }
+        ref_format = value
+        ref_format_explicit = true
+      }
+      _ if arg.has_prefix("--object-format=") => {
+        let value = (try! arg[16:]).to_string().to_lower()
+        if value != "sha1" && value != "sha256" {
+          eprint_line("fatal: unknown hash algorithm '\{value}'")
+          @sys.exit(128)
+        }
+        object_format = Some(value)
+        object_format_explicit = true
+      }
       _ if not(arg.has_prefix("-")) => target_dir = Some(arg)
       _ if arg.has_prefix("-") => warn_unimplemented_arg("init", arg)
       _ => ()
@@ -120,15 +166,59 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
   // Check if this is a reinit (repository already exists)
   let is_reinit = fs.is_dir(actual_git_dir) &&
     fs.is_file(actual_git_dir + "/HEAD")
+  let mut reinit_tables_list_content : String? = None
+  if object_format is None {
+    let env_default = @sys.get_env_var("GIT_DEFAULT_HASH").unwrap_or("sha1")
+    let normalized = env_default.to_lower()
+    if normalized != "sha1" && normalized != "sha256" {
+      eprint_line("fatal: unknown hash algorithm '\{normalized}'")
+      @sys.exit(128)
+    }
+    object_format = Some(normalized)
+  }
+  if is_reinit {
+    let existing_ref_format = if is_reftable_repo(fs, actual_git_dir) {
+      "reftable"
+    } else {
+      "files"
+    }
+    if existing_ref_format == "reftable" {
+      let tables_list_path = actual_git_dir + "/reftable/tables.list"
+      if fs.is_file(tables_list_path) {
+        reinit_tables_list_content = Some(decode_bytes(fs.read_file(tables_list_path)))
+      }
+    }
+    if ref_format_explicit && ref_format != existing_ref_format {
+      eprint_line(
+        "fatal: attempt to reinitialize repository with different reference storage format",
+      )
+      @sys.exit(128)
+    }
+    ref_format = existing_ref_format
+    let existing_object_format = repo_object_format(fs, actual_git_dir)
+    if object_format_explicit &&
+      object_format.unwrap_or("sha1") != existing_object_format {
+      eprint_line("fatal: attempt to reinitialize repository with different hash")
+      @sys.exit(128)
+    }
+    object_format = Some(existing_object_format)
+  }
   // Build init options
   let opts : @gitlib.InitOptions = {
     default_branch: branch,
     bare,
     separate_git_dir: resolved_sep_git_dir,
     template_dir,
+    ref_format,
+    object_format: object_format.unwrap_or("sha1"),
   }
   // Initialize repository
   @gitrepo.init_repo_with_options(fs, path, opts)
+  match reinit_tables_list_content {
+    Some(content) =>
+      fs.write_string(actual_git_dir + "/reftable/tables.list", content)
+    None => ()
+  }
   // Apply template if specified
   match template_dir {
     Some(tpl) =>

@@ -941,7 +941,6 @@ fn command_handles_builtin_help(cmd : String) -> Bool {
   false
 }
 
-///|
 fn command_error_name(cmd : String) -> String {
   if cmd == "subdir-clone" {
     "subdir"
