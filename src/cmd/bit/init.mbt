@@ -26,10 +26,15 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
   let mut target_dir : String? = None
   let mut separate_git_dir : String? = None
   let mut template_dir : String? = None
-  let default_ref_format = match @sys.get_env_var("GIT_TEST_DEFAULT_REF_FORMAT") {
+  let default_ref_format = match
+    @sys.get_env_var("GIT_TEST_DEFAULT_REF_FORMAT") {
     Some(value) => {
       let normalized = value.to_lower()
-      if normalized == "reftable" { "reftable" } else { "files" }
+      if normalized == "reftable" {
+        "reftable"
+      } else {
+        "files"
+      }
     }
     None => "files"
   }
@@ -37,6 +42,7 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
   let mut ref_format_explicit = false
   let mut object_format : String? = None
   let mut object_format_explicit = false
+  let mut shared_mode : String? = None
   let mut use_bit = false
   let mut i = 0
   while i < args.length() {
@@ -57,6 +63,13 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
         template_dir = Some(args[i + 1])
         i += 1
       }
+      "--shared" =>
+        if i + 1 < args.length() && not(args[i + 1].has_prefix("-")) {
+          shared_mode = Some(args[i + 1])
+          i += 1
+        } else {
+          shared_mode = Some("group")
+        }
       "--ref-format" if i + 1 < args.length() => {
         let value = args[i + 1].to_lower()
         if value != "files" && value != "reftable" {
@@ -83,6 +96,8 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
         separate_git_dir = Some((try! arg[19:]).to_string())
       _ if arg.has_prefix("--template=") =>
         template_dir = Some((try! arg[11:]).to_string())
+      _ if arg.has_prefix("--shared=") =>
+        shared_mode = Some((try! arg[9:]).to_string())
       _ if arg.has_prefix("--ref-format=") => {
         let value = (try! arg[13:]).to_string().to_lower()
         if value != "files" && value != "reftable" {
@@ -185,7 +200,9 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
     if existing_ref_format == "reftable" {
       let tables_list_path = actual_git_dir + "/reftable/tables.list"
       if fs.is_file(tables_list_path) {
-        reinit_tables_list_content = Some(decode_bytes(fs.read_file(tables_list_path)))
+        reinit_tables_list_content = Some(
+          decode_bytes(fs.read_file(tables_list_path)),
+        )
       }
     }
     if ref_format_explicit && ref_format != existing_ref_format {
@@ -198,7 +215,9 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
     let existing_object_format = repo_object_format(fs, actual_git_dir)
     if object_format_explicit &&
       object_format.unwrap_or("sha1") != existing_object_format {
-      eprint_line("fatal: attempt to reinitialize repository with different hash")
+      eprint_line(
+        "fatal: attempt to reinitialize repository with different hash",
+      )
       @sys.exit(128)
     }
     object_format = Some(existing_object_format)
@@ -227,6 +246,12 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
       }
     None => ()
   }
+  if ref_format == "reftable" && not(is_reinit) {
+    bootstrap_reftable_head_table(actual_git_dir, branch)
+  }
+  if ref_format == "reftable" {
+    apply_reftable_shared_permissions(fs, actual_git_dir, shared_mode)
+  }
   // Print appropriate message (unless quiet)
   if not(quiet) {
     let verb = if is_reinit {
@@ -236,4 +261,66 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
     }
     print_line(verb + " Git repository in " + actual_git_dir + "/")
   }
+}
+
+///|
+async fn apply_reftable_shared_permissions(
+  fs : OsFs,
+  git_dir : String,
+  shared_mode : String?,
+) -> Unit {
+  let chmod_mode = match shared_mode {
+    Some(value) => {
+      let normalized = value.to_lower()
+      if normalized == "world" ||
+        normalized == "all" ||
+        normalized == "everybody" ||
+        normalized == "2" {
+        Some(0o664)
+      } else {
+        None
+      }
+    }
+    None => None
+  }
+  match chmod_mode {
+    Some(mode) => {
+      let reftable_dir = git_dir + "/reftable"
+      let tables_list_path = reftable_dir + "/tables.list"
+      if fs.is_file(tables_list_path) {
+        @asyncfs.chmod(tables_list_path[:], mode) catch {
+          _ => ()
+        }
+      }
+      if fs.is_dir(reftable_dir) {
+        for entry in fs.readdir(reftable_dir) {
+          if entry.has_suffix(".ref") {
+            let table_path = reftable_dir + "/" + entry
+            @asyncfs.chmod(table_path[:], mode) catch {
+              _ => ()
+            }
+          }
+        }
+      }
+    }
+    None => ()
+  }
+}
+
+///|
+async fn bootstrap_reftable_head_table(
+  git_dir : String,
+  branch : String,
+) -> Unit {
+  let real_git = resolve_real_git_for_fetch()
+  let head_ref = "refs/heads/" + branch
+  ignore(
+    @process.run(
+      real_git,
+      ["--git-dir=" + git_dir, "symbolic-ref", "HEAD", head_ref],
+      inherit_env=true,
+    ) catch {
+      _ => 1
+    },
+  )
 }
