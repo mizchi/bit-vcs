@@ -796,11 +796,46 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
     @sys.exit(1)
   }
   guard resolved_obj_id is Some(oid) else {
-    raise @git.GitError::InvalidObject("Not a valid object name: \{spec}")
+    eprint_line("fatal: Not a valid object name \{spec}")
+    @sys.exit(128)
   }
-  let obj = cat_file_find_object_in_dbs(dbs, fs, oid)
+  let obj = cat_file_find_object_in_dbs(dbs, fs, oid) catch {
+    err =>
+      match err {
+        @git.GitError::InvalidObject(msg) => {
+          let prefix = "Unknown object type: "
+          if msg.has_prefix(prefix) {
+            let obj_type = String::unsafe_substring(
+              msg,
+              start=prefix.length(),
+              end=msg.length(),
+            )
+            if obj_type.length() > 32 {
+              eprint_line(
+                "error: header for \{oid.to_hex()} too long, exceeds 32 bytes",
+              )
+              if pretty_print {
+                eprint_line("fatal: Not a valid object name \{oid.to_hex()}")
+              } else {
+                eprint_line("fatal: git cat-file: could not get object info")
+              }
+            } else {
+              eprint_line("fatal: invalid object type")
+            }
+            @sys.exit(128)
+          }
+          raise err
+        }
+        _ => raise err
+      }
+  }
   guard obj is Some(o) else {
-    raise @git.GitError::InvalidObject("Object not found: \{spec}")
+    if pretty_print {
+      eprint_line("fatal: Not a valid object name \{spec}")
+    } else {
+      eprint_line("fatal: git cat-file: could not get object info")
+    }
+    @sys.exit(128)
   }
   let display_object_name = cat_file_batch_display_object_name(
     fs,
