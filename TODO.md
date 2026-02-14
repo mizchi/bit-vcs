@@ -40,7 +40,9 @@
   - [x] cat-file 系: `t1006`, `t8007`, `t8010`
   - [x] multi-pack-index 系: `t5319`, `t5326`, `t5327`, `t5334`
   - [x] fetch/push 回帰監視: `t5510`, `t5516`, `t5601`
-  - [ ] 代表 allowlist スモーク（t5/t8 中心）を shard 実行
+  - [x] 代表 allowlist スモーク（t5/t8 中心）を shard 実行
+    - shard1 代表8本（`t5001,t5200,t5300,t5306,t5312,t5321,t5330,t5333`）: success 149 / failed 0 / broken 0
+    - shard2 代表8本（`t5002,t5301,t5307,t5313,t5318,t5322,t5327,t5331`）: success 488 / failed 0 / broken 0
 
 ## 直近更新（2026-02-14）
 
@@ -206,7 +208,7 @@ P0 から順に「先頭の `if is_real_git_delegate_enabled() { delegate_to_rea
 
 - cat-file（`SHIM_CMDS="cat-file" SHIM_STRICT=1`）
   - [x] `t8010-cat-file-filters.sh`: `success 9 / failed 0`
-  - [ ] `t8007-cat-file-textconv.sh`: `success 3 / failed 12`
+  - [x] `t8007-cat-file-textconv.sh`: `success 15 / failed 0`（2026-02-15）
   - [x] `t1006-cat-file.sh`（`GIT_TEST_OPTS='--run=54-233'`, `just git-t-full`）: `success 178 / failed 0 / broken 2`
     - `broken 2` は既知 breakage（test 147 / 158 の `%(rest)`）のみ
   - [x] `t1006` 修正反映:
