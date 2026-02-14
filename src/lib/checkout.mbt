@@ -14,12 +14,13 @@ pub fn restore_paths(
   } else {
     git_dir
   }
+  let object_git_dir = resolve_checkout_common_git_dir(rfs, actual_git_dir)
   let index_entries = read_index_entries(rfs, actual_git_dir)
   let index_map : Map[String, IndexEntry] = {}
   for e in index_entries {
     index_map[e.path] = e
   }
-  let db = ObjectDb::load(rfs, actual_git_dir)
+  let db = ObjectDb::load(rfs, object_git_dir)
   for path in paths {
     match index_map.get(path) {
       None =>
@@ -63,6 +64,7 @@ pub fn checkout(
   } else {
     git_dir
   }
+  let object_git_dir = resolve_checkout_common_git_dir(rfs, actual_git_dir)
   let head_path = join_path(actual_git_dir, "HEAD")
   let mut target : @git.ObjectId? = None
   let mut refname : String? = None
@@ -129,7 +131,7 @@ pub fn checkout(
     fs.write_string(head_path, commit_id.to_hex() + "\n")
   }
   if update_worktree || update_index {
-    let db = ObjectDb::load_lazy(rfs, actual_git_dir)
+    let db = ObjectDb::load_lazy(rfs, object_git_dir)
     db.set_skip_verify(true)
     let files = collect_tree_files_from_commit(db, rfs, commit_id)
     if update_worktree && update_index {
@@ -160,4 +162,27 @@ pub fn checkout(
     }
   }
   commit_id
+}
+
+///|
+fn resolve_checkout_common_git_dir(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> String {
+  let commondir_path = join_path(git_dir, "commondir")
+  if not(fs.is_file(commondir_path)) {
+    return git_dir
+  }
+  let raw = @utf8.decode_lossy(
+    (fs.read_file(commondir_path) catch { _ => Bytes::default() })[:],
+  )
+  let rel = trim_string(raw)
+  if rel.length() == 0 {
+    return git_dir
+  }
+  if rel.has_prefix("/") {
+    normalize_path(rel)
+  } else {
+    normalize_path(join_path(git_dir, rel))
+  }
 }

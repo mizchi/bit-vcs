@@ -76,7 +76,7 @@ pub fn create_lightweight_tag(&@types.FileSystem, String, String, @object.Object
 
 pub fn create_reflog(&@types.FileSystem, &@types.RepoFileSystem, String, String) -> Unit raise @object.GitError
 
-pub fn create_worktree(&@types.FileSystem, &@types.RepoFileSystem, String, String, String?, detach? : Bool, new_branch~ : String?) -> Unit raise @object.GitError
+pub fn create_worktree(&@types.FileSystem, &@types.RepoFileSystem, String, String, String?, detach? : Bool, force? : Bool, new_branch~ : String?) -> Unit raise @object.GitError
 
 pub fn delete_branch(&@types.FileSystem, &@types.RepoFileSystem, String, String, force? : Bool) -> Unit raise @object.GitError
 
@@ -521,6 +521,8 @@ pub(all) struct InitOptions {
   bare : Bool
   separate_git_dir : String?
   template_dir : String?
+  ref_format : String
+  object_format : String
 }
 pub fn InitOptions::new() -> Self
 
@@ -574,6 +576,8 @@ pub struct ObjectDb {
   mut saw_corrupt_pack : Bool
   mut skip_verify : Bool
 }
+pub fn ObjectDb::find_delta_base(Self, &@types.RepoFileSystem, @object.ObjectId) -> @object.ObjectId? raise @object.GitError
+pub fn ObjectDb::find_object_disk_size(Self, &@types.RepoFileSystem, @object.ObjectId) -> Int? raise @object.GitError
 pub fn ObjectDb::get(Self, &@types.RepoFileSystem, @object.ObjectId) -> @object.PackObject? raise @object.GitError
 pub fn ObjectDb::load(&@types.RepoFileSystem, String) -> Self raise @object.GitError
 pub fn ObjectDb::load_from_objects_dir(&@types.RepoFileSystem, String) -> Self raise @object.GitError

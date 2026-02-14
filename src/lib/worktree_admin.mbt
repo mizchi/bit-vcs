@@ -24,12 +24,13 @@ pub fn list_worktrees(
 ) -> Array[WorktreeInfo] raise @git.GitError {
   let result : Array[WorktreeInfo] = []
   let git_dir = resolve_git_dir(fs, root)
+  let main_root = resolve_main_worktree_root(root, git_dir)
   let root_is_bare = normalize_path(git_dir) == normalize_path(root) &&
     fs.is_file(join_path(root, "HEAD")) &&
     fs.is_dir(join_path(root, "objects"))
   // Add main worktree for non-bare repositories.
   if not(root_is_bare) {
-    let main_info = get_main_worktree_info(fs, root, git_dir)
+    let main_info = get_main_worktree_info(fs, main_root, git_dir)
     result.push(main_info)
   }
   // Scan .git/worktrees/ for linked worktrees
@@ -52,6 +53,15 @@ pub fn list_worktrees(
     }
   }
   result
+}
+
+///|
+fn resolve_main_worktree_root(root : String, git_dir : String) -> String {
+  if basename(git_dir) == ".git" {
+    normalize_path(parent_dir(git_dir))
+  } else {
+    normalize_path(root)
+  }
 }
 
 ///|
@@ -81,6 +91,7 @@ pub fn create_worktree(
   worktree_path : String,
   commit_ish : String?,
   detach? : Bool = false,
+  force? : Bool = false,
   new_branch~ : String?,
 ) -> Unit raise @git.GitError {
   let git_dir = resolve_git_dir(rfs, root)
@@ -113,12 +124,14 @@ pub fn create_worktree(
   // Check branch is not already checked out
   match branch {
     Some(b) =>
-      match is_branch_checked_out(rfs, root, b) {
-        Some(path) =>
-          raise @git.GitError::InvalidObject(
-            "'\{b}' is already checked out at '\{path}'",
-          )
-        None => ()
+      if not(force) {
+        match is_branch_checked_out(rfs, root, b) {
+          Some(path) =>
+            raise @git.GitError::InvalidObject(
+              "'\{b}' is already checked out at '\{path}'",
+            )
+          None => ()
+        }
       }
     None => ()
   }

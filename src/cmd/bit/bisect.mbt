@@ -1,10 +1,10 @@
 ///|
 async fn handle_bisect(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
-  let git_dir = root + "/.git"
   let fs = OsFs::new()
   let wfs : &@git.FileSystem = fs
   let rfs : &@git.RepoFileSystem = fs
+  let git_dir = resolve_git_dir(rfs, root)
   let subcmd = args.get(0).unwrap_or("help")
   match subcmd {
     "start" => bisect_start(wfs, rfs, root, git_dir, args)

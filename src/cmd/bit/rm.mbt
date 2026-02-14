@@ -1,8 +1,5 @@
 ///|
 async fn handle_rm(args : Array[String]) -> Unit raise Error {
-  if is_real_git_delegate_enabled() {
-    delegate_to_real_git("rm", args)
-  }
   let root = get_work_root()
   let fs = OsFs::new()
   let mut cached = false

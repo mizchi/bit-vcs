@@ -1,4 +1,4 @@
-# moongit TODO (updated 2026-02-13)
+# moongit TODO (updated 2026-02-14)
 
 ## 現在のステータス
 
@@ -41,6 +41,39 @@
   - [x] multi-pack-index 系: `t5319`, `t5326`, `t5327`, `t5334`
   - [x] fetch/push 回帰監視: `t5510`, `t5516`, `t5601`
   - [ ] 代表 allowlist スモーク（t5/t8 中心）を shard 実行
+
+## 直近更新（2026-02-14）
+
+- [x] `init` の reftable 初期化で real git 委譲（`symbolic-ref`）を撤去
+- [x] `init --shared=world` で `reftable/tables.list` と `reftable/*.ref` の権限を補正
+- [x] `GIT_TEST_OPTS='--run=24' just git-t-full t0610-reftable-basics.sh` が green
+- [x] `--ref-format=reftable` 初期化時の `.ref` 初期テーブルを bit 単体で生成
+
+## 次に git 依存をなくす候補（2026-02-14）
+
+`moon ide find-references delegate_to_real_git` 基準で、`src/cmd/bit` には
+まだ 15 コマンド分の `SHIM_REAL_GIT` 条件付き委譲が残っている。
+
+優先度（低リスク順）:
+
+- [x] P0（短期）着手: `rm`, `reset`, `switch`, `add` の先頭委譲を撤去
+- [ ] P1（中期）: `config`, `branch`, `checkout`, `update-ref`, `log`
+- [ ] P2（中〜高）: `bundle`, `merge`
+- [ ] P3（高）: `fetch`, `pull`, `push`, `hash-object`（compat object format の条件付き委譲）
+
+P0 から順に「先頭の `if is_real_git_delegate_enabled() { delegate_to_real_git(...) }` を撤去」
+して、`just git-t-full` のスポット run で回帰を潰す。
+
+- [x] P0 blocker: `t2060-switch.sh`（16/16 pass, 2026-02-14）
+  - `switch` の主要オプション互換を実装し、`--ignore-other-worktrees` の回帰まで解消
+  - 付随修正: `worktree add -f` 受理、worktree 上の `bisect` gitdir 解決、checkout の commondir object 参照
+- [ ] P0 blocker: `t3600-rm.sh`（`--run=1-20` で 5 fail）
+  - `--cached` 整合性チェック、`ls-files` との整合、`rm` 出力メッセージ互換
+- [ ] P0 blocker: `t7102-reset.sh`（`--run=1-20` で 20 fail）
+  - オプション検証、`--soft/--hard` の状態遷移、エラーメッセージと出力文言互換
+- [ ] P0 blocker: `t3700-add.sh`（`--run=1-20` で 7 fail）
+  - no-pathspec ヒント文言、`--` 経由 pathspec、`core.filemode=0`、ignore エラー互換
+- [x] P0 smoke: `SHIM_REAL_GIT=/no/such` でも `add/rm/reset/switch` が実行可能（委譲しないことを確認）
 
 ### 絞り込み再計測の結果（2026-02-13 夜）
 
@@ -85,12 +118,14 @@
 - packfile: delta 遅延圧縮（delta 採用時に通常圧縮をスキップ）
 - ObjectDb: loose object 高速パス（seen set 割り当て削減）
 
-## Standalone 状況（2026-02-12）
+## Standalone 状況（2026-02-14）
 
-### アプリケーション本体: real git fallback 0 箇所
+### アプリケーション本体: 常時 fallback 0（`SHIM_REAL_GIT` 条件付き委譲は残存）
 
-`bit` コマンド自体は外部 git バイナリへの fallback が完全に撤去済み。
-`SHIM_REAL_GIT`, `real_git_path()`, `@process.run("git", ...)` いずれも 0。
+`bit` コマンド自体の常時 real-git fallback（`real_git_path()` や
+`@process.run("git", ...)` 直呼び）は撤去済み。
+一方で `SHIM_REAL_GIT` が有効な場合に限る条件付き委譲は残っており、
+段階的に撤去する（上記「次に git 依存をなくす候補」を参照）。
 
 残っている `@process.run` は全て正当な用途:
 - `git-upload-pack` / `ssh` (プロトコル実装)

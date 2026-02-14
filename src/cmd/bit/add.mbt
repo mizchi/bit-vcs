@@ -10,9 +10,6 @@ async fn show_add_command_help() -> Unit {
 
 ///|
 async fn handle_add(args : Array[String]) -> Unit raise Error {
-  if is_real_git_delegate_enabled() {
-    delegate_to_real_git("add", args)
-  }
   if has_interactive_add_flag(args) {
     run_add_interactive(args)
     return

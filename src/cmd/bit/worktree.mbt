@@ -233,6 +233,7 @@ async fn handle_worktree_add(args : Array[String]) -> Unit raise Error {
   let fs = OsFs::new()
   // Parse arguments
   let mut detach = false
+  let mut force = false
   let mut new_branch : String? = None
   let mut path : String? = None
   let mut commit_ish : String? = None
@@ -241,6 +242,7 @@ async fn handle_worktree_add(args : Array[String]) -> Unit raise Error {
     let arg = args[i]
     match arg {
       "--detach" | "-d" => detach = true
+      "--force" | "-f" => force = true
       "-b" if i + 1 < args.length() => {
         new_branch = Some(args[i + 1])
         i += 2
@@ -277,6 +279,7 @@ async fn handle_worktree_add(args : Array[String]) -> Unit raise Error {
     wt_path,
     commit_ish,
     detach~,
+    force~,
     new_branch~,
   )
   // Print success message
