@@ -108,6 +108,22 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
       continue
     }
     let arg = args[process_index]
+    if arg == "--git-path" {
+      if process_index + 1 >= args.length() {
+        eprint_line("fatal: option '--git-path' requires a value")
+        @sys.exit(128)
+      }
+      let requested = args[process_index + 1]
+      print_line(rev_parse_resolve_git_path(cwd_abs, git_dir, requested))
+      process_index += 2
+      continue
+    }
+    if arg.has_prefix("--git-path=") {
+      let requested = String::unsafe_substring(arg, start=11, end=arg.length())
+      print_line(rev_parse_resolve_git_path(cwd_abs, git_dir, requested))
+      process_index += 1
+      continue
+    }
     match arg {
       "--git-dir" => print_line(git_dir)
       "--absolute-git-dir" => print_line(abs_git_dir)
@@ -203,6 +219,56 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
   }
   ignore(show_ref_format)
   ignore(show_object_format)
+}
+
+///|
+fn rev_parse_resolve_git_path(
+  cwd_abs : String,
+  git_dir : String,
+  requested_path : String,
+) -> String {
+  if requested_path.length() == 0 {
+    if git_dir == "." {
+      return "."
+    }
+    return git_dir
+  }
+  if requested_path.has_prefix("/") {
+    return requested_path
+  }
+  let abs_git_dir = if git_dir.has_prefix("/") {
+    git_dir
+  } else if git_dir == "." {
+    cwd_abs
+  } else {
+    cwd_abs + "/" + git_dir
+  }
+  let abs_target = if abs_git_dir.has_suffix("/") {
+    abs_git_dir + requested_path
+  } else {
+    abs_git_dir + "/" + requested_path
+  }
+  let cwd_prefix = if cwd_abs.has_suffix("/") { cwd_abs } else { cwd_abs + "/" }
+  if abs_target == cwd_abs {
+    return "."
+  }
+  if abs_target.has_prefix(cwd_prefix) {
+    return String::unsafe_substring(
+      abs_target,
+      start=cwd_prefix.length(),
+      end=abs_target.length(),
+    )
+  }
+  if git_dir == "." {
+    return requested_path
+  }
+  if git_dir.has_prefix("/") {
+    return abs_target
+  }
+  if git_dir.has_suffix("/") {
+    return git_dir + requested_path
+  }
+  git_dir + "/" + requested_path
 }
 
 ///|

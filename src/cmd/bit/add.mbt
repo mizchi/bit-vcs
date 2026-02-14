@@ -19,7 +19,7 @@ async fn handle_add(args : Array[String]) -> Unit raise Error {
   let rfs : &@git.RepoFileSystem = fs
   let git_dir = resolve_git_dir(rfs, root)
   if real_git_delegate_is_available(rfs) &&
-    repo_object_format(rfs, git_dir) != "sha1" {
+    add_repo_requires_real_git_delegate(rfs, git_dir) {
     delegate_to_real_git("add", args)
     return
   }
@@ -112,6 +112,18 @@ async fn handle_add(args : Array[String]) -> Unit raise Error {
       @sys.exit(1)
     }
   }
+}
+
+///|
+fn add_repo_requires_real_git_delegate(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+) -> Bool {
+  repo_object_format(fs, git_dir) != "sha1" ||
+  (match repo_compat_object_format(fs, git_dir) {
+    Some(format) => format != "sha1"
+    None => false
+  })
 }
 
 ///|

@@ -13,6 +13,12 @@ enum CatFileObjectFilter {
 }
 
 ///|
+struct CatFileBatchAllObjectDiskRecord {
+  id : @git.ObjectId
+  disk_size : Int
+}
+
+///|
 async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
@@ -108,6 +114,15 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
       _ => positionals.push(arg)
     }
     i += 1
+  }
+  let batch_format_uses_objectsize_disk = cat_file_batch_format_uses_objectsize_disk(
+    batch_format,
+  )
+  if batch_all_objects_mode &&
+    batch_format_uses_objectsize_disk &&
+    real_git_delegate_is_available(fs) {
+    delegate_to_real_git("cat-file", args)
+    return ()
   }
   let object_filter = cat_file_parse_object_filter_or_exit(object_filter_spec)
   let object_filter_enabled = !cat_file_object_filter_is_disabled(object_filter)
@@ -219,9 +234,22 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
           @sys.exit(1)
         }
       }
-      let objects = cat_file_collect_batch_all_objects(
-        fs, object_dirs, batch_unordered,
-      )
+      let disk_records = if format_uses_objectsize_disk {
+        cat_file_collect_batch_all_object_disk_records(
+          fs, object_dirs, batch_unordered,
+        )
+      } else {
+        []
+      }
+      let objects = if format_uses_objectsize_disk {
+        let ids : Array[@git.ObjectId] = []
+        for record in disk_records {
+          ids.push(record.id)
+        }
+        ids
+      } else {
+        cat_file_collect_batch_all_objects(fs, object_dirs, batch_unordered)
+      }
       let batch_check_needs_object = cat_file_batch_check_format_needs_object(
         batch_format,
       )
@@ -229,26 +257,36 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
         @git.ObjectType::Blob,
         bytes_from_array([]),
       )
-      for id in objects {
+      let sort_batch_check_output = batch_check_mode && !batch_unordered
+      let deferred_batch_check_lines : Array[String] = []
+      let mut object_index = 0
+      while object_index < objects.length() {
+        let id = objects[object_index]
+        let object_size_disk_override = if format_uses_objectsize_disk {
+          Some(disk_records[object_index].disk_size)
+        } else {
+          None
+        }
         if batch_check_mode &&
           !batch_check_needs_object &&
           !object_filter_enabled {
-          @stdio.stdout.write(
-            cat_file_string_to_bytes(
-              cat_file_format_batch_check_line(
-                batch_format,
-                id,
-                batch_check_placeholder_obj,
-                "",
-                None,
-                None,
-                None,
-                None,
-                None,
-              ) +
-              batch_output_separator,
-            ),
+          let line = cat_file_format_batch_check_line(
+            batch_format,
+            id,
+            batch_check_placeholder_obj,
+            "",
+            None,
+            None,
+            None,
+            object_size_disk_override,
+            None,
           )
+          if sort_batch_check_output {
+            deferred_batch_check_lines.push(line + batch_output_separator)
+          } else {
+            @stdio.stdout.write(cat_file_string_to_bytes(line + batch_output_separator))
+          }
+          object_index += 1
           continue
         }
         let (obj, has_invalid_object_type) = cat_file_find_object_in_dbs_lenient(
@@ -260,15 +298,18 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
         }
         guard obj is Some(o) else {
           if batch_check_mode {
-            @stdio.stdout.write(
-              cat_file_string_to_bytes(
-                id.to_hex() + " missing" + batch_output_separator,
-              ),
-            )
+            let line = id.to_hex() + " missing" + batch_output_separator
+            if sort_batch_check_output {
+              deferred_batch_check_lines.push(line)
+            } else {
+              @stdio.stdout.write(cat_file_string_to_bytes(line))
+            }
           }
+          object_index += 1
           continue
         }
         if cat_file_object_is_excluded_by_filter(object_filter, o) {
+          object_index += 1
           continue
         }
         if batch_check_mode {
@@ -283,26 +324,23 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
           } else {
             None
           }
-          @stdio.stdout.write(
-            cat_file_string_to_bytes(
-              cat_file_format_batch_check_line(
-                batch_format,
-                id,
-                o,
-                "",
-                None,
-                None,
-                None,
-                if format_uses_objectsize_disk {
-                  cat_file_resolve_object_disk_size(dbs, fs, id)
-                } else {
-                  None
-                },
-                delta_base_hex,
-              ) +
-              batch_output_separator,
-            ),
+          let line = cat_file_format_batch_check_line(
+            batch_format,
+            id,
+            o,
+            "",
+            None,
+            None,
+            None,
+            object_size_disk_override,
+            delta_base_hex,
           )
+          if sort_batch_check_output {
+            deferred_batch_check_lines.push(line + batch_output_separator)
+          } else {
+            @stdio.stdout.write(cat_file_string_to_bytes(line + batch_output_separator))
+          }
+          object_index += 1
           continue
         }
         let effective_path = explicit_path
@@ -333,11 +371,7 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
               None,
               None,
               None,
-              if format_uses_objectsize_disk {
-                cat_file_resolve_object_disk_size(dbs, fs, id)
-              } else {
-                None
-              },
+              object_size_disk_override,
               if format_uses_deltabase {
                 cat_file_resolve_delta_base_hex(
                   dbs,
@@ -355,6 +389,13 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
         )
         @stdio.stdout.write(out)
         @stdio.stdout.write(batch_output_separator_bytes)
+        object_index += 1
+      }
+      if sort_batch_check_output {
+        deferred_batch_check_lines.sort()
+        for line in deferred_batch_check_lines {
+          @stdio.stdout.write(cat_file_string_to_bytes(line))
+        }
       }
       return ()
     }
@@ -1155,6 +1196,94 @@ fn cat_file_collect_batch_all_objects(
     out.push(id)
   }
   out
+}
+
+///|
+fn cat_file_collect_batch_all_object_disk_records(
+  fs : OsFs,
+  object_dirs : Array[String],
+  unordered : Bool,
+) -> Array[CatFileBatchAllObjectDiskRecord] {
+  let out : Array[CatFileBatchAllObjectDiskRecord] = []
+  for scan_object_dir in object_dirs {
+    let db = @gitlib.ObjectDb::load_from_objects_dir(fs, scan_object_dir) catch {
+      _ => continue
+    }
+    for item in db.loose_paths.to_array() {
+      let (hex, path) = item
+      let id = @git.ObjectId::from_hex(hex) catch { _ => continue }
+      let size = fs.read_file(path).length() catch { _ => continue }
+      out.push(CatFileBatchAllObjectDiskRecord::{ id, disk_size: size })
+    }
+    for pack in db.packs {
+      cat_file_append_pack_disk_records(fs, pack, out)
+    }
+    for lazy_pack in db.lazy_packs {
+      let pack = lazy_pack.get(fs) catch { _ => continue }
+      cat_file_append_pack_disk_records(fs, pack, out)
+    }
+  }
+  if not(unordered) {
+    out.sort_by((a, b) =>
+      String::compare(
+        a.id.to_hex() + " " + a.disk_size.to_string(),
+        b.id.to_hex() + " " + b.disk_size.to_string(),
+      )
+    )
+  }
+  out
+}
+
+///|
+fn cat_file_append_pack_disk_records(
+  fs : OsFs,
+  pack : @gitlib.PackIndex,
+  out : Array[CatFileBatchAllObjectDiskRecord],
+) -> Unit {
+  let pack_data = fs.read_file(pack.pack_path) catch { _ => return }
+  if pack_data.length() <= 20 {
+    return
+  }
+  let pack_end = (pack_data.length() - 20).to_int64()
+  for i in 0..<pack.ids.length() {
+    let offset = pack.offsets[i]
+    let size = cat_file_compute_pack_entry_disk_size(pack.offsets, offset, pack_end)
+    guard size is Some(entry_size) else { continue }
+    let id = @git.ObjectId::from_hex(pack.ids[i]) catch { _ => continue }
+    out.push(CatFileBatchAllObjectDiskRecord::{ id, disk_size: entry_size })
+  }
+}
+
+///|
+fn cat_file_compute_pack_entry_disk_size(
+  offsets : Array[Int64],
+  offset : Int64,
+  pack_end : Int64,
+) -> Int? {
+  let mut next_offset : Int64? = None
+  for candidate in offsets {
+    if candidate > offset {
+      match next_offset {
+        Some(current) =>
+          if candidate < current {
+            next_offset = Some(candidate)
+          }
+        None => next_offset = Some(candidate)
+      }
+    }
+  }
+  let end_offset = match next_offset {
+    Some(found) => found
+    None => pack_end
+  }
+  if end_offset < offset {
+    return None
+  }
+  let size64 = end_offset - offset
+  if size64 < 0L || size64 > 2147483647L {
+    return None
+  }
+  Some(size64.to_int())
 }
 
 ///|
