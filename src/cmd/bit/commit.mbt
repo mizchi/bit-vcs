@@ -155,7 +155,7 @@ async fn handle_commit(args : Array[String]) -> Unit raise Error {
     None => default_timestamp
   }
   // Committer is always the current user
-  let committer = default_author
+  let committer = get_committer_string()
   let committer_timestamp = default_timestamp
   let git_dir = resolve_git_dir(fs, root)
   if not(no_verify) {
@@ -214,6 +214,14 @@ fn commit_should_delegate_to_real_git(args : Array[String]) -> Bool {
     }
     if arg == "--" {
       // `git commit -- <pathspec>` requires full pathspec semantics.
+      return true
+    }
+    if arg == "-S" ||
+      arg == "--gpg-sign" ||
+      arg == "--no-gpg-sign" ||
+      arg.has_prefix("-S") ||
+      arg.has_prefix("--gpg-sign=") {
+      // Keep signature compatibility by delegating signed commits.
       return true
     }
     if arg == "-m" ||

@@ -168,6 +168,64 @@ test "helpers: get_commit_timezone parses git-style committer date" {
 }
 
 ///|
+test "helpers: get_committer_string prefers GIT_COMMITTER identity" {
+  let prev_committer_name = @sys.get_env_var("GIT_COMMITTER_NAME")
+  let prev_committer_email = @sys.get_env_var("GIT_COMMITTER_EMAIL")
+  let prev_author_name = @sys.get_env_var("GIT_AUTHOR_NAME")
+  let prev_author_email = @sys.get_env_var("GIT_AUTHOR_EMAIL")
+  @sys.set_env_var("GIT_COMMITTER_NAME", "Committer")
+  @sys.set_env_var("GIT_COMMITTER_EMAIL", "committer@example.com")
+  @sys.set_env_var("GIT_AUTHOR_NAME", "Author")
+  @sys.set_env_var("GIT_AUTHOR_EMAIL", "author@example.com")
+  assert_eq(get_committer_string(), "Committer <committer@example.com>")
+  match prev_committer_name {
+    Some(value) => @sys.set_env_var("GIT_COMMITTER_NAME", value)
+    None => @sys.unset_env_var("GIT_COMMITTER_NAME")
+  }
+  match prev_committer_email {
+    Some(value) => @sys.set_env_var("GIT_COMMITTER_EMAIL", value)
+    None => @sys.unset_env_var("GIT_COMMITTER_EMAIL")
+  }
+  match prev_author_name {
+    Some(value) => @sys.set_env_var("GIT_AUTHOR_NAME", value)
+    None => @sys.unset_env_var("GIT_AUTHOR_NAME")
+  }
+  match prev_author_email {
+    Some(value) => @sys.set_env_var("GIT_AUTHOR_EMAIL", value)
+    None => @sys.unset_env_var("GIT_AUTHOR_EMAIL")
+  }
+}
+
+///|
+test "helpers: get_committer_string falls back to author identity" {
+  let prev_committer_name = @sys.get_env_var("GIT_COMMITTER_NAME")
+  let prev_committer_email = @sys.get_env_var("GIT_COMMITTER_EMAIL")
+  let prev_author_name = @sys.get_env_var("GIT_AUTHOR_NAME")
+  let prev_author_email = @sys.get_env_var("GIT_AUTHOR_EMAIL")
+  @sys.unset_env_var("GIT_COMMITTER_NAME")
+  @sys.unset_env_var("GIT_COMMITTER_EMAIL")
+  @sys.set_env_var("GIT_AUTHOR_NAME", "Author")
+  @sys.set_env_var("GIT_AUTHOR_EMAIL", "author@example.com")
+  assert_eq(get_committer_string(), "Author <author@example.com>")
+  match prev_committer_name {
+    Some(value) => @sys.set_env_var("GIT_COMMITTER_NAME", value)
+    None => @sys.unset_env_var("GIT_COMMITTER_NAME")
+  }
+  match prev_committer_email {
+    Some(value) => @sys.set_env_var("GIT_COMMITTER_EMAIL", value)
+    None => @sys.unset_env_var("GIT_COMMITTER_EMAIL")
+  }
+  match prev_author_name {
+    Some(value) => @sys.set_env_var("GIT_AUTHOR_NAME", value)
+    None => @sys.unset_env_var("GIT_AUTHOR_NAME")
+  }
+  match prev_author_email {
+    Some(value) => @sys.set_env_var("GIT_AUTHOR_EMAIL", value)
+    None => @sys.unset_env_var("GIT_AUTHOR_EMAIL")
+  }
+}
+
+///|
 test "main: resolve_global_path uses GIT_SHIM_PWD when available" {
   let prev = @sys.get_env_var("GIT_SHIM_PWD")
   @sys.set_env_var("GIT_SHIM_PWD", "/tmp/bit-main-wbtest")

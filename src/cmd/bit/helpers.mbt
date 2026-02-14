@@ -628,6 +628,17 @@ fn get_author_string() -> String {
 }
 
 ///|
+fn get_committer_string() -> String {
+  match @sys.get_env_var("GIT_COMMITTER_NAME") {
+    Some(name) => {
+      let email = @sys.get_env_var("GIT_COMMITTER_EMAIL").unwrap_or("unknown")
+      name + " <" + email + ">"
+    }
+    None => get_author_string()
+  }
+}
+
+///|
 fn get_hub_signing_key() -> String? {
   match @sys.get_env_var("BIT_COLLAB_SIGN_KEY") {
     Some(value) => if value.length() > 0 { Some(value) } else { None }

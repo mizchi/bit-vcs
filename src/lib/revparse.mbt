@@ -8,7 +8,7 @@ pub fn rev_parse(
 ) -> @git.ObjectId? raise @git.GitError {
   if spec.has_prefix(":/") && spec.length() > 2 {
     let needle = substring_revparse(spec, 2, spec.length())
-    return resolve_commit_message_search(fs, git_dir, "HEAD", needle)
+    return resolve_commit_message_search_all_refs(fs, git_dir, needle)
   }
   match parse_commit_message_search_spec(spec) {
     Some((base_spec, needle)) =>
@@ -85,19 +85,60 @@ fn resolve_commit_message_search(
   }
   let base = rev_parse(fs, git_dir, base_spec)
   guard base is Some(base_id) else { return None }
-  find_reachable_commit_by_message(fs, git_dir, base_id, needle)
+  find_reachable_commit_by_message_from_many(fs, git_dir, [base_id], needle)
 }
 
 ///|
-fn find_reachable_commit_by_message(
+fn resolve_commit_message_search_all_refs(
   fs : &@git.RepoFileSystem,
   git_dir : String,
-  start : @git.ObjectId,
+  needle : String,
+) -> @git.ObjectId? raise @git.GitError {
+  if needle.length() == 0 {
+    return None
+  }
+  let starts : Array[@git.ObjectId] = []
+  let seen_start : Map[String, Bool] = {}
+  let refs = show_ref(fs, git_dir)
+  for item in refs {
+    let (_, id) = item
+    let hex = id.to_hex()
+    if not(seen_start.contains(hex)) {
+      seen_start[hex] = true
+      starts.push(id)
+    }
+  }
+  match resolve_head_commit(fs, git_dir) {
+    Some(id) => {
+      let hex = id.to_hex()
+      if not(seen_start.contains(hex)) {
+        seen_start[hex] = true
+        starts.push(id)
+      }
+    }
+    None => ()
+  }
+  if starts.length() == 0 {
+    return None
+  }
+  find_reachable_commit_by_message_from_many(fs, git_dir, starts, needle)
+}
+
+///|
+fn find_reachable_commit_by_message_from_many(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+  starts : Array[@git.ObjectId],
   needle : String,
 ) -> @git.ObjectId? raise @git.GitError {
   let db = ObjectDb::load(fs, git_dir)
-  let queue : Array[@git.ObjectId] = [start]
+  let queue : Array[@git.ObjectId] = []
+  for start in starts {
+    queue.push(start)
+  }
   let seen : Map[String, Bool] = {}
+  let mut best_id : @git.ObjectId? = None
+  let mut best_time = -1L
   while queue.length() > 0 {
     let current = queue.unsafe_pop()
     let hex = current.to_hex()
@@ -109,7 +150,11 @@ fn find_reachable_commit_by_message(
       Some(obj) =>
         if obj.obj_type == @git.ObjectType::Commit {
           if commit_message_contains(obj.data, needle) {
-            return Some(current)
+            let ts = parse_commit_committer_timestamp(obj.data)
+            if best_id is None || ts > best_time {
+              best_id = Some(current)
+              best_time = ts
+            }
           }
           let info = @git.parse_commit(obj.data)
           for parent in info.parents {
@@ -121,7 +166,7 @@ fn find_reachable_commit_by_message(
       None => ()
     }
   }
-  None
+  best_id
 }
 
 ///|
@@ -132,6 +177,46 @@ fn commit_message_contains(data : Bytes, needle : String) -> Bool {
       substring_revparse(text, idx + 2, text.length()).find(needle) is Some(_)
     None => false
   }
+}
+
+///|
+fn parse_commit_committer_timestamp(data : Bytes) -> Int64 {
+  let text = @utf8.decode_lossy(data[:])
+  for line_view in text.split("\n") {
+    let line = line_view.to_string()
+    if line.length() == 0 {
+      break
+    }
+    if line.has_prefix("committer ") {
+      let rest = substring_revparse(line, 10, line.length())
+      return parse_identity_timestamp(rest)
+    }
+  }
+  0L
+}
+
+///|
+fn parse_identity_timestamp(identity : String) -> Int64 {
+  let last_space = identity.rev_find(" ")
+  guard last_space is Some(tz_idx) else { return 0L }
+  let before_tz = substring_revparse(identity, 0, tz_idx)
+  let second_last = before_tz.rev_find(" ")
+  guard second_last is Some(ts_idx) else { return 0L }
+  let ts = substring_revparse(before_tz, ts_idx + 1, before_tz.length())
+  parse_revparse_int64(ts)
+}
+
+///|
+fn parse_revparse_int64(s : String) -> Int64 {
+  let mut value = 0L
+  for c in s {
+    if c < '0' || c > '9' {
+      return value
+    }
+    let digit = c.to_int() - '0'.to_int()
+    value = value * 10L + digit.to_int64()
+  }
+  value
 }
 
 ///|

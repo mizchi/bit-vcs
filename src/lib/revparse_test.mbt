@@ -171,6 +171,30 @@ test "rev-parse: :/message finds commit from HEAD history" {
 }
 
 ///|
+test "rev-parse: :/message searches commits reachable from all refs" {
+  let fs = setup_rev_repo()
+  fs.write_string("/repo/a.txt", "one\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let first = commit(
+    fs, fs, "/repo", "one\n", "Test <test@example.com>", 1700000000L,
+  )
+  fs.write_string("/repo/a.txt", "two\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let target = commit(
+    fs, fs, "/repo", "two\n", "Test <test@example.com>", 1700000001L,
+  )
+  fs.write_string("/repo/.git/refs/heads/side", first.to_hex() + "\n")
+  fs.write_string("/repo/.git/HEAD", "ref: refs/heads/side\n")
+  fs.write_string("/repo/a.txt", "three\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  ignore(
+    commit(fs, fs, "/repo", "three\n", "Test <test@example.com>", 1700000002L),
+  )
+  let parsed = rev_parse(fs, "/repo/.git", ":/two")
+  assert_eq(parsed.unwrap().to_hex(), target.to_hex())
+}
+
+///|
 test "rev-parse: base^{/message} finds reachable commit" {
   let fs = setup_rev_repo()
   fs.write_string("/repo/a.txt", "first\n")
@@ -185,6 +209,31 @@ test "rev-parse: base^{/message} finds reachable commit" {
   )
   let parsed = rev_parse(fs, "/repo/.git", "HEAD^{/first target}")
   assert_eq(parsed.unwrap().to_hex(), first.to_hex())
+}
+
+///|
+test "create_annotated_tag: nested target writes tag type header" {
+  let fs = setup_rev_repo()
+  fs.write_string("/repo/a.txt", "hello\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let commit_id = commit(
+    fs, fs, "/repo", "msg\n", "Test <test@example.com>", 1700000000L,
+  )
+  create_annotated_tag(
+    fs, fs, "/repo/.git", "base", commit_id, "base", "Test <test@example.com>", 1700000001L,
+  )
+  let base_tag = resolve_ref(fs, "/repo/.git", "refs/tags/base").unwrap()
+  create_annotated_tag(
+    fs, fs, "/repo/.git", "double", base_tag, "double", "Test <test@example.com>",
+    1700000002L,
+  )
+  let double_tag = resolve_ref(fs, "/repo/.git", "refs/tags/double").unwrap()
+  let db = ObjectDb::load(fs, "/repo/.git")
+  let obj = db.get(fs, double_tag).unwrap()
+  let text = @utf8.decode_lossy(obj.data[:])
+  assert_true(text.contains("\ntype tag\n"))
+  let peeled = rev_parse(fs, "/repo/.git", "double^{commit}")
+  assert_eq(peeled.unwrap().to_hex(), commit_id.to_hex())
 }
 
 ///|

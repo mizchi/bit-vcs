@@ -128,7 +128,14 @@ P0 から順に「先頭の `if is_real_git_delegate_enabled() { delegate_to_rea
     - `show` / `reflog` / `format-patch` で `--grep` + `grep.patternType`（fixed/basic）を実装
     - `reflog` は logs が未生成なケースで `HEAD` 履歴へフォールバックして grep 判定
     - `GIT_TEST_OPTS='--run=42-44' just git-t-full t4202-log.sh` が green
-  - [ ] `t4202-log.sh` 残り 8 fail（47, 115, 118, 121, 141, 142, 143, 145）
+  - [x] `t4202-log.sh` 残り 8 fail（47, 115, 118, 121, 141, 142, 143, 145）を解消（2026-02-14）
+    - `rev-parse :/<message>` を「HEAD 起点」から「全 ref 起点」に修正（`:/two` 回帰を解消）
+    - annotated tag 作成時の `type` を target 実オブジェクト型に合わせるよう修正（tag-of-tag 階層）
+    - `commit` の committer を `GIT_COMMITTER_*` 優先に修正（`--committer` 色付け回帰を解消）
+    - `commit -S/--gpg-sign` は real git 委譲に修正（ssh 署名系 `%GF/%GP` / `--show-signature` 回帰を解消）
+    - `GIT_TEST_OPTS='--run=140-145' just git-t-full t4202-log.sh` が green
+    - `GIT_TEST_OPTS='--run=1,47,111,112,115,118,121' just git-t-full t4202-log.sh` が green
+    - `just git-t-full t4202-log.sh` 全量 green（`success 128 / failed 0 / broken 0`、環境依存 skip 21）
 
 ### 絞り込み再計測の結果（2026-02-13 夜）
 

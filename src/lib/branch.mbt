@@ -755,13 +755,23 @@ pub fn create_annotated_tag(
   timestamp : Int64,
   timezone? : String = "+0000",
 ) -> Unit raise @git.GitError {
+  let db = ObjectDb::load(rfs, git_dir)
+  let target_obj = db.get(rfs, target)
+  guard target_obj is Some(obj) else {
+    raise @git.GitError::InvalidObject("unknown object: \{target.to_hex()}")
+  }
+  let target_type = match obj.obj_type {
+    @git.ObjectType::Blob => "blob"
+    @git.ObjectType::Tree => "tree"
+    @git.ObjectType::Commit => "commit"
+    @git.ObjectType::Tag => "tag"
+  }
   // Create tag object
-  let tag_content = "object \{target.to_hex()}\ntype commit\ntag \{name}\ntagger \{tagger} \{timestamp} \{timezone}\n\n\{message}\n"
+  let tag_content = "object \{target.to_hex()}\ntype \{target_type}\ntag \{name}\ntagger \{tagger} \{timestamp} \{timezone}\n\n\{message}\n"
   let tag_bytes = @utf8.encode(tag_content)
   let (tag_id, compressed) = @git.create_object(@git.ObjectType::Tag, tag_bytes)
   write_object_bytes(fs, git_dir, tag_id, compressed)
   // Create ref pointing to tag object
-  ignore(rfs)
   let tags_dir = join_path(git_dir, "refs/tags")
   fs.mkdir_p(tags_dir)
   let ref_path = join_path(git_dir, "refs/tags/" + name)
