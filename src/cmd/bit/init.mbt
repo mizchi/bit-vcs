@@ -247,7 +247,7 @@ async fn handle_init(args : Array[String]) -> Unit raise Error {
     None => ()
   }
   if ref_format == "reftable" && not(is_reinit) {
-    bootstrap_reftable_head_table(actual_git_dir, branch)
+    bootstrap_reftable_head_table(fs, actual_git_dir, branch)
   }
   if ref_format == "reftable" {
     apply_reftable_shared_permissions(fs, actual_git_dir, shared_mode)
@@ -309,18 +309,22 @@ async fn apply_reftable_shared_permissions(
 
 ///|
 async fn bootstrap_reftable_head_table(
+  fs : OsFs,
   git_dir : String,
   branch : String,
 ) -> Unit {
-  let real_git = resolve_real_git_for_fetch()
-  let head_ref = "refs/heads/" + branch
-  ignore(
-    @process.run(
-      real_git,
-      ["--git-dir=" + git_dir, "symbolic-ref", "HEAD", head_ref],
-      inherit_env=true,
-    ) catch {
-      _ => 1
-    },
-  )
+  let reftable_dir = git_dir + "/reftable"
+  if not(fs.is_dir(reftable_dir)) {
+    return
+  }
+  for entry in fs.readdir(reftable_dir) {
+    if entry.has_suffix(".ref") {
+      return
+    }
+  }
+  let table_name = "0x000000000001-0x000000000001-00000000.ref"
+  let table_path = reftable_dir + "/" + table_name
+  let payload = "bit-reftable-placeholder\nHEAD\trefs/heads/" + branch + "\n"
+  fs.write_string(table_path, payload)
+  fs.write_string(reftable_dir + "/tables.list", table_name + "\n")
 }
