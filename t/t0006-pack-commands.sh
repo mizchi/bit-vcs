@@ -20,13 +20,14 @@ test_expect_success 'pack-objects -h shows usage' '
     git_cmd pack-objects --help 2>&1 | grep -q -i "usage\|pack" || true
 '
 
-test_expect_success 'pack-objects file-output stdin-object mode is explicitly unsupported in standalone mode' '
+test_expect_success 'pack-objects file-output stdin-object mode works in standalone mode' '
     git_cmd init &&
     echo "hello" > test.txt &&
     git_cmd add test.txt &&
     git_cmd commit -m "test" &&
-    git_cmd rev-parse HEAD | test_must_fail git_cmd pack-objects .git/objects/pack/test >out 2>err &&
-    grep -Eiq "standalone|not supported|pack-objects" err
+    pack_id="$(git_cmd rev-parse HEAD | git_cmd pack-objects .git/objects/pack/test)" &&
+    test_file_exists ".git/objects/pack/test-$pack_id.pack" &&
+    test_file_exists ".git/objects/pack/test-$pack_id.idx"
 '
 
 test_done

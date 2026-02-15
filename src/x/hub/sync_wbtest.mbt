@@ -157,3 +157,54 @@ test "sync: merge notes uses LWW by clock and timestamp" {
   let merged_record = parse_hub_record(merged_text)
   assert_eq(merged_record.payload, "payload remote")
 }
+
+///|
+test "sync: merge notes supports tombstone-wins policy" {
+  let (fs, git_dir) = setup_sync_repo()
+  let objects = make_test_object_store(fs, git_dir)
+  let key = "hub/pr/1/meta"
+  let (key_id, key_compressed) = @git.create_blob_string(key)
+  write_object_bytes(fs, git_dir, key_id, key_compressed) catch {
+    _ => panic()
+  }
+  let local_record = HubRecord::new(
+    key,
+    "pr",
+    "payload local",
+    "nodeA",
+    10L,
+    clock={ "nodeA": 2 },
+    deleted=false,
+  )
+  let remote_record = HubRecord::new(
+    key,
+    "pr",
+    "",
+    "nodeB",
+    5L,
+    clock={ "nodeB": 1 },
+    deleted=true,
+  )
+  let local_blob = write_record_blob(fs, git_dir, local_record)
+  let remote_blob = write_record_blob(fs, git_dir, remote_record)
+  let local_notes = write_tree(fs, git_dir, [
+    @git.TreeEntry::new("100644", key_id.to_hex(), local_blob),
+  ])
+  let remote_notes = write_tree(fs, git_dir, [
+    @git.TreeEntry::new("100644", key_id.to_hex(), remote_blob),
+  ])
+  let obj_store : &@lib.ObjectStore = objects
+  let merged = merge_notes_trees_store(
+    obj_store,
+    fs,
+    git_dir,
+    local_notes,
+    remote_notes,
+    conflict_policy=RecordMergePolicy::TombstoneWins,
+  )
+  let merged_entry = find_tree_entry(objects, merged, key_id.to_hex())
+  guard merged_entry is Some(mid) else { panic() }
+  let merged_text = read_blob_string(objects, mid)
+  let merged_record = parse_hub_record(merged_text)
+  assert_true(merged_record.deleted)
+}

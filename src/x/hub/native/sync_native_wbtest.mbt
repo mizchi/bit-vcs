@@ -124,6 +124,7 @@ test "relay: apply_relay_records stores imported record into notes" {
     [incoming],
     1L,
     "relay import",
+    @hub.default_record_merge_policy(),
   )
   assert_true(changed)
   let reloaded = @hub.HubStore::load(objects, refs, node_id="node-local")

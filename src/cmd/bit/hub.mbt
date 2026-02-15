@@ -1240,6 +1240,8 @@ async fn handle_hub_pr_import(args : Array[String]) -> Unit raise Error {
   let mut repo : String? = None
   let mut state = "all"
   let mut limit = 100
+  let mut provider = GitHubImportProvider::GhCli
+  let mut input_path : String? = None
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -1288,11 +1290,42 @@ async fn handle_hub_pr_import(args : Array[String]) -> Unit raise Error {
         raise @git.GitError::InvalidObject(
           "hub pr import: --limit requires a value",
         )
+      "--provider" if i + 1 < args.length() => {
+        provider = parse_github_import_provider_option(args[i + 1])
+        i += 2
+        continue
+      }
+      "--provider" =>
+        raise @git.GitError::InvalidObject(
+          "hub pr import: --provider requires a value",
+        )
+      "--input" if i + 1 < args.length() => {
+        input_path = Some(args[i + 1])
+        i += 2
+        continue
+      }
+      "--input" =>
+        raise @git.GitError::InvalidObject(
+          "hub pr import: --input requires a value",
+        )
       _ if arg.has_prefix("--limit=") => {
         let value = String::unsafe_substring(arg, start=8, end=arg.length())
         limit = @strconv.parse_int(value) catch {
           _ => raise @git.GitError::InvalidObject("Invalid limit: \{value}")
         }
+        i += 1
+        continue
+      }
+      _ if arg.has_prefix("--provider=") => {
+        let value = String::unsafe_substring(arg, start=11, end=arg.length())
+        provider = parse_github_import_provider_option(value)
+        i += 1
+        continue
+      }
+      _ if arg.has_prefix("--input=") => {
+        input_path = Some(
+          String::unsafe_substring(arg, start=8, end=arg.length()),
+        )
         i += 1
         continue
       }
@@ -1312,8 +1345,14 @@ async fn handle_hub_pr_import(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let fs = OsFs::new()
-  let repo_name = resolve_github_repo(fs, git_dir, repo)
-  let (stdout, _stderr) = gh_pr_list(repo_name, state_value, limit)
+  let (stdout, _stderr) = match provider {
+    GitHubImportProvider::GhCli => {
+      let repo_name = resolve_github_repo(fs, git_dir, repo)
+      gh_pr_list(repo_name, state_value, limit)
+    }
+    GitHubImportProvider::JsonFile =>
+      read_import_json_from_file(fs, "hub pr import", input_path)
+  }
   let prs = parse_gh_prs(stdout)
   if prs.length() == 0 {
     print_line("No pull requests to import")
@@ -1470,31 +1509,55 @@ async fn parse_hub_pr_create_options(
         i += 2
         continue
       }
+      "-t" | "--title" =>
+        raise @git.GitError::InvalidObject(
+          "\{warn_context}: --title requires a value",
+        )
       "-m" | "-b" | "--message" | "--body" if i + 1 < args.length() => {
         body = Some(args[i + 1])
         i += 2
         continue
       }
+      "-m" | "-b" | "--message" | "--body" =>
+        raise @git.GitError::InvalidObject(
+          "\{warn_context}: --body requires a value",
+        )
       "--source" | "--head" if i + 1 < args.length() => {
         source_branch = Some(args[i + 1])
         i += 2
         continue
       }
+      "--source" | "--head" =>
+        raise @git.GitError::InvalidObject(
+          "\{warn_context}: --source requires a value",
+        )
       "--target" | "--base" if i + 1 < args.length() => {
         target_branch = Some(args[i + 1])
         i += 2
         continue
       }
+      "--target" | "--base" =>
+        raise @git.GitError::InvalidObject(
+          "\{warn_context}: --target requires a value",
+        )
       "--source-repo" if i + 1 < args.length() => {
         source_repo = Some(args[i + 1])
         i += 2
         continue
       }
+      "--source-repo" =>
+        raise @git.GitError::InvalidObject(
+          "\{warn_context}: --source-repo requires a value",
+        )
       "--source-ref" if i + 1 < args.length() => {
         source_ref = Some(args[i + 1])
         i += 2
         continue
       }
+      "--source-ref" =>
+        raise @git.GitError::InvalidObject(
+          "\{warn_context}: --source-ref requires a value",
+        )
       _ if arg.has_prefix("--title=") => {
         title = Some(String::unsafe_substring(arg, start=8, end=arg.length()))
         i += 1
@@ -1680,16 +1743,28 @@ async fn handle_hub_pr_update(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
+      "-t" | "--title" =>
+        raise @git.GitError::InvalidObject(
+          "hub pr update: --title requires a value",
+        )
       "-m" | "-b" | "--message" | "--body" if i + 1 < args.length() => {
         body = Some(args[i + 1])
         i += 2
         continue
       }
+      "-m" | "-b" | "--message" | "--body" =>
+        raise @git.GitError::InvalidObject(
+          "hub pr update: --body requires a value",
+        )
       "--label" | "-l" if i + 1 < args.length() => {
         labels.push(args[i + 1])
         i += 2
         continue
       }
+      "--label" | "-l" =>
+        raise @git.GitError::InvalidObject(
+          "hub pr update: --label requires a value",
+        )
       _ if arg.has_prefix("--title=") => {
         title = Some(String::unsafe_substring(arg, start=8, end=arg.length()))
         i += 1
@@ -2119,16 +2194,28 @@ async fn handle_hub_pr_review_submit(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
+      "--verdict" =>
+        raise @git.GitError::InvalidObject(
+          "hub pr review submit: --verdict requires a value",
+        )
       "--commit" if i + 1 < args.length() => {
         commit_id = args[i + 1] |> @git.ObjectId::from_hex |> Some
         i += 2
         continue
       }
+      "--commit" =>
+        raise @git.GitError::InvalidObject(
+          "hub pr review submit: --commit requires a value",
+        )
       "-m" | "-b" | "--message" | "--body" if i + 1 < args.length() => {
         body = Some(args[i + 1])
         i += 2
         continue
       }
+      "-m" | "-b" | "--message" | "--body" =>
+        raise @git.GitError::InvalidObject(
+          "hub pr review submit: --body requires a value",
+        )
       _ if arg.has_prefix("--verdict=") => {
         let value = String::unsafe_substring(arg, start=10, end=arg.length())
         match parse_review_verdict(value) {
@@ -2559,6 +2646,8 @@ async fn handle_hub_issue_import(args : Array[String]) -> Unit raise Error {
   let mut repo : String? = None
   let mut state = "all"
   let mut limit = 100
+  let mut provider = GitHubImportProvider::GhCli
+  let mut input_path : String? = None
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -2607,11 +2696,42 @@ async fn handle_hub_issue_import(args : Array[String]) -> Unit raise Error {
         raise @git.GitError::InvalidObject(
           "hub issue import: --limit requires a value",
         )
+      "--provider" if i + 1 < args.length() => {
+        provider = parse_github_import_provider_option(args[i + 1])
+        i += 2
+        continue
+      }
+      "--provider" =>
+        raise @git.GitError::InvalidObject(
+          "hub issue import: --provider requires a value",
+        )
+      "--input" if i + 1 < args.length() => {
+        input_path = Some(args[i + 1])
+        i += 2
+        continue
+      }
+      "--input" =>
+        raise @git.GitError::InvalidObject(
+          "hub issue import: --input requires a value",
+        )
       _ if arg.has_prefix("--limit=") => {
         let value = String::unsafe_substring(arg, start=8, end=arg.length())
         limit = @strconv.parse_int(value) catch {
           _ => raise @git.GitError::InvalidObject("Invalid limit: \{value}")
         }
+        i += 1
+        continue
+      }
+      _ if arg.has_prefix("--provider=") => {
+        let value = String::unsafe_substring(arg, start=11, end=arg.length())
+        provider = parse_github_import_provider_option(value)
+        i += 1
+        continue
+      }
+      _ if arg.has_prefix("--input=") => {
+        input_path = Some(
+          String::unsafe_substring(arg, start=8, end=arg.length()),
+        )
         i += 1
         continue
       }
@@ -2632,8 +2752,14 @@ async fn handle_hub_issue_import(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
   let fs = OsFs::new()
-  let repo_name = resolve_github_repo(fs, git_dir, repo)
-  let (stdout, _stderr) = gh_issue_list(repo_name, state_value, limit)
+  let (stdout, _stderr) = match provider {
+    GitHubImportProvider::GhCli => {
+      let repo_name = resolve_github_repo(fs, git_dir, repo)
+      gh_issue_list(repo_name, state_value, limit)
+    }
+    GitHubImportProvider::JsonFile =>
+      read_import_json_from_file(fs, "hub issue import", input_path)
+  }
   let issues = parse_gh_issues(stdout)
   if issues.length() == 0 {
     print_line("No issues to import")
@@ -3367,6 +3493,20 @@ struct HubSyncRuntimeOptions {
   auth_token : String?
   signing_key : String?
   require_signed : Bool?
+  conflict_policy : @hub.RecordMergePolicy?
+}
+
+///|
+fn parse_hub_conflict_policy(
+  value : String,
+) -> @hub.RecordMergePolicy raise @git.GitError {
+  match @hub.parse_record_merge_policy(value) {
+    Some(policy) => policy
+    None =>
+      raise @git.GitError::InvalidObject(
+        "Unknown hub conflict policy: \{value}",
+      )
+  }
 }
 
 ///|
@@ -3378,6 +3518,7 @@ fn parse_hub_sync_runtime_options(
   let mut auth_token : String? = None
   let mut signing_key : String? = None
   let mut require_signed : Bool? = None
+  let mut conflict_policy : @hub.RecordMergePolicy? = None
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -3410,6 +3551,15 @@ fn parse_hub_sync_runtime_options(
         i += 1
         continue
       }
+      "--conflict-policy" if i + 1 < args.length() => {
+        conflict_policy = Some(parse_hub_conflict_policy(args[i + 1]))
+        i += 2
+        continue
+      }
+      "--conflict-policy" =>
+        raise @git.GitError::InvalidObject(
+          "hub sync: --conflict-policy requires a value",
+        )
       _ if arg.has_prefix("--auth-token=") => {
         auth_token = Some(
           String::unsafe_substring(arg, start=13, end=arg.length()),
@@ -3431,6 +3581,12 @@ fn parse_hub_sync_runtime_options(
         i += 1
         continue
       }
+      _ if arg.has_prefix("--conflict-policy=") => {
+        let value = String::unsafe_substring(arg, start=18, end=arg.length())
+        conflict_policy = Some(parse_hub_conflict_policy(value))
+        i += 1
+        continue
+      }
       _ if arg.has_prefix("-") =>
         raise @git.GitError::InvalidObject("Unknown hub sync option: \{arg}")
       _ => {
@@ -3440,7 +3596,7 @@ fn parse_hub_sync_runtime_options(
       }
     }
   }
-  { remote_url, auth_token, signing_key, require_signed }
+  { remote_url, auth_token, signing_key, require_signed, conflict_policy }
 }
 
 ///|
@@ -3465,6 +3621,7 @@ async fn handle_hub_sync_push(args : Array[String]) -> Unit raise Error {
     signing_key=options.signing_key,
     require_signed=options.require_signed,
     auth_token=options.auth_token,
+    conflict_policy=options.conflict_policy,
   )
   if result.success() {
     print_line(result.message())
@@ -3617,6 +3774,7 @@ async fn handle_hub_sync_fetch(args : Array[String]) -> Unit raise Error {
     signing_key=options.signing_key,
     require_signed=options.require_signed,
     auth_token=options.auth_token,
+    conflict_policy=options.conflict_policy,
   )
   if result.success() {
     let after_store = load_hub_record_store(objects, refs)
@@ -3749,6 +3907,54 @@ async fn handle_hub_dump(args : Array[String]) -> Unit raise Error {
       print_line(format_hub_record_summary(rec))
     }
   }
+}
+
+///|
+enum GitHubImportProvider {
+  GhCli
+  JsonFile
+}
+
+///|
+fn parse_github_import_provider(value : String) -> GitHubImportProvider? {
+  match value.to_lower() {
+    "gh" | "gh-cli" => Some(GitHubImportProvider::GhCli)
+    "json-file" | "file" => Some(GitHubImportProvider::JsonFile)
+    _ => None
+  }
+}
+
+///|
+fn parse_github_import_provider_option(
+  value : String,
+) -> GitHubImportProvider raise @git.GitError {
+  match parse_github_import_provider(value) {
+    Some(provider) => provider
+    None =>
+      raise @git.GitError::InvalidObject(
+        "Unknown GitHub import provider: \{value}",
+      )
+  }
+}
+
+///|
+fn read_import_json_from_file(
+  fs : OsFs,
+  context : String,
+  input_path : String?,
+) -> (String, String) raise @git.GitError {
+  guard input_path is Some(path) else {
+    raise @git.GitError::InvalidObject(
+      "\{context}: --input requires a file path when --provider=json-file",
+    )
+  }
+  let bytes = fs.read_file(path) catch {
+    err =>
+      raise @git.GitError::IoError(
+        "\{context}: failed to read --input file '\{path}': \{err}",
+      )
+  }
+  (decode_bytes(bytes), "")
 }
 
 ///|

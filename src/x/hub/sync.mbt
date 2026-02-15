@@ -87,6 +87,7 @@ pub fn merge_notes_commits(
   refs : &@lib.RefStore,
   local_id : @git.ObjectId,
   remote_id : @git.ObjectId,
+  conflict_policy? : RecordMergePolicy = RecordMergePolicy::Lww,
 ) -> PrSyncResult raise @git.GitError {
   // Fast-forward if possible
   if is_commit_ancestor_store(objects, local_id, remote_id) {
@@ -122,7 +123,12 @@ pub fn merge_notes_commits(
     raise @git.GitError::InvalidObject("Cannot read remote notes tree")
   }
   let merged_tree_id = merge_notes_trees_store(
-    objects, fs, git_dir, ltree, rtree,
+    objects,
+    fs,
+    git_dir,
+    ltree,
+    rtree,
+    conflict_policy~,
   )
   let commit = @git.Commit::new(
     merged_tree_id,
@@ -183,6 +189,7 @@ fn merge_notes_trees_store(
   git_dir : String,
   local_tree : @git.ObjectId,
   remote_tree : @git.ObjectId,
+  conflict_policy? : RecordMergePolicy = RecordMergePolicy::Lww,
 ) -> @git.ObjectId raise @git.GitError {
   let local_entries = read_tree_entries_store(objects, local_tree)
   let remote_entries = read_tree_entries_store(objects, remote_tree)
@@ -215,7 +222,11 @@ fn merge_notes_trees_store(
           let theirs = objects.get(rid)
           match (ours, theirs) {
             (Some(o), Some(t)) => {
-              let merged_bytes = merge_record_bytes(o.data, t.data)
+              let merged_bytes = merge_record_bytes_with_policy(
+                o.data,
+                t.data,
+                conflict_policy,
+              )
               let merged_text = @utf8.decode_lossy(merged_bytes[:])
               let (blob_id, compressed) = @git.create_blob_string(merged_text)
               write_object_bytes(fs, git_dir, blob_id, compressed)

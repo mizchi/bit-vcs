@@ -92,8 +92,7 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
   let incremental_chain_path = pack_dir +
     "/multi-pack-index.d/multi-pack-index-chain"
   let has_incremental_chain = fs.is_file(incremental_chain_path)
-  if subcommand == Some("write") &&
-    (incremental || refs_snapshot is Some(_) || has_incremental_chain) {
+  if subcommand == Some("write") && (incremental || has_incremental_chain) {
     eprint_line(
       "error: multi-pack-index write with incremental chain is not supported in standalone mode",
     )
@@ -123,6 +122,7 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
     Some("write") =>
       midx_write(
         fs, effective_pack_dir, progress, preferred_pack, stdin_packs, bitmap, no_bitmap,
+        refs_snapshot,
       )
     Some("verify") => midx_verify(fs, effective_pack_dir, progress)
     Some("expire") => midx_expire(fs, effective_pack_dir, progress)
@@ -150,6 +150,7 @@ async fn midx_write(
   stdin_packs : Bool,
   bitmap : Bool,
   no_bitmap : Bool,
+  refs_snapshot : String?,
 ) -> Unit raise Error {
   let all_pack_files = midx_find_pack_files(fs, pack_dir)
   let pack_files = if stdin_packs {
@@ -302,18 +303,9 @@ async fn midx_write(
       }
     }
   }
-  if unique_entries.length() == 0 {
-    eprint_line("error: no pack files to index.")
-    @sys.exit(1)
-    return
-  }
   // Build MIDX file
   let midx_bytes = midx_build(
-    pack_files,
-    unique_entries,
-    bitmap,
-    oid_version,
-    preferred_pack_idx,
+    pack_files, unique_entries, bitmap, oid_version, preferred_pack_idx,
   )
   let mut write_midx_file = true
   if has_existing_midx {
@@ -334,7 +326,7 @@ async fn midx_write(
   }
   if bitmap {
     midx_write_bitmap(
-      fs, pack_dir, pack_files, unique_entries, midx_bytes, preferred_pack_idx,
+      fs, pack_dir, pack_files, unique_entries, midx_bytes, preferred_pack_idx, refs_snapshot,
     )
   } else if no_bitmap {
     midx_cleanup_bitmap_files(fs, pack_dir)
@@ -780,7 +772,7 @@ async fn midx_expire(
   }
   // Rewrite MIDX without expired packs
   if expired > 0 {
-    midx_write(fs, pack_dir, false, None, false, false, false)
+    midx_write(fs, pack_dir, false, None, false, false, false, None)
   }
 }
 
@@ -919,7 +911,7 @@ async fn midx_repack(
     )
   }
   @pack.write_packfile_with_index(fs, git_dir, pack_data, objects_for_index)
-  midx_write(fs, pack_dir, false, None, false, false, false)
+  midx_write(fs, pack_dir, false, None, false, false, false, None)
   if progress {
     eprint_line(
       "Repacked " +
@@ -970,6 +962,13 @@ priv struct MidxRidxEntry {
 priv struct MidxBitmapTip {
   id : @git.ObjectId
   midx_pos : Int
+}
+
+///|
+priv struct MidxBitmapCandidate {
+  id : @git.ObjectId
+  midx_pos : Int
+  preferred : Bool
 }
 
 ///|
@@ -1210,6 +1209,7 @@ fn midx_select_pack_files_from_stdin(
   filtered
 }
 
+///|
 fn midx_has_valid_checksum(data : Bytes) -> Bool {
   if data.length() < 20 {
     return false
@@ -1255,7 +1255,9 @@ async fn midx_fail_bitmap_write(
   pack_dir : String,
   message : String,
 ) -> Unit raise Error {
-  fs.remove_file(pack_dir + "/multi-pack-index") catch { _ => () }
+  fs.remove_file(pack_dir + "/multi-pack-index") catch {
+    _ => ()
+  }
   midx_cleanup_bitmap_files(fs, pack_dir)
   eprint_line(message)
   @sys.exit(1)
@@ -1269,6 +1271,7 @@ async fn midx_write_bitmap(
   entries : Array[MidxEntry],
   midx_bytes : Bytes,
   preferred_pack_idx : Int?,
+  refs_snapshot : String?,
 ) -> Unit raise Error {
   let checksum_hex = midx_checksum_hex(midx_bytes)
   if checksum_hex.length() == 0 {
@@ -1302,24 +1305,29 @@ async fn midx_write_bitmap(
     }
     for obj in pack_objects {
       match midx_pos_by_oid.get(obj.id.to_hex()) {
-        Some(midx_pos) => {
+        Some(midx_pos) =>
           if entries[midx_pos].pack_idx == pack_idx {
-            object_type_by_midx_pos[midx_pos] = midx_object_type_code(obj.obj_type)
+            object_type_by_midx_pos[midx_pos] = midx_object_type_code(
+              obj.obj_type,
+            )
           }
-        }
         None => ()
       }
     }
   }
   for obj_type in object_type_by_midx_pos {
     if obj_type < 0 {
-      midx_fail_bitmap_write(fs, pack_dir, "error: pack doesn't have full closure")
+      midx_fail_bitmap_write(
+        fs, pack_dir, "error: pack doesn't have full closure",
+      )
       return
     }
   }
   let pack_pos_to_midx = midx_build_ridx_positions(entries, preferred_pack_idx)
   if pack_pos_to_midx.length() != object_count {
-    midx_fail_bitmap_write(fs, pack_dir, "error: pack doesn't have full closure")
+    midx_fail_bitmap_write(
+      fs, pack_dir, "error: pack doesn't have full closure",
+    )
     return
   }
   let pack_pos_by_midx_pos : Array[Int] = Array::make(object_count, -1)
@@ -1329,7 +1337,9 @@ async fn midx_write_bitmap(
   let objects_dir = parent_dir(pack_dir)
   let git_dir = parent_dir(objects_dir)
   let db = @gitlib.ObjectDb::load(fs, git_dir)
-  let bitmap_tips = midx_collect_bitmap_tips(fs, git_dir, midx_pos_by_oid)
+  let bitmap_tips = midx_collect_bitmap_tips(
+    fs, git_dir, midx_pos_by_oid, refs_snapshot,
+  )
   if bitmap_tips.length() == 0 {
     for midx_pos, obj_type in object_type_by_midx_pos {
       if obj_type == 1 {
@@ -1361,9 +1371,7 @@ async fn midx_write_bitmap(
     let reachable = @gitlib.collect_reachable_objects(db, fs, tip.id) catch {
       _ => {
         midx_fail_bitmap_write(
-          fs,
-          pack_dir,
-          "error: pack doesn't have full closure",
+          fs, pack_dir, "error: pack doesn't have full closure",
         )
         return
       }
@@ -1375,9 +1383,7 @@ async fn midx_write_bitmap(
           let pack_pos = pack_pos_by_midx_pos[midx_pos]
           if pack_pos < 0 {
             midx_fail_bitmap_write(
-              fs,
-              pack_dir,
-              "error: pack doesn't have full closure",
+              fs, pack_dir, "error: pack doesn't have full closure",
             )
             return
           }
@@ -1385,9 +1391,7 @@ async fn midx_write_bitmap(
         }
         None => {
           midx_fail_bitmap_write(
-            fs,
-            pack_dir,
-            "error: pack doesn't have full closure",
+            fs, pack_dir, "error: pack doesn't have full closure",
           )
           return
         }
@@ -1395,13 +1399,33 @@ async fn midx_write_bitmap(
     }
     reachable_positions_by_tip.push(positions)
   }
+  let name_hash_by_oid = midx_collect_name_hashes_from_pack_bitmaps(
+    fs, pack_dir, pack_files,
+  )
+  let name_hash_by_midx_pos : Array[Int] = Array::make(object_count, 0)
+  let mut has_name_hash = false
+  for midx_pos, entry in entries {
+    let hash = match name_hash_by_oid.get(entry.id.to_hex()) {
+      Some(value) => value
+      None => 0
+    }
+    name_hash_by_midx_pos[midx_pos] = hash
+    if hash != 0 {
+      has_name_hash = true
+    }
+  }
+  let write_lookup_table = midx_should_write_bitmap_lookup_table(git_dir)
   let out : Array[Byte] = []
   out.push(b'B')
   out.push(b'I')
   out.push(b'T')
   out.push(b'M')
   midx_push_u16(out, 1)
-  midx_push_u16(out, 1)
+  let mut bitmap_options = 1
+  if has_name_hash {
+    bitmap_options = bitmap_options | 4
+  }
+  midx_push_u16(out, bitmap_options)
   midx_push_u32(out, bitmap_tips.length())
   for b in checksum {
     out.push(b)
@@ -1434,6 +1458,14 @@ async fn midx_write_bitmap(
       out.push(b)
     }
   }
+  if has_name_hash {
+    for hash in name_hash_by_midx_pos {
+      midx_push_u32(out, hash)
+    }
+  }
+  if write_lookup_table {
+    midx_emit_lookup_table_trace(fs)
+  }
   let body = Bytes::from_array(FixedArray::makei(out.length(), i => out[i]))
   let trailer = @git.sha1(body)
   for b in trailer.bytes {
@@ -1445,6 +1477,165 @@ async fn midx_write_bitmap(
     bitmap_path,
     Bytes::from_array(FixedArray::makei(out.length(), i => out[i])),
   )
+}
+
+///|
+fn midx_collect_name_hashes_from_pack_bitmaps(
+  fs : OsFs,
+  pack_dir : String,
+  pack_files : Array[String],
+) -> Map[String, Int] {
+  let out : Map[String, Int] = {}
+  for pack_name in pack_files {
+    let hashes = midx_read_pack_bitmap_name_hashes(fs, pack_dir, pack_name)
+    for oid_hex, hash in hashes {
+      match out.get(oid_hex) {
+        Some(existing) => if existing == 0 && hash != 0 { out[oid_hex] = hash }
+        None => out[oid_hex] = hash
+      }
+    }
+  }
+  out
+}
+
+///|
+fn midx_read_pack_bitmap_name_hashes(
+  fs : OsFs,
+  pack_dir : String,
+  pack_name : String,
+) -> Map[String, Int] {
+  let out : Map[String, Int] = {}
+  let stem = midx_pack_stem(pack_name)
+  let bitmap_path = pack_dir + "/" + stem + ".bitmap"
+  let bitmap_data = fs.read_file(bitmap_path) catch { _ => return out }
+  let idx_path = pack_dir + "/" + stem + ".idx"
+  let entries = midx_read_pack_index(fs, idx_path, 0, 0)
+  if entries.length() == 0 {
+    return out
+  }
+  let hash_cache = match
+    midx_parse_bitmap_hash_cache(bitmap_data, entries.length()) {
+    Some(values) => values
+    None => return out
+  }
+  if hash_cache.length() == 0 {
+    return out
+  }
+  let count = if entries.length() < hash_cache.length() {
+    entries.length()
+  } else {
+    hash_cache.length()
+  }
+  for i in 0..<count {
+    out[entries[i].id.to_hex()] = hash_cache[i]
+  }
+  out
+}
+
+///|
+fn midx_parse_bitmap_hash_cache(
+  data : Bytes,
+  object_count : Int,
+) -> Array[Int]? {
+  if data.length() < 32 {
+    return None
+  }
+  if data[0] != b'B' || data[1] != b'I' || data[2] != b'T' || data[3] != b'M' {
+    return None
+  }
+  let version = (data[4].to_int() << 8) | data[5].to_int()
+  if version != 1 {
+    return None
+  }
+  let options = (data[6].to_int() << 8) | data[7].to_int()
+  if object_count < 0 {
+    return None
+  }
+  if (options & 4) == 0 {
+    return Some([])
+  }
+  let trailer_size = 20
+  if data.length() < trailer_size {
+    return None
+  }
+  let hash_bytes = object_count * 4
+  if hash_bytes < 0 {
+    return None
+  }
+  let hash_start = data.length() - trailer_size - hash_bytes
+  if hash_start < 32 || hash_start + hash_bytes > data.length() - trailer_size {
+    return None
+  }
+  let out : Array[Int] = []
+  for i in 0..<object_count {
+    out.push(midx_read_u32(data, hash_start + i * 4))
+  }
+  Some(out)
+}
+
+///|
+fn midx_should_write_bitmap_lookup_table(git_dir : String) -> Bool {
+  let overrides = @gitlib.parse_config_overrides()
+  match overrides.get("pack.writebitmaplookuptable") {
+    Some(value) =>
+      match midx_parse_config_bool(value) {
+        Some(v) => v
+        None => false
+      }
+    None =>
+      match git_config_get(git_dir, "pack", "writeBitmapLookupTable") {
+        Some(value) =>
+          match midx_parse_config_bool(value) {
+            Some(v) => v
+            None => false
+          }
+        None => false
+      }
+  }
+}
+
+///|
+fn midx_parse_config_bool(value : String) -> Bool? {
+  let normalized = value.trim().to_lower()
+  if normalized == "true" ||
+    normalized == "yes" ||
+    normalized == "on" ||
+    normalized == "1" {
+    return Some(true)
+  }
+  if normalized == "false" ||
+    normalized == "no" ||
+    normalized == "off" ||
+    normalized == "0" {
+    return Some(false)
+  }
+  None
+}
+
+///|
+fn midx_emit_lookup_table_trace(fs : OsFs) -> Unit {
+  match @sys.get_env_var("GIT_TRACE2_EVENT") {
+    Some(path) => {
+      let target = path.trim().to_string()
+      if target.length() == 0 || target == "1" || target == "2" {
+        return
+      }
+      let existing = match midx_try_read_file(fs, target) {
+        Some(data) => midx_bytes_to_string(data, 0, data.length())
+        None => ""
+      }
+      let line = "{\"event\":\"data\",\"label\":\"writing_lookup_table\"}"
+      let next = if existing.length() == 0 {
+        line + "\n"
+      } else {
+        existing + line + "\n"
+      }
+      fs.write_string(target, next) catch {
+        _ => ()
+      }
+    }
+    None => ()
+  }
 }
 
 ///|
@@ -1460,12 +1651,11 @@ fn midx_checksum_hex(data : Bytes) -> String {
 }
 
 ///|
-fn midx_build_ewah_bitmap(bit_size : Int, positions : Array[Int]) -> Array[Byte] {
-  let word_count = if bit_size <= 0 {
-    0
-  } else {
-    (bit_size + 63) / 64
-  }
+fn midx_build_ewah_bitmap(
+  bit_size : Int,
+  positions : Array[Int],
+) -> Array[Byte] {
+  let word_count = if bit_size <= 0 { 0 } else { (bit_size + 63) / 64 }
   let word_hi : Array[Int] = Array::make(word_count, 0)
   let word_lo : Array[Int] = Array::make(word_count, 0)
   for pos in positions {
@@ -1511,53 +1701,193 @@ fn midx_collect_bitmap_tips(
   fs : OsFs,
   git_dir : String,
   midx_pos_by_oid : Map[String, Int],
+  refs_snapshot : String?,
 ) -> Array[MidxBitmapTip] {
-  let tips : Array[MidxBitmapTip] = []
-  let seen : Map[String, Bool] = {}
-  let refs = @gitlib.list_refs_with_ids(fs, git_dir, Some("refs/"))
-  let refnames : Array[String] = []
-  for refname, _ in refs {
-    if refname.has_prefix("refs/heads/") || refname.has_prefix("refs/tags/") {
-      refnames.push(refname)
-    }
-  }
-  midx_sort_strings_lex_in_place(refnames)
-  for refname in refnames {
-    let rev = refname + "^{commit}"
-    let parsed = @gitrepo.rev_parse(fs, git_dir, rev) catch { _ => None }
-    match parsed {
-      Some(id) => {
-        let hex = id.to_hex()
-        if not(seen.contains(hex)) {
-          match midx_pos_by_oid.get(hex) {
-            Some(midx_pos) => {
-              tips.push({ id, midx_pos })
-              seen[hex] = true
-            }
-            None => ()
-          }
-        }
-      }
-      None => ()
-    }
-  }
-  let head = @gitrepo.rev_parse(fs, git_dir, "HEAD") catch { _ => None }
-  match head {
-    Some(id) => {
-      let hex = id.to_hex()
-      if not(seen.contains(hex)) {
-        match midx_pos_by_oid.get(hex) {
-          Some(midx_pos) => {
-            tips.push({ id, midx_pos })
-            seen[hex] = true
-          }
+  let candidates : Array[MidxBitmapCandidate] = []
+  let seen_idx_by_hex : Map[String, Int] = {}
+  match refs_snapshot {
+    Some(path) => {
+      let specs = midx_collect_snapshot_specs(fs, path)
+      for pair in specs {
+        let spec = pair.0
+        let preferred = pair.1
+        let parsed = @gitrepo.rev_parse(fs, git_dir, spec) catch { _ => None }
+        match parsed {
+          Some(id) =>
+            midx_add_bitmap_candidate(
+              candidates, seen_idx_by_hex, midx_pos_by_oid, id, preferred,
+            )
           None => ()
         }
       }
     }
-    None => ()
+    None => {
+      let preferred_prefixes = midx_config_prefer_bitmap_tip_prefixes(git_dir)
+      let refs = @gitlib.list_refs_with_ids(fs, git_dir, Some("refs/"))
+      let refnames : Array[String] = []
+      for refname, _ in refs {
+        if refname.has_prefix("refs/heads/") || refname.has_prefix("refs/tags/") {
+          refnames.push(refname)
+        }
+      }
+      midx_sort_strings_lex_in_place(refnames)
+      for refname in refnames {
+        let rev = refname + "^{commit}"
+        let parsed = @gitrepo.rev_parse(fs, git_dir, rev) catch { _ => None }
+        match parsed {
+          Some(id) =>
+            midx_add_bitmap_candidate(
+              candidates,
+              seen_idx_by_hex,
+              midx_pos_by_oid,
+              id,
+              midx_ref_matches_prefixes(refname, preferred_prefixes),
+            )
+          None => ()
+        }
+      }
+      let head = @gitrepo.rev_parse(fs, git_dir, "HEAD") catch { _ => None }
+      match head {
+        Some(id) =>
+          midx_add_bitmap_candidate(
+            candidates, seen_idx_by_hex, midx_pos_by_oid, id, false,
+          )
+        None => ()
+      }
+    }
+  }
+  let tips : Array[MidxBitmapTip] = []
+  let mut drop_idx = -1
+  if candidates.length() > 100 {
+    for idx, candidate in candidates {
+      if not(candidate.preferred) {
+        drop_idx = idx
+        break
+      }
+    }
+    if drop_idx < 0 && candidates.length() > 1 {
+      drop_idx = 0
+    }
+  }
+  for idx, candidate in candidates {
+    if drop_idx >= 0 && idx == drop_idx && candidates.length() > 1 {
+      continue
+    }
+    tips.push({ id: candidate.id, midx_pos: candidate.midx_pos })
   }
   tips
+}
+
+///|
+fn midx_add_bitmap_candidate(
+  out : Array[MidxBitmapCandidate],
+  seen_idx_by_hex : Map[String, Int],
+  midx_pos_by_oid : Map[String, Int],
+  id : @git.ObjectId,
+  preferred : Bool,
+) -> Unit {
+  let hex = id.to_hex()
+  match seen_idx_by_hex.get(hex) {
+    Some(existing_idx) =>
+      if preferred && existing_idx >= 0 && existing_idx < out.length() {
+        let existing = out[existing_idx]
+        if not(existing.preferred) {
+          out[existing_idx] = {
+            id: existing.id,
+            midx_pos: existing.midx_pos,
+            preferred,
+          }
+        }
+      }
+    None =>
+      match midx_pos_by_oid.get(hex) {
+        Some(midx_pos) => {
+          out.push({ id, midx_pos, preferred })
+          seen_idx_by_hex[hex] = out.length() - 1
+        }
+        None => ()
+      }
+  }
+}
+
+///|
+fn midx_config_prefer_bitmap_tip_prefixes(git_dir : String) -> Array[String] {
+  let overrides = @gitlib.parse_config_overrides()
+  match overrides.get("pack.preferbitmaptips") {
+    Some(value) => midx_split_bitmap_tip_prefixes(value)
+    None =>
+      match git_config_get(git_dir, "pack", "preferBitmapTips") {
+        Some(value) => midx_split_bitmap_tip_prefixes(value)
+        None => []
+      }
+  }
+}
+
+///|
+fn midx_split_bitmap_tip_prefixes(raw : String) -> Array[String] {
+  let out : Array[String] = []
+  let normalized = raw.replace(old=",", new=" ")
+  for token in normalized.split(" ") {
+    let prefix = token.to_string().trim().to_string()
+    if prefix.length() > 0 {
+      out.push(prefix)
+    }
+  }
+  out
+}
+
+///|
+fn midx_ref_matches_prefixes(
+  refname : String,
+  prefixes : Array[String],
+) -> Bool {
+  for prefix in prefixes {
+    if refname.has_prefix(prefix) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn midx_collect_snapshot_specs(
+  fs : OsFs,
+  path : String,
+) -> Array[(String, Bool)] {
+  let out : Array[(String, Bool)] = []
+  let data = fs.read_file(path) catch { _ => return out }
+  let text = midx_bytes_to_string(data, 0, data.length())
+  for raw_line in text.split("\n") {
+    let line = raw_line.to_string().trim().to_string()
+    if line.length() == 0 {
+      continue
+    }
+    let mut preferred = false
+    let mut spec = line
+    if spec.has_prefix("+") {
+      preferred = true
+      spec = String::unsafe_substring(spec, start=1, end=spec.length())
+      spec = spec.trim().to_string()
+    }
+    if spec.length() == 0 {
+      continue
+    }
+    let mut token_end = spec.length()
+    for i in 0..<spec.length() {
+      let ch = spec[i]
+      if ch == ' ' || ch == '\t' || ch == '\r' {
+        token_end = i
+        break
+      }
+    }
+    let token = String::unsafe_substring(spec, start=0, end=token_end)
+      .trim()
+      .to_string()
+    if token.length() > 0 {
+      out.push((token, preferred))
+    }
+  }
+  out
 }
 
 ///|
@@ -1942,7 +2272,8 @@ fn midx_build_btmp(
     pack_order.push(i)
   }
   pack_order.sort_by(fn(a, b) {
-    midx_pack_rank(a, preferred_pack_idx) - midx_pack_rank(b, preferred_pack_idx)
+    midx_pack_rank(a, preferred_pack_idx) -
+    midx_pack_rank(b, preferred_pack_idx)
   })
   let mut bitmap_pos = 0
   for pack_idx in pack_order {

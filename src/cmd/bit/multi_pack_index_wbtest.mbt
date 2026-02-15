@@ -104,7 +104,9 @@ test "midx build writes BTMP chunk only when --bitmap is requested" {
 ///|
 test "midx ewah bitmap uses literal RLW encoding compatible with git" {
   let ewah = midx_build_ewah_bitmap(130, [0, 40, 65, 129])
-  let ewah_bytes = Bytes::from_array(FixedArray::makei(ewah.length(), i => ewah[i]))
+  let ewah_bytes = Bytes::from_array(
+    FixedArray::makei(ewah.length(), i => ewah[i]),
+  )
   assert_eq(ewah.length(), 44)
   assert_eq(midx_read_u32(ewah_bytes, 0), 130)
   assert_eq(midx_read_u32(ewah_bytes, 4), 4)

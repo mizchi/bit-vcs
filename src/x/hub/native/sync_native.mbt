@@ -177,6 +177,18 @@ fn relay_auth_token() -> String? {
 }
 
 ///|
+fn relay_conflict_policy() -> @hub.RecordMergePolicy {
+  match @sys.get_env_var("BIT_HUB_CONFLICT_POLICY") {
+    Some(value) =>
+      match @hub.parse_record_merge_policy(value) {
+        Some(policy) => policy
+        None => @hub.default_record_merge_policy()
+      }
+    None => @hub.default_record_merge_policy()
+  }
+}
+
+///|
 fn relay_headers_with_auth(
   headers : Map[String, String],
   auth_token : String?,
@@ -426,6 +438,7 @@ fn apply_relay_record(
   store : @hub.HubStore,
   objects : &@lib.ObjectStore,
   record : @hub.HubRecord,
+  conflict_policy : @hub.RecordMergePolicy,
 ) -> Bool raise @git.GitError {
   if not(
       relay_record_matches_signing_policy(
@@ -454,9 +467,10 @@ fn apply_relay_record(
           true
         }
         Some(existing_blob) => {
-          let merged = @hub.merge_record_bytes(
+          let merged = @hub.merge_record_bytes_with_policy(
             existing_blob.data,
             incoming_bytes,
+            conflict_policy,
           )
           if merged == existing_blob.data {
             false
@@ -479,10 +493,11 @@ fn apply_relay_records(
   records : Array[@hub.HubRecord],
   commit_timestamp : Int64,
   message : String,
+  conflict_policy : @hub.RecordMergePolicy,
 ) -> Bool raise @git.GitError {
   let mut changed = false
   for record in records {
-    if apply_relay_record(store, objects, record) {
+    if apply_relay_record(store, objects, record, conflict_policy) {
       changed = true
     }
   }
@@ -635,6 +650,7 @@ async fn relay_fetch_with_http(
   signing_key~ : String?,
   require_signed? : Bool = false,
   auth_token~ : String?,
+  conflict_policy? : @hub.RecordMergePolicy = @hub.default_record_merge_policy(),
 ) -> @hub.PrSyncResult raise @git.GitError {
   let base_url = trim_trailing_slash(remote_url)
   let before = @lib.resolve_ref(rfs, git_dir, @hub.hub_notes_ref_name())
@@ -675,7 +691,7 @@ async fn relay_fetch_with_http(
     }
   }
   let changed = apply_relay_records(
-    store, objects, refs, records, max_ts, "hub relay fetch",
+    store, objects, refs, records, max_ts, "hub relay fetch", conflict_policy,
   )
   write_relay_cursor(fs, git_dir, base_url, next_cursor)
   if changed {
@@ -751,6 +767,7 @@ async fn hub_fetch_git_http(
   rfs : &@git.RepoFileSystem,
   git_dir : String,
   remote_url : String,
+  conflict_policy? : @hub.RecordMergePolicy = @hub.default_record_merge_policy(),
 ) -> @hub.PrSyncResult raise @git.GitError {
   let ref_name = @hub.hub_notes_ref_name()
   let (refs, _, _, _) = @gitionative.discover_upload_refs_http(remote_url, true)
@@ -796,7 +813,14 @@ async fn hub_fetch_git_http(
         @hub.PrSyncResult::new(true, "Already up to date", Some(lid), Some(rid))
       } else {
         @hub.merge_notes_commits(
-          hub, fs, git_dir, obj_store, ref_store, lid, rid,
+          hub,
+          fs,
+          git_dir,
+          obj_store,
+          ref_store,
+          lid,
+          rid,
+          conflict_policy~,
         )
       }
   }
@@ -812,6 +836,7 @@ pub async fn hub_push(
   signing_key~ : String?,
   require_signed~ : Bool?,
   auth_token~ : String?,
+  conflict_policy~ : @hub.RecordMergePolicy?,
 ) -> @hub.PrSyncResult raise @git.GitError {
   let effective_signing_key = match signing_key {
     Some(value) => Some(value)
@@ -824,6 +849,10 @@ pub async fn hub_push(
   let effective_auth_token = match auth_token {
     Some(value) => Some(value)
     None => relay_auth_token()
+  }
+  let _effective_conflict_policy = match conflict_policy {
+    Some(value) => value
+    None => relay_conflict_policy()
   }
   match parse_relay_base_url(remote_url) {
     Some(base_url) =>
@@ -871,6 +900,7 @@ pub async fn hub_fetch(
   signing_key~ : String?,
   require_signed~ : Bool?,
   auth_token~ : String?,
+  conflict_policy~ : @hub.RecordMergePolicy?,
 ) -> @hub.PrSyncResult raise @git.GitError {
   let effective_signing_key = match signing_key {
     Some(value) => Some(value)
@@ -884,6 +914,10 @@ pub async fn hub_fetch(
     Some(value) => Some(value)
     None => relay_auth_token()
   }
+  let effective_conflict_policy = match conflict_policy {
+    Some(value) => value
+    None => relay_conflict_policy()
+  }
   match parse_relay_base_url(remote_url) {
     Some(base_url) =>
       relay_fetch_with_http(
@@ -896,9 +930,17 @@ pub async fn hub_fetch(
         signing_key=effective_signing_key,
         require_signed=effective_require_signed,
         auth_token=effective_auth_token,
+        conflict_policy=effective_conflict_policy,
       )
     None =>
-      hub_fetch_git_http(hub, fs, rfs, git_dir, remote_url) catch {
+      hub_fetch_git_http(
+        hub,
+        fs,
+        rfs,
+        git_dir,
+        remote_url,
+        conflict_policy=effective_conflict_policy,
+      ) catch {
         err => {
           if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
             raise err
@@ -914,6 +956,7 @@ pub async fn hub_fetch(
               signing_key=effective_signing_key,
               require_signed=effective_require_signed,
               auth_token=effective_auth_token,
+              conflict_policy=effective_conflict_policy,
             )
           } else {
             raise err

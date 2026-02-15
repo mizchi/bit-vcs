@@ -38,7 +38,10 @@ fn update_ref_storage_runtime_delegate_args(
     return None
   }
   let (should_log, always) = @gitrepo.should_log_ref(
-    fs, git_dir, parsed.refname, is_bare,
+    fs,
+    git_dir,
+    parsed.refname,
+    is_bare,
   ) catch {
     _ => return None
   }
@@ -62,7 +65,8 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
   }
   let is_bare = is_bare_repo_dir(root)
   if update_ref_should_use_storage_runtime_args(args) {
-    match update_ref_storage_runtime_delegate_args(rfs, git_dir, is_bare, args) {
+    match
+      update_ref_storage_runtime_delegate_args(rfs, git_dir, is_bare, args) {
       Some(update_args) => {
         @runtime.run_storage_command(
           fs,

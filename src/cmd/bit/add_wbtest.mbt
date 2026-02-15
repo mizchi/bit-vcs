@@ -29,11 +29,13 @@ test "add: compatobjectformat=sha256 requires standalone error" {
 }
 
 ///|
-test "add: storage runtime routing only for simple pathspec mode" {
-  assert_true(add_should_use_storage_runtime(["a.txt"]))
-  assert_true(add_should_use_storage_runtime(["--", "-literal"]))
+test "add: storage runtime routing only for add-all without pathspecs" {
   assert_true(add_should_use_storage_runtime(["-A"]))
+  assert_true(add_should_use_storage_runtime(["--all"]))
 
+  assert_false(add_should_use_storage_runtime(["a.txt"]))
+  assert_false(add_should_use_storage_runtime(["--", "-literal"]))
+  assert_false(add_should_use_storage_runtime(["-A", "a.txt"]))
   assert_false(add_should_use_storage_runtime(["--refresh"]))
   assert_false(add_should_use_storage_runtime(["-n", "a.txt"]))
 }

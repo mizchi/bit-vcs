@@ -184,7 +184,7 @@ async test "storage runtime cmd wrapper: delegates error path" {
 fn cmd_storage_parse_should_fail(
   cmd : String,
   args : Array[String],
-  ) -> Unit raise Error {
+) -> Unit raise Error {
   let mut failed = false
   let _ = storage_runtime_parse_command(cmd, args) catch {
     _ => {
@@ -203,11 +203,7 @@ fn cmd_storage_parse_should_fail(
 ///|
 test "storage runtime parser: init normal and invalid ref-format" {
   let parsed = storage_runtime_parse_command("init", [
-    "-q",
-    "--initial-branch",
-    "dev",
-    "--ref-format=files",
-    "--object-format=sha1",
+    "-q", "--initial-branch", "dev", "--ref-format=files", "--object-format=sha1",
   ]) catch {
     err => {
       fail("parse init failed: \{err}")
@@ -252,10 +248,7 @@ test "storage runtime parser: add normal and no pathspec" {
 ///|
 test "storage runtime parser: commit normal and missing message" {
   let parsed = storage_runtime_parse_command("commit", [
-    "-am",
-    "msg",
-    "--allow-empty",
-    "-q",
+    "-am", "msg", "--allow-empty", "-q",
   ]) catch {
     err => {
       fail("parse commit failed: \{err}")
@@ -305,8 +298,7 @@ test "storage runtime parser: status normal and pathspec invalid" {
 ///|
 test "storage runtime parser: log normal and revision invalid" {
   let parsed = storage_runtime_parse_command("log", [
-    "--oneline",
-    "--max-count=3",
+    "--oneline", "--max-count=3",
   ]) catch {
     err => {
       fail("parse log failed: \{err}")
@@ -326,10 +318,7 @@ test "storage runtime parser: log normal and revision invalid" {
 ///|
 test "storage runtime parser: hash-object normal and invalid type" {
   let parsed = storage_runtime_parse_command("hash-object", [
-    "-w",
-    "-t",
-    "tree",
-    "x.txt",
+    "-w", "-t", "tree", "x.txt",
   ]) catch {
     err => {
       fail("parse hash-object failed: \{err}")
@@ -372,8 +361,7 @@ test "storage runtime parser: write-tree normal and invalid option" {
 ///|
 test "storage runtime parser: update-ref normal and missing value" {
   let parsed = storage_runtime_parse_command("update-ref", [
-    "refs/heads/dev",
-    "@",
+    "refs/heads/dev", "@",
   ]) catch {
     err => {
       fail("parse update-ref failed: \{err}")
@@ -395,9 +383,7 @@ test "storage runtime parser: update-ref normal and missing value" {
     _ => fail("expected update-ref command")
   }
   let parsed_delete = storage_runtime_parse_command("update-ref", [
-    "-d",
-    "refs/heads/dev",
-    "oldhash",
+    "-d", "refs/heads/dev", "oldhash",
   ]) catch {
     err => {
       fail("parse update-ref delete failed: \{err}")

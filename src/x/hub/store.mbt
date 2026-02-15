@@ -320,6 +320,54 @@ fn record_is_newer(a : HubRecord, b : HubRecord) -> Bool {
 }
 
 ///|
+pub enum RecordMergePolicy {
+  Lww
+  TombstoneWins
+}
+
+///|
+pub fn parse_record_merge_policy(value : String) -> RecordMergePolicy? {
+  match value.to_lower() {
+    "lww" => Some(RecordMergePolicy::Lww)
+    "tombstone-wins" | "deleted-wins" => Some(RecordMergePolicy::TombstoneWins)
+    _ => None
+  }
+}
+
+///|
+pub fn default_record_merge_policy() -> RecordMergePolicy {
+  RecordMergePolicy::Lww
+}
+
+///|
+fn select_merge_winner(
+  ours : HubRecord,
+  theirs : HubRecord,
+  conflict_policy : RecordMergePolicy,
+) -> HubRecord {
+  match conflict_policy {
+    RecordMergePolicy::TombstoneWins =>
+      if ours.deleted != theirs.deleted {
+        if theirs.deleted {
+          theirs
+        } else {
+          ours
+        }
+      } else if record_is_newer(theirs, ours) {
+        theirs
+      } else {
+        ours
+      }
+    RecordMergePolicy::Lww =>
+      if record_is_newer(theirs, ours) {
+        theirs
+      } else {
+        ours
+      }
+  }
+}
+
+///|
 fn is_valid_record(record : HubRecord) -> Bool {
   record.key.length() > 0 && record.kind.length() > 0
 }
@@ -359,6 +407,15 @@ fn sign_record(record : HubRecord, signing_key : String) -> HubRecord {
 
 ///|
 pub fn merge_record_bytes(ours : Bytes, theirs : Bytes) -> Bytes {
+  merge_record_bytes_with_policy(ours, theirs, RecordMergePolicy::Lww)
+}
+
+///|
+pub fn merge_record_bytes_with_policy(
+  ours : Bytes,
+  theirs : Bytes,
+  conflict_policy : RecordMergePolicy,
+) -> Bytes {
   let ours_text = @utf8.decode_lossy(ours[:])
   let theirs_text = @utf8.decode_lossy(theirs[:])
   let ours_record = parse_hub_record(ours_text)
@@ -369,11 +426,7 @@ pub fn merge_record_bytes(ours : Bytes, theirs : Bytes) -> Bytes {
   if (theirs_record |> is_valid_record |> not) {
     return ours
   }
-  let winner = if record_is_newer(theirs_record, ours_record) {
-    theirs_record
-  } else {
-    ours_record
-  }
+  let winner = select_merge_winner(ours_record, theirs_record, conflict_policy)
   @utf8.encode(winner.serialize())
 }
 

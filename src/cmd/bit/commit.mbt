@@ -37,10 +37,7 @@ fn commit_has_no_verify_flag(args : Array[String]) -> Bool {
 }
 
 ///|
-fn commit_has_merge_state(
-  fs : OsFs,
-  git_dir : String,
-) -> Bool {
+fn commit_has_merge_state(fs : OsFs, git_dir : String) -> Bool {
   fs.is_file(git_dir + "/MERGE_HEAD") ||
   fs.is_file(git_dir + "/MERGE_MSG") ||
   fs.is_file(git_dir + "/MERGE_MODE") ||

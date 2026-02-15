@@ -510,7 +510,7 @@ test_expect_success 'multi-pack-index write --bitmap works for single-pack repo 
     )
 '
 
-test_expect_success 'multi-pack-index write --bitmap is unsupported for multi-pack repo if SHIM_REAL_GIT points to false' '
+test_expect_success 'multi-pack-index write --bitmap works for multi-pack repo if SHIM_REAL_GIT points to false' '
     git_cmd init repo &&
     (
         cd repo &&
@@ -523,8 +523,9 @@ test_expect_success 'multi-pack-index write --bitmap is unsupported for multi-pa
         git_cmd commit -m "second commit" &&
         git_cmd repack -d &&
         test "$(ls .git/objects/pack/pack-*.pack | wc -l)" -ge 2 &&
-        SHIM_REAL_GIT=false test_must_fail git_cmd multi-pack-index write --bitmap >out 2>err &&
-        grep -Eiq "single-pack|standalone|bitmap" err
+        SHIM_REAL_GIT=false git_cmd multi-pack-index write --bitmap &&
+        test_file_exists .git/objects/pack/multi-pack-index &&
+        ls .git/objects/pack/multi-pack-index-*.bitmap >/dev/null 2>&1
     )
 '
 

@@ -202,6 +202,70 @@ test "hub parser: parse_hub_issue_list_options rejects missing limit value" {
 }
 
 ///|
+async test "hub parser: parse_hub_pr_create_options accepts positional source/target" {
+  let options = parse_hub_pr_create_options(
+    ["--title", "Add feature", "feature", "main"],
+    "hub pr create",
+  )
+  assert_eq(options.title, "Add feature")
+  assert_eq(options.body, "")
+  assert_eq(options.source_branch, "feature")
+  assert_eq(options.target_branch, "main")
+  assert_eq(options.source_repo, None)
+  assert_eq(options.source_ref, None)
+}
+
+///|
+async test "hub parser: parse_hub_pr_create_options rejects missing title value" {
+  ignore(
+    parse_hub_pr_create_options(["--title"], "hub pr create") catch {
+      @git.GitError::InvalidObject(message) => {
+        assert_true(message.contains("--title requires a value"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
+}
+
+///|
+async test "hub pr update: --label requires a value" {
+  handle_hub_pr_update(["123", "--label"]) catch {
+    @git.GitError::InvalidObject(message) => {
+      assert_true(message.contains("--label requires a value"))
+      return ()
+    }
+    err => fail("unexpected error: \{err.to_string()}")
+  }
+  fail("expected invalid object error")
+}
+
+///|
+async test "hub pr review submit: --verdict requires a value" {
+  handle_hub_pr_review_submit(["123", "--verdict"]) catch {
+    @git.GitError::InvalidObject(message) => {
+      assert_true(message.contains("--verdict requires a value"))
+      return ()
+    }
+    err => fail("unexpected error: \{err.to_string()}")
+  }
+  fail("expected invalid object error")
+}
+
+///|
+async test "hub pr review submit: --commit requires a value" {
+  handle_hub_pr_review_submit(["123", "--approve", "--commit"]) catch {
+    @git.GitError::InvalidObject(message) => {
+      assert_true(message.contains("--commit requires a value"))
+      return ()
+    }
+    err => fail("unexpected error: \{err.to_string()}")
+  }
+  fail("expected invalid object error")
+}
+
+///|
 test "hub dump parser: defaults" {
   let opts = parse_hub_dump_options([])
   assert_eq(opts.prefix, "hub/")
@@ -374,6 +438,78 @@ async test "hub issue import: --limit requires a value" {
 }
 
 ///|
+test "hub import provider parser: gh and json-file aliases" {
+  match parse_github_import_provider("gh") {
+    Some(GitHubImportProvider::GhCli) => ()
+    _ => fail("expected gh provider")
+  }
+  match parse_github_import_provider("gh-cli") {
+    Some(GitHubImportProvider::GhCli) => ()
+    _ => fail("expected gh-cli provider")
+  }
+  match parse_github_import_provider("json-file") {
+    Some(GitHubImportProvider::JsonFile) => ()
+    _ => fail("expected json-file provider")
+  }
+  match parse_github_import_provider("file") {
+    Some(GitHubImportProvider::JsonFile) => ()
+    _ => fail("expected file provider")
+  }
+  match parse_github_import_provider("unknown") {
+    None => ()
+    _ => fail("expected unknown provider to be rejected")
+  }
+}
+
+///|
+async test "hub pr import: --provider requires a value" {
+  handle_hub_pr_import(["--provider"]) catch {
+    @git.GitError::InvalidObject(message) => {
+      assert_true(message.contains("--provider requires a value"))
+      return ()
+    }
+    err => fail("unexpected error: \{err.to_string()}")
+  }
+  fail("expected invalid object error")
+}
+
+///|
+async test "hub pr import: unknown provider fails" {
+  handle_hub_pr_import(["--provider", "unknown"]) catch {
+    @git.GitError::InvalidObject(message) => {
+      assert_true(message.contains("Unknown GitHub import provider"))
+      return ()
+    }
+    err => fail("unexpected error: \{err.to_string()}")
+  }
+  fail("expected invalid object error")
+}
+
+///|
+async test "hub pr import: json-file provider requires --input" {
+  handle_hub_pr_import(["--provider", "json-file"]) catch {
+    @git.GitError::InvalidObject(message) => {
+      assert_true(message.contains("--input requires a file path"))
+      return ()
+    }
+    err => fail("unexpected error: \{err.to_string()}")
+  }
+  fail("expected invalid object error")
+}
+
+///|
+async test "hub issue import: --input requires a value" {
+  handle_hub_issue_import(["--provider", "json-file", "--input"]) catch {
+    @git.GitError::InvalidObject(message) => {
+      assert_true(message.contains("--input requires a value"))
+      return ()
+    }
+    err => fail("unexpected error: \{err.to_string()}")
+  }
+  fail("expected invalid object error")
+}
+
+///|
 test "hub parser: parse_gh_prs rejects missing branch names" {
   let payload =
     #|[{
@@ -522,6 +658,56 @@ test "hub sync parser: defaults to configured remote and allows unsigned overrid
   assert_eq(options.require_signed, Some(false))
   assert_eq(options.auth_token, None)
   assert_eq(options.signing_key, None)
+}
+
+///|
+test "hub sync parser: parses conflict policy option" {
+  let options = parse_hub_sync_runtime_options(
+    ["--conflict-policy", "tombstone-wins"],
+    default_remote_url=Some("https://origin.example/repo.git"),
+  )
+  assert_eq(options.remote_url, Some("https://origin.example/repo.git"))
+  match options.conflict_policy {
+    Some(@hub.RecordMergePolicy::TombstoneWins) => ()
+    _ => fail("expected tombstone-wins policy")
+  }
+}
+
+///|
+test "hub sync parser: invalid conflict policy value fails" {
+  ignore(
+    parse_hub_sync_runtime_options(["--conflict-policy", "unknown"]) catch {
+      @git.GitError::InvalidObject(message) => {
+        assert_true(message.contains("Unknown hub conflict policy"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
+}
+
+///|
+test "hub sync parser: --sign-key alias parses inline value" {
+  let options = parse_hub_sync_runtime_options([
+    "--sign-key=key-1", "relay+http://127.0.0.1:8787",
+  ])
+  assert_eq(options.signing_key, Some("key-1"))
+  assert_eq(options.remote_url, Some("relay+http://127.0.0.1:8787"))
+}
+
+///|
+test "hub sync parser: rejects unknown option" {
+  ignore(
+    parse_hub_sync_runtime_options(["--unknown"]) catch {
+      @git.GitError::InvalidObject(message) => {
+        assert_true(message.contains("Unknown hub sync option"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
 }
 
 ///|

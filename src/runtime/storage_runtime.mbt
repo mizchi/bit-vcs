@@ -555,7 +555,9 @@ fn storage_handle_commit(
     )
   }
   if args.all_modified {
-    let all_modified_paths = storage_collect_commit_all_modified_paths(rfs, root)
+    let all_modified_paths = storage_collect_commit_all_modified_paths(
+      rfs, root,
+    )
     if all_modified_paths.length() > 0 {
       @gitlib.add_paths(fs, rfs, root, all_modified_paths)
     }

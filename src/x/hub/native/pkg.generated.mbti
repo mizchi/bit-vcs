@@ -8,9 +8,9 @@ import {
 }
 
 // Values
-pub async fn hub_fetch(@hub.Hub, &@types.FileSystem, &@types.RepoFileSystem, String, String, signing_key~ : String?, require_signed~ : Bool?, auth_token~ : String?) -> @hub.PrSyncResult raise @object.GitError
+pub async fn hub_fetch(@hub.Hub, &@types.FileSystem, &@types.RepoFileSystem, String, String, signing_key~ : String?, require_signed~ : Bool?, auth_token~ : String?, conflict_policy~ : @hub.RecordMergePolicy?) -> @hub.PrSyncResult raise @object.GitError
 
-pub async fn hub_push(@hub.Hub, &@types.RepoFileSystem, String, String, signing_key~ : String?, require_signed~ : Bool?, auth_token~ : String?) -> @hub.PrSyncResult raise @object.GitError
+pub async fn hub_push(@hub.Hub, &@types.RepoFileSystem, String, String, signing_key~ : String?, require_signed~ : Bool?, auth_token~ : String?, conflict_policy~ : @hub.RecordMergePolicy?) -> @hub.PrSyncResult raise @object.GitError
 
 // Errors
 

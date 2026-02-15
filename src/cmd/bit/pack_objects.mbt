@@ -928,6 +928,31 @@ fn dedup_objects(objects : Array[@git.PackObject]) -> Array[@git.PackObject] {
 }
 
 ///|
+fn sort_stdin_object_mode_objects(objects : Array[@git.PackObject]) -> Unit {
+  objects.sort_by(fn(a, b) {
+    let a_type = a.obj_type.to_packfile_type()
+    let b_type = b.obj_type.to_packfile_type()
+    if a_type != b_type {
+      return a_type - b_type
+    }
+    let a_size = a.data.length()
+    let b_size = b.data.length()
+    if a_size != b_size {
+      return b_size - a_size
+    }
+    let a_hex = @git.hash_object_content(a.obj_type, a.data).to_hex()
+    let b_hex = @git.hash_object_content(b.obj_type, b.data).to_hex()
+    if a_hex < b_hex {
+      -1
+    } else if a_hex > b_hex {
+      1
+    } else {
+      0
+    }
+  })
+}
+
+///|
 fn filter_objects(
   objects : Array[@git.PackObject],
   exclude : Map[String, Bool],
@@ -1666,23 +1691,13 @@ async fn handle_pack_objects(args : Array[String]) -> Unit raise Error {
         )
         @sys.exit(1)
       }
-      if !cfg.stdout && !cfg.stdin_packs && !cfg.revs && !cfg.all {
-        @stdio.stderr.write(
-          "bit pack-objects: file-output stdin-object mode is not supported in standalone mode\n",
-        )
-        @sys.exit(1)
-      }
       let trace2_event = @sys.get_env_var("GIT_TRACE2_EVENT")
       ignore(trace2_event)
       ignore(is_pack_reuse_config_enabled(git_dir))
       // Keep these flags visible for future compatibility tuning.
       let non_default_delta_params = cfg.window == 0 || cfg.depth != 50
-      let stdin_object_mode_without_revs = cfg.stdout &&
-        !cfg.revs &&
-        !cfg.all &&
-        !cfg.stdin_packs
+      let stdin_object_mode = !cfg.revs && !cfg.all && !cfg.stdin_packs
       ignore(non_default_delta_params)
-      ignore(stdin_object_mode_without_revs)
       let pack_dir = git_dir + "/objects/pack"
       if cfg.name_hash_version is Some(version) &&
         cfg.write_bitmap &&
@@ -1996,6 +2011,9 @@ async fn handle_pack_objects(args : Array[String]) -> Unit raise Error {
         if tags.length() > 0 {
           objects.append(tags)
         }
+      }
+      if stdin_object_mode {
+        sort_stdin_object_mode_objects(objects)
       }
       objects = dedup_objects(objects)
       if cfg.progress {

@@ -10,6 +10,8 @@ import {
 // Values
 pub fn classify_record_trigger(HubRecord) -> RecordTriggerClass
 
+pub fn default_record_merge_policy() -> RecordMergePolicy
+
 pub fn find_remote_notes_ref(Array[(@object.ObjectId, String)]) -> (@object.ObjectId, String)
 
 pub fn find_upload_notes_ref(Array[(@object.ObjectId, String)]) -> (@object.ObjectId, String)?
@@ -24,9 +26,11 @@ pub fn issue_comment_prefix(String) -> String
 
 pub fn issue_meta_key(String) -> String
 
-pub fn merge_notes_commits(Hub, &@types.FileSystem, String, &@lib.ObjectStore, &@lib.RefStore, @object.ObjectId, @object.ObjectId) -> PrSyncResult raise @object.GitError
+pub fn merge_notes_commits(Hub, &@types.FileSystem, String, &@lib.ObjectStore, &@lib.RefStore, @object.ObjectId, @object.ObjectId, conflict_policy? : RecordMergePolicy) -> PrSyncResult raise @object.GitError
 
 pub fn merge_record_bytes(Bytes, Bytes) -> Bytes
+
+pub fn merge_record_bytes_with_policy(Bytes, Bytes, RecordMergePolicy) -> Bytes
 
 pub fn parse_hub_record(String) -> HubRecord
 
@@ -47,6 +51,8 @@ pub fn parse_pr_workflow_result(String) -> PrWorkflowResult raise PrError
 pub fn parse_pr_workflow_status(String) -> PrWorkflowStatus?
 
 pub fn parse_pull_request(String) -> PullRequest raise PrError
+
+pub fn parse_record_merge_policy(String) -> RecordMergePolicy?
 
 pub fn pr_comment_key(String, String) -> String
 
@@ -389,6 +395,11 @@ pub fn PullRequest::target_branch(Self) -> String
 pub fn PullRequest::target_commit(Self) -> @object.ObjectId
 pub fn PullRequest::title(Self) -> String
 pub fn PullRequest::updated_at(Self) -> Int64
+
+pub enum RecordMergePolicy {
+  Lww
+  TombstoneWins
+}
 
 pub(all) enum RecordTriggerClass {
   Full
