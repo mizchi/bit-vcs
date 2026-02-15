@@ -294,6 +294,84 @@ async test "main: show_command_help supports rebase-ai command" {
 }
 
 ///|
+async test "main: show_command_help supports all completion subcommands" {
+  for entry in all_subcommands() {
+    let cmd = entry.0
+    let ok = show_command_help(cmd, silent=true)
+    assert_true(ok)
+  }
+}
+
+///|
+async test "main: show_command_help supports command aliases" {
+  for cmd_alias in ["show-branches", "git-upload-pack", "git-receive-pack"] {
+    let ok = show_command_help(cmd_alias, silent=true)
+    assert_true(ok)
+  }
+}
+
+///|
+test "main: opt-in help text is disabled by default" {
+  let prev_full = @sys.get_env_var("BIT_HELP_FULL")
+  let prev_dir = @sys.get_env_var("BIT_HELP_TEXT_DIR")
+  @sys.unset_env_var("BIT_HELP_FULL")
+  @sys.unset_env_var("BIT_HELP_TEXT_DIR")
+  assert_false(help_text_opt_in_enabled())
+  assert_eq(load_opt_in_help_text("status"), None)
+  match prev_full {
+    Some(value) => @sys.set_env_var("BIT_HELP_FULL", value)
+    None => @sys.unset_env_var("BIT_HELP_FULL")
+  }
+  match prev_dir {
+    Some(value) => @sys.set_env_var("BIT_HELP_TEXT_DIR", value)
+    None => @sys.unset_env_var("BIT_HELP_TEXT_DIR")
+  }
+}
+
+///|
+test "main: opt-in help text is loaded from external files" {
+  let fs = OsFs::new()
+  let dir = "/tmp/bit-test-help-text-" + get_current_timestamp().to_string()
+  cleanup_tree(fs, dir)
+  fs.mkdir_p(dir)
+  fs.write_string(dir + "/show-branch.txt", "Detailed show-branch help")
+  let prev_full = @sys.get_env_var("BIT_HELP_FULL")
+  let prev_dir = @sys.get_env_var("BIT_HELP_TEXT_DIR")
+  @sys.set_env_var("BIT_HELP_FULL", "1")
+  @sys.set_env_var("BIT_HELP_TEXT_DIR", dir)
+  assert_true(help_text_opt_in_enabled())
+  assert_eq(
+    load_opt_in_help_text("show-branches"),
+    Some("Detailed show-branch help"),
+  )
+  match prev_full {
+    Some(value) => @sys.set_env_var("BIT_HELP_FULL", value)
+    None => @sys.unset_env_var("BIT_HELP_FULL")
+  }
+  match prev_dir {
+    Some(value) => @sys.set_env_var("BIT_HELP_TEXT_DIR", value)
+    None => @sys.unset_env_var("BIT_HELP_TEXT_DIR")
+  }
+  cleanup_tree(fs, dir)
+}
+
+///|
+async test "main: dispatch-only commands have help route" {
+  let dispatch_only = [
+    "diff-files",
+    "show-branches",
+    "rebase-ai",
+    "scalar",
+    "shell",
+    "version",
+  ]
+  for cmd in dispatch_only {
+    let ok = command_handles_builtin_help(cmd) || show_command_help(cmd, silent=true)
+    assert_true(ok)
+  }
+}
+
+///|
 test "main: normalize_dispatch_command maps ws to workspace" {
   assert_eq(normalize_dispatch_command("ws"), "workspace")
 }
