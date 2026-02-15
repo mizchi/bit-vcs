@@ -60,12 +60,8 @@ fn cmd_storage_setup_test_env() -> (
   @sys.set_env_var("GIT_COMMITTER_DATE", "1700000000")
   @sys.set_env_var("BIT_STORAGE_RUNTIME_QUIET", "1")
   (
-    prev_author_name,
-    prev_author_email,
-    prev_committer_name,
-    prev_committer_email,
-    prev_committer_date,
-    prev_quiet,
+    prev_author_name, prev_author_email, prev_committer_name, prev_committer_email,
+    prev_committer_date, prev_quiet,
   )
 }
 
@@ -87,6 +83,31 @@ fn cmd_storage_restore_test_env(
 }
 
 ///|
+fn cmd_storage_init_command() -> @runtime.StorageCommand {
+  @runtime.StorageCommand::Init({
+    quiet: true,
+    default_branch: "main",
+    ref_format: "files",
+    object_format: "sha1",
+  })
+}
+
+///|
+fn cmd_storage_add_command(path : String) -> @runtime.StorageCommand {
+  @runtime.StorageCommand::Add({ add_all: false, paths: [path] })
+}
+
+///|
+fn cmd_storage_commit_command(message : String) -> @runtime.StorageCommand {
+  @runtime.StorageCommand::Commit({
+    message,
+    all_modified: false,
+    allow_empty: false,
+    quiet: true,
+  })
+}
+
+///|
 async test "storage runtime cmd wrapper: delegates successful flow" {
   let fs = @git.TestFs::new()
   let root_cmd = "/repo-storage-runtime-cmd-wrapper"
@@ -100,28 +121,18 @@ async test "storage runtime cmd wrapper: delegates successful flow" {
     prev_quiet,
   ) = cmd_storage_setup_test_env()
 
-  run_storage_command(fs, fs, root_cmd, @runtime.StorageCommand::Init(["-q"])) catch {
+  run_storage_command(fs, fs, root_cmd, cmd_storage_init_command()) catch {
     err => fail("cmd init failed: \{err}")
   }
   fs.write_string(root_cmd + "/a.txt", "hello\n")
-  run_storage_command(fs, fs, root_cmd, @runtime.StorageCommand::Add(["a.txt"])) catch {
+  run_storage_command(fs, fs, root_cmd, cmd_storage_add_command("a.txt")) catch {
     err => fail("cmd add failed: \{err}")
   }
-  run_storage_command(
-    fs,
-    fs,
-    root_cmd,
-    @runtime.StorageCommand::Commit(["-q", "-m", "base"]),
-  ) catch {
+  run_storage_command(fs, fs, root_cmd, cmd_storage_commit_command("base")) catch {
     err => fail("cmd commit failed: \{err}")
   }
 
-  @runtime.run_storage_command(
-    fs,
-    fs,
-    root_runtime,
-    @runtime.StorageCommand::Init(["-q"]),
-  ) catch {
+  @runtime.run_storage_command(fs, fs, root_runtime, cmd_storage_init_command()) catch {
     err => fail("runtime init failed: \{err}")
   }
   fs.write_string(root_runtime + "/a.txt", "hello\n")
@@ -129,7 +140,7 @@ async test "storage runtime cmd wrapper: delegates successful flow" {
     fs,
     fs,
     root_runtime,
-    @runtime.StorageCommand::Add(["a.txt"]),
+    cmd_storage_add_command("a.txt"),
   ) catch {
     err => fail("runtime add failed: \{err}")
   }
@@ -137,7 +148,7 @@ async test "storage runtime cmd wrapper: delegates successful flow" {
     fs,
     fs,
     root_runtime,
-    @runtime.StorageCommand::Commit(["-q", "-m", "base"]),
+    cmd_storage_commit_command("base"),
   ) catch {
     err => fail("runtime commit failed: \{err}")
   }
@@ -146,17 +157,15 @@ async test "storage runtime cmd wrapper: delegates successful flow" {
     cmd_storage_decode_bytes(fs.read_file(root_cmd + "/.git/refs/heads/main")),
   )
   let runtime_head = cmd_storage_trim(
-    cmd_storage_decode_bytes(fs.read_file(root_runtime + "/.git/refs/heads/main")),
+    cmd_storage_decode_bytes(
+      fs.read_file(root_runtime + "/.git/refs/heads/main"),
+    ),
   )
   assert_eq(cmd_head, runtime_head)
 
   cmd_storage_restore_test_env(
-    prev_author_name,
-    prev_author_email,
-    prev_committer_name,
-    prev_committer_email,
-    prev_committer_date,
-    prev_quiet,
+    prev_author_name, prev_author_email, prev_committer_name, prev_committer_email,
+    prev_committer_date, prev_quiet,
   )
 }
 
@@ -164,19 +173,9 @@ async test "storage runtime cmd wrapper: delegates successful flow" {
 async test "storage runtime cmd wrapper: delegates error path" {
   let fs = @git.TestFs::new()
   let mut cmd_error = ""
-  let mut runtime_error = ""
   run_storage_command_by_name(fs, fs, "/repo-cmd-error", "clone", []) catch {
     err => cmd_error = "\{err}"
   }
-  @runtime.run_storage_command_by_name(
-    fs,
-    fs,
-    "/repo-runtime-error",
-    "clone",
-    [],
-  ) catch {
-    err => runtime_error = "\{err}"
-  }
   assert_true(cmd_error.length() > 0)
-  assert_eq(cmd_error, runtime_error)
+  assert_eq(cmd_error, "InvalidObject(\"unsupported storage command: clone\")")
 }

@@ -346,7 +346,7 @@ fn stage_paths_with_storage_runtime(
     fs,
     rfs,
     root,
-    @runtime.StorageCommand::Add(paths),
+    @runtime.StorageCommand::Add({ add_all: false, paths }),
   ) catch {
     err =>
       raise @git.GitError::InvalidObject(

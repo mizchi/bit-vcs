@@ -1,32 +1,69 @@
 ///|
-pub(all) enum StorageCommand {
-  Init(Array[String])
-  Add(Array[String])
-  Commit(Array[String])
-  Status(Array[String])
-  Log(Array[String])
-  HashObject(Array[String])
-  WriteTree(Array[String])
-  UpdateRef(Array[String])
+pub(all) struct StorageInitArgs {
+  quiet : Bool
+  default_branch : String
+  ref_format : String
+  object_format : String
 }
 
 ///|
-pub fn parse_storage_command(
-  cmd : String,
-  args : Array[String],
-) -> StorageCommand raise Error {
-  match cmd {
-    "init" => StorageCommand::Init(args)
-    "add" => StorageCommand::Add(args)
-    "commit" => StorageCommand::Commit(args)
-    "status" => StorageCommand::Status(args)
-    "log" => StorageCommand::Log(args)
-    "hash-object" => StorageCommand::HashObject(args)
-    "write-tree" => StorageCommand::WriteTree(args)
-    "update-ref" => StorageCommand::UpdateRef(args)
-    _ =>
-      raise @git.GitError::InvalidObject("unsupported storage command: " + cmd)
-  }
+pub(all) struct StorageAddArgs {
+  add_all : Bool
+  paths : Array[String]
+}
+
+///|
+pub(all) struct StorageCommitArgs {
+  message : String
+  all_modified : Bool
+  allow_empty : Bool
+  quiet : Bool
+}
+
+///|
+pub(all) struct StorageStatusArgs {
+  porcelain : Bool
+  short : Bool
+  show_branch : Bool
+}
+
+///|
+pub(all) struct StorageLogArgs {
+  oneline : Bool
+  max_count : Int
+}
+
+///|
+pub(all) struct StorageHashObjectArgs {
+  write_object : Bool
+  stdin_mode : Bool
+  obj_type : @git.ObjectType
+  paths : Array[String]
+}
+
+///|
+pub(all) struct StorageWriteTreeArgs {
+  prefix : String?
+}
+
+///|
+pub(all) struct StorageUpdateRefArgs {
+  delete_mode : Bool
+  refname : String
+  new_value : String?
+  old_value : String?
+}
+
+///|
+pub(all) enum StorageCommand {
+  Init(StorageInitArgs)
+  Add(StorageAddArgs)
+  Commit(StorageCommitArgs)
+  Status(StorageStatusArgs)
+  Log(StorageLogArgs)
+  HashObject(StorageHashObjectArgs)
+  WriteTree(StorageWriteTreeArgs)
+  UpdateRef(StorageUpdateRefArgs)
 }
 
 ///|
@@ -44,21 +81,11 @@ pub fn run_storage_command(
     StorageCommand::Log(args) => storage_handle_log(rfs, root, args)
     StorageCommand::HashObject(args) =>
       storage_handle_hash_object(fs, rfs, root, args)
-    StorageCommand::WriteTree(args) => storage_handle_write_tree(fs, rfs, root, args)
-    StorageCommand::UpdateRef(args) => storage_handle_update_ref(fs, rfs, root, args)
+    StorageCommand::WriteTree(args) =>
+      storage_handle_write_tree(fs, rfs, root, args)
+    StorageCommand::UpdateRef(args) =>
+      storage_handle_update_ref(fs, rfs, root, args)
   }
-}
-
-///|
-pub fn run_storage_command_by_name(
-  fs : &@git.FileSystem,
-  rfs : &@git.RepoFileSystem,
-  root : String,
-  cmd : String,
-  args : Array[String],
-) -> Unit raise Error {
-  let command = parse_storage_command(cmd, args)
-  run_storage_command(fs, rfs, root, command)
 }
 
 ///|
@@ -283,20 +310,6 @@ fn storage_get_commit_timestamp() -> Int64 {
 }
 
 ///|
-fn storage_is_short_count_flag(arg : String) -> Bool {
-  if not(arg.has_prefix("-")) || arg.length() <= 1 {
-    return false
-  }
-  let raw = String::unsafe_substring(arg, start=1, end=arg.length())
-  for c in raw {
-    if c < '0' || c > '9' {
-      return false
-    }
-  }
-  true
-}
-
-///|
 fn storage_hash_object_requires_standalone_error(
   write_object : Bool,
   compat_object_format : String?,
@@ -315,17 +328,6 @@ fn storage_read_all_stdin() -> Bytes raise Error {
   raise @git.GitError::InvalidObject(
     "hash-object: stdin is not supported in storage runtime",
   )
-}
-
-///|
-fn storage_parse_object_type(s : String) -> @git.ObjectType raise Error {
-  match s {
-    "blob" => @git.ObjectType::Blob
-    "tree" => @git.ObjectType::Tree
-    "commit" => @git.ObjectType::Commit
-    "tag" => @git.ObjectType::Tag
-    _ => raise @git.GitError::InvalidObject("invalid object type \"" + s + "\"")
-  }
 }
 
 ///|
@@ -400,16 +402,6 @@ fn storage_read_ref_value_inner(
 }
 
 ///|
-fn storage_fail_unsupported_option(
-  cmd : String,
-  arg : String,
-) -> Unit raise Error {
-  raise @git.GitError::InvalidObject(
-    cmd + ": option is not supported in storage runtime: " + arg,
-  )
-}
-
-///|
 fn storage_fail_unsupported_mode(
   cmd : String,
   detail : String,
@@ -461,68 +453,23 @@ fn storage_handle_init(
   fs : &@git.FileSystem,
   rfs : &@git.RepoFileSystem,
   root : String,
-  args : Array[String],
+  args : StorageInitArgs,
 ) -> Unit raise Error {
-  let mut quiet = false
-  let mut initial_branch : String? = None
-  let mut ref_format = "files"
-  let mut object_format = "sha1"
-  let mut i = 0
-  while i < args.length() {
-    let arg = args[i]
-    match arg {
-      "-q" | "--quiet" => quiet = true
-      "-b" if i + 1 < args.length() => {
-        initial_branch = Some(args[i + 1])
-        i += 2
-        continue
-      }
-      "--initial-branch" if i + 1 < args.length() => {
-        initial_branch = Some(args[i + 1])
-        i += 2
-        continue
-      }
-      "--ref-format" if i + 1 < args.length() => {
-        let value = args[i + 1].to_lower()
-        if value != "files" {
-          storage_fail_unsupported_mode("init", "--ref-format=" + value)
-        }
-        ref_format = value
-        i += 2
-        continue
-      }
-      "--object-format" if i + 1 < args.length() => {
-        let value = args[i + 1].to_lower()
-        if value != "sha1" {
-          storage_fail_unsupported_mode("init", "--object-format=" + value)
-        }
-        object_format = value
-        i += 2
-        continue
-      }
-      _ if arg.has_prefix("--initial-branch=") =>
-        initial_branch = Some((try! arg[17:]).to_string())
-      _ if arg.has_prefix("--ref-format=") => {
-        let value = (try! arg[13:]).to_string().to_lower()
-        if value != "files" {
-          storage_fail_unsupported_mode("init", "--ref-format=" + value)
-        }
-        ref_format = value
-      }
-      _ if arg.has_prefix("--object-format=") => {
-        let value = (try! arg[16:]).to_string().to_lower()
-        if value != "sha1" {
-          storage_fail_unsupported_mode("init", "--object-format=" + value)
-        }
-        object_format = value
-      }
-      _ if arg.has_prefix("-") => storage_fail_unsupported_option("init", arg)
-      _ => storage_fail_unsupported_mode("init", "directory argument")
-    }
-    i += 1
+  let ref_format = args.ref_format.to_lower()
+  let object_format = args.object_format.to_lower()
+  if ref_format != "files" {
+    storage_fail_unsupported_mode("init", "--ref-format=" + ref_format)
+  }
+  if object_format != "sha1" {
+    storage_fail_unsupported_mode("init", "--object-format=" + object_format)
+  }
+  let default_branch = if args.default_branch.length() == 0 {
+    "main"
+  } else {
+    args.default_branch
   }
   let opts : @gitlib.InitOptions = {
-    default_branch: initial_branch.unwrap_or("main"),
+    default_branch,
     bare: false,
     separate_git_dir: None,
     template_dir: None,
@@ -530,7 +477,7 @@ fn storage_handle_init(
     object_format,
   }
   @gitrepo.init_repo_with_options(fs, root, opts)
-  if not(quiet) {
+  if not(args.quiet) {
     let git_dir = storage_resolve_git_dir(rfs, root)
     storage_print_line("Initialized empty Git repository in " + git_dir + "/")
   }
@@ -541,33 +488,18 @@ fn storage_handle_add(
   fs : &@git.FileSystem,
   rfs : &@git.RepoFileSystem,
   root : String,
-  args : Array[String],
+  args : StorageAddArgs,
 ) -> Unit raise Error {
   let git_dir = storage_resolve_git_dir(rfs, root)
   storage_require_sha1_repo("add", rfs, git_dir)
-  let mut add_all = false
-  let mut end_of_options = false
-  let paths : Array[String] = []
-  for arg in args {
-    if not(end_of_options) && arg == "--" {
-      end_of_options = true
-      continue
-    }
-    match arg {
-      "-A" | "--all" if not(end_of_options) => add_all = true
-      _ if end_of_options || not(arg.has_prefix("-")) => paths.push(arg)
-      _ if arg.has_prefix("-") => storage_fail_unsupported_option("add", arg)
-      _ => ()
-    }
-  }
-  if add_all {
+  if args.add_all {
     @gitlib.add_paths(fs, rfs, root, ["."])
     return
   }
-  if paths.length() == 0 {
+  if args.paths.length() == 0 {
     raise @git.GitError::InvalidObject("add requires pathspec")
   }
-  @gitlib.add_paths(fs, rfs, root, paths)
+  @gitlib.add_paths(fs, rfs, root, args.paths)
 }
 
 ///|
@@ -575,65 +507,16 @@ fn storage_handle_commit(
   fs : &@git.FileSystem,
   rfs : &@git.RepoFileSystem,
   root : String,
-  args : Array[String],
+  args : StorageCommitArgs,
 ) -> Unit raise Error {
   let git_dir = storage_resolve_git_dir(rfs, root)
   storage_require_sha1_repo("commit", rfs, git_dir)
-  let mut message : String? = None
-  let mut all_modified = false
-  let mut allow_empty = false
-  let mut quiet = false
-  let mut i = 0
-  while i < args.length() {
-    let arg = args[i]
-    match arg {
-      "-m" if i + 1 < args.length() => {
-        message = Some(args[i + 1])
-        i += 2
-        continue
-      }
-      "--message" if i + 1 < args.length() => {
-        message = Some(args[i + 1])
-        i += 2
-        continue
-      }
-      "-am" | "-ma" if i + 1 < args.length() => {
-        all_modified = true
-        message = Some(args[i + 1])
-        i += 2
-        continue
-      }
-      _ if arg.has_prefix("-m") && arg.length() > 2 => {
-        message = Some((try! arg[2:]).to_string())
-        i += 1
-        continue
-      }
-      _ if arg.has_prefix("-am") || arg.has_prefix("-ma") => {
-        all_modified = true
-        message = Some((try! arg[3:]).to_string())
-        i += 1
-        continue
-      }
-      _ if arg.has_prefix("--message=") => {
-        message = Some((try! arg[10:]).to_string())
-        i += 1
-        continue
-      }
-      "-a" | "--all" => all_modified = true
-      "--allow-empty" => allow_empty = true
-      "-q" | "--quiet" => quiet = true
-      "--no-verify" => ()
-      _ if arg.has_prefix("-") => storage_fail_unsupported_option("commit", arg)
-      _ => storage_fail_unsupported_mode("commit", "positional arguments")
-    }
-    i += 1
-  }
-  guard message is Some(msg) else {
+  guard args.message.length() > 0 else {
     raise @git.GitError::InvalidObject(
       "storage runtime commit requires -m/--message",
     )
   }
-  if all_modified {
+  if args.all_modified {
     @gitlib.add_paths(fs, rfs, root, ["."])
   }
   let timestamp = storage_get_commit_timestamp()
@@ -643,18 +526,18 @@ fn storage_handle_commit(
     fs,
     rfs,
     root,
-    msg,
+    args.message,
     storage_get_author_string(),
     timestamp,
     committer~,
     committer_timestamp~,
-    allow_empty~,
+    allow_empty=args.allow_empty,
   )
-  if not(quiet) {
+  if not(args.quiet) {
     let short_id = (try! commit_id.to_hex()[:7]).to_string()
-    let first_line = match msg.find("\n") {
-      Some(idx) => (try! msg[:idx]).to_string()
-      None => msg
+    let first_line = match args.message.find("\n") {
+      Some(idx) => (try! args.message[:idx]).to_string()
+      None => args.message
     }
     storage_print_line("[" + short_id + "] " + first_line)
   }
@@ -697,7 +580,9 @@ fn storage_resolve_common_git_dir(
     return git_dir
   }
   let raw = storage_decode_bytes(
-    (rfs.read_file(commondir_path) catch { _ => Bytes::default() }),
+    rfs.read_file(commondir_path) catch {
+      _ => Bytes::default()
+    },
   )
   let rel = storage_trim_string(raw)
   if rel.length() == 0 {
@@ -817,9 +702,7 @@ fn storage_collect_status_snapshot(
     match index_map.get(rel_path) {
       Some(index_entry) => {
         let abs_path = root + "/" + rel_path
-        let content = rfs.read_file(abs_path) catch {
-          _ => continue
-        }
+        let content = rfs.read_file(abs_path) catch { _ => continue }
         let worktree_id = @git.hash_blob(content)
         if worktree_id != index_entry.id {
           unstaged_modified.push(rel_path)
@@ -845,11 +728,7 @@ fn storage_collect_status_snapshot(
   let staged_modified : Array[String] = []
   let staged_deleted : Array[String] = []
   storage_collect_staged_changes_from_head(
-    rfs,
-    git_dir,
-    staged_index_map,
-    staged_modified,
-    staged_deleted,
+    rfs, git_dir, staged_index_map, staged_modified, staged_deleted,
   )
   let staged_added : Array[String] = []
   for item in staged_index_map.to_array() {
@@ -1014,26 +893,10 @@ fn storage_status_text_lines(
 fn storage_handle_status(
   rfs : &@git.RepoFileSystem,
   root : String,
-  args : Array[String],
+  args : StorageStatusArgs,
 ) -> Unit raise Error {
-  let mut porcelain = false
-  let mut short = false
-  let mut show_branch = false
-  for arg in args {
-    match arg {
-      "--porcelain" | "--porcelain=v1" => porcelain = true
-      "-s" | "--short" => short = true
-      "-b" | "--branch" => show_branch = true
-      "-sb" => {
-        short = true
-        show_branch = true
-      }
-      _ if arg.has_prefix("-") => storage_fail_unsupported_option("status", arg)
-      _ => storage_fail_unsupported_mode("status", "pathspec")
-    }
-  }
-  let lines = if porcelain || short {
-    storage_status_porcelain_lines(rfs, root, show_branch)
+  let lines = if args.porcelain || args.short {
+    storage_status_porcelain_lines(rfs, root, args.show_branch)
   } else {
     storage_status_text_lines(rfs, root)
   }
@@ -1046,47 +909,17 @@ fn storage_handle_status(
 fn storage_handle_log(
   rfs : &@git.RepoFileSystem,
   root : String,
-  args : Array[String],
+  args : StorageLogArgs,
 ) -> Unit raise Error {
-  let mut oneline = false
-  let mut max_count = 10
-  let mut i = 0
-  while i < args.length() {
-    let arg = args[i]
-    match arg {
-      "--oneline" => oneline = true
-      "-n" if i + 1 < args.length() => {
-        max_count = @strconv.parse_int(args[i + 1])
-        i += 2
-        continue
-      }
-      "--max-count" if i + 1 < args.length() => {
-        max_count = @strconv.parse_int(args[i + 1])
-        i += 2
-        continue
-      }
-      _ if arg.has_prefix("-n") && arg.length() > 2 =>
-        max_count = @strconv.parse_int((try! arg[2:]).to_string())
-      _ if storage_is_short_count_flag(arg) => {
-        let num_str = String::unsafe_substring(arg, start=1, end=arg.length())
-        max_count = @strconv.parse_int(num_str)
-      }
-      _ if arg.has_prefix("--max-count=") =>
-        max_count = @strconv.parse_int((try! arg[12:]).to_string())
-      _ if arg.has_prefix("-") => storage_fail_unsupported_option("log", arg)
-      _ => storage_fail_unsupported_mode("log", "revision arguments")
-    }
-    i += 1
-  }
   let git_dir = storage_resolve_git_dir(rfs, root)
-  if oneline {
-    let lines = @gitlib.log_head_oneline(rfs, git_dir, max_count~)
+  if args.oneline {
+    let lines = @gitlib.log_head_oneline(rfs, git_dir, max_count=args.max_count)
     for line in lines {
       storage_print_line(line)
     }
     return
   }
-  let entries = @gitlib.log_head(rfs, git_dir, max_count~)
+  let entries = @gitlib.log_head(rfs, git_dir, max_count=args.max_count)
   for entry in entries {
     storage_print_line("commit " + entry.id.to_hex())
     storage_print_line("Author: " + entry.author)
@@ -1101,79 +934,37 @@ fn storage_handle_hash_object(
   fs : &@git.FileSystem,
   rfs : &@git.RepoFileSystem,
   root : String,
-  args : Array[String],
+  args : StorageHashObjectArgs,
 ) -> Unit raise Error {
-  let mut write_object = false
-  let mut stdin_mode = false
-  let mut obj_type = "blob"
-  let paths : Array[String] = []
-  let mut i = 0
-  while i < args.length() {
-    let arg = args[i]
-    match arg {
-      "-w" => write_object = true
-      "--stdin" => stdin_mode = true
-      "--literally" => ()
-      "-t" if i + 1 < args.length() => {
-        obj_type = args[i + 1]
-        i += 2
-        continue
-      }
-      _ if arg.has_prefix("-t") && arg.length() > 2 =>
-        obj_type = String::unsafe_substring(arg, start=2, end=arg.length())
-      _ if not(arg.has_prefix("-")) => paths.push(arg)
-      _ => storage_fail_unsupported_option("hash-object", arg)
-    }
-    i += 1
-  }
-  let git_dir = if write_object {
+  let git_dir = if args.write_object {
     storage_resolve_git_dir(rfs, root)
   } else {
     root + "/.git"
   }
   let compat_object_format = storage_read_compat_object_format(rfs, git_dir)
   if storage_hash_object_requires_standalone_error(
-      write_object, compat_object_format,
+      args.write_object,
+      compat_object_format,
     ) {
     storage_fail_unsupported_mode(
       "hash-object", "-w with compatObjectFormat=sha256",
     )
   }
-  if stdin_mode {
+  if args.stdin_mode {
     let content = storage_read_all_stdin()
-    let id = @git.hash_object_content(
-      storage_parse_object_type(obj_type),
-      content,
-    )
-    if write_object {
-      ignore(
-        @gitlib.write_loose_object(
-          fs,
-          git_dir,
-          storage_parse_object_type(obj_type),
-          content,
-        ),
-      )
+    let id = @git.hash_object_content(args.obj_type, content)
+    if args.write_object {
+      ignore(@gitlib.write_loose_object(fs, git_dir, args.obj_type, content))
     }
     storage_print_line(id.to_hex())
     return
   }
-  for path in paths {
+  for path in args.paths {
     let abs = if path.has_prefix("/") { path } else { root + "/" + path }
     let content = rfs.read_file(abs)
-    let id = @git.hash_object_content(
-      storage_parse_object_type(obj_type),
-      content,
-    )
-    if write_object {
-      ignore(
-        @gitlib.write_loose_object(
-          fs,
-          git_dir,
-          storage_parse_object_type(obj_type),
-          content,
-        ),
-      )
+    let id = @git.hash_object_content(args.obj_type, content)
+    if args.write_object {
+      ignore(@gitlib.write_loose_object(fs, git_dir, args.obj_type, content))
     }
     storage_print_line(id.to_hex())
   }
@@ -1202,23 +993,17 @@ fn storage_handle_write_tree(
   fs : &@git.FileSystem,
   rfs : &@git.RepoFileSystem,
   root : String,
-  args : Array[String],
+  args : StorageWriteTreeArgs,
 ) -> Unit raise Error {
   let git_dir = storage_resolve_git_dir(rfs, root)
   storage_require_sha1_repo("write-tree", rfs, git_dir)
-  let mut prefix : String? = None
-  for arg in args {
-    if arg.has_prefix("--prefix=") {
-      prefix = Some((try! arg[9:]).to_string())
-      continue
-    }
-    if arg.has_prefix("-") {
-      storage_fail_unsupported_option("write-tree", arg)
-    }
-    storage_fail_unsupported_mode("write-tree", "path arguments")
-  }
   let entries = @gitlib.read_index_entries(rfs, git_dir)
-  let tree_id = @gitlib.write_tree_from_index(fs, git_dir, entries, prefix~)
+  let tree_id = @gitlib.write_tree_from_index(
+    fs,
+    git_dir,
+    entries,
+    prefix=args.prefix,
+  )
   storage_print_line(tree_id.to_hex())
 }
 
@@ -1227,55 +1012,29 @@ fn storage_handle_update_ref(
   fs : &@git.FileSystem,
   rfs : &@git.RepoFileSystem,
   root : String,
-  args : Array[String],
+  args : StorageUpdateRefArgs,
 ) -> Unit raise Error {
   let git_dir = storage_resolve_git_dir(rfs, root)
   if storage_is_reftable_repo(rfs, git_dir) {
     storage_fail_unsupported_mode("update-ref", "reftable repository")
   }
-  let mut delete_mode = false
-  let positional : Array[String] = []
-  for arg in args {
-    match arg {
-      "-d" | "--delete" => delete_mode = true
-      _ if not(arg.has_prefix("-")) => positional.push(arg)
-      _ => storage_fail_unsupported_option("update-ref", arg)
-    }
-  }
-  if delete_mode {
-    guard positional.length() >= 1 else {
-      raise @git.GitError::InvalidObject(
-        "usage: update-ref -d <refname> [<oldvalue>]",
-      )
-    }
-    let refname = positional[0]
-    let old_value : String? = if positional.length() >= 2 {
-      Some(positional[1])
-    } else {
-      None
-    }
-    storage_verify_old_ref_value(rfs, git_dir, refname, old_value)
-    let ref_path = git_dir + "/" + refname
+  if args.delete_mode {
+    storage_verify_old_ref_value(rfs, git_dir, args.refname, args.old_value)
+    let ref_path = git_dir + "/" + args.refname
     if rfs.is_file(ref_path) {
       fs.remove_file(ref_path)
     }
     return
   }
-  guard positional.length() >= 2 else {
+  guard args.new_value is Some(raw_new_value) else {
     raise @git.GitError::InvalidObject(
       "usage: update-ref <refname> <newvalue> [<oldvalue>]",
     )
   }
-  let refname = positional[0]
-  let new_value = if positional[1] == "@" { "HEAD" } else { positional[1] }
-  let old_value : String? = if positional.length() >= 3 {
-    Some(positional[2])
-  } else {
-    None
-  }
-  storage_verify_old_ref_value(rfs, git_dir, refname, old_value)
+  let new_value = if raw_new_value == "@" { "HEAD" } else { raw_new_value }
+  storage_verify_old_ref_value(rfs, git_dir, args.refname, args.old_value)
   let new_id = storage_resolve_object_id(rfs, git_dir, new_value)
-  let ref_path = git_dir + "/" + refname
+  let ref_path = git_dir + "/" + args.refname
   let dir = storage_parent_dir(ref_path)
   if dir.length() > 0 && not(rfs.is_dir(dir)) {
     fs.mkdir_p(dir)

@@ -2,28 +2,73 @@
 package "mizchi/bit/runtime"
 
 import {
+  "mizchi/bit/object",
   "mizchi/bit/types",
 }
 
 // Values
-pub fn parse_storage_command(String, Array[String]) -> StorageCommand raise
-
 pub fn run_storage_command(&@types.FileSystem, &@types.RepoFileSystem, String, StorageCommand) -> Unit raise
-
-pub fn run_storage_command_by_name(&@types.FileSystem, &@types.RepoFileSystem, String, String, Array[String]) -> Unit raise
 
 // Errors
 
 // Types and methods
+pub(all) struct StorageAddArgs {
+  add_all : Bool
+  paths : Array[String]
+}
+
 pub(all) enum StorageCommand {
-  Init(Array[String])
-  Add(Array[String])
-  Commit(Array[String])
-  Status(Array[String])
-  Log(Array[String])
-  HashObject(Array[String])
-  WriteTree(Array[String])
-  UpdateRef(Array[String])
+  Init(StorageInitArgs)
+  Add(StorageAddArgs)
+  Commit(StorageCommitArgs)
+  Status(StorageStatusArgs)
+  Log(StorageLogArgs)
+  HashObject(StorageHashObjectArgs)
+  WriteTree(StorageWriteTreeArgs)
+  UpdateRef(StorageUpdateRefArgs)
+}
+
+pub(all) struct StorageCommitArgs {
+  message : String
+  all_modified : Bool
+  allow_empty : Bool
+  quiet : Bool
+}
+
+pub(all) struct StorageHashObjectArgs {
+  write_object : Bool
+  stdin_mode : Bool
+  obj_type : @object.ObjectType
+  paths : Array[String]
+}
+
+pub(all) struct StorageInitArgs {
+  quiet : Bool
+  default_branch : String
+  ref_format : String
+  object_format : String
+}
+
+pub(all) struct StorageLogArgs {
+  oneline : Bool
+  max_count : Int
+}
+
+pub(all) struct StorageStatusArgs {
+  porcelain : Bool
+  short : Bool
+  show_branch : Bool
+}
+
+pub(all) struct StorageUpdateRefArgs {
+  delete_mode : Bool
+  refname : String
+  new_value : String?
+  old_value : String?
+}
+
+pub(all) struct StorageWriteTreeArgs {
+  prefix : String?
 }
 
 // Type aliases

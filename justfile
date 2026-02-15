@@ -17,13 +17,10 @@ check:
       exit 1; \
     fi
     @if rg -n "run_storage_command_by_name\\(" src \
-      -g '!src/runtime/storage_runtime.mbt' \
-      -g '!src/runtime/storage_runtime_wbtest.mbt' \
       -g '!src/cmd/bit/storage_runtime.mbt' \
       -g '!src/cmd/bit/storage_runtime_wbtest.mbt' \
-      -g '!src/runtime/pkg.generated.mbti' \
       -g '!src/cmd/bit/pkg.generated.mbti' >/dev/null; then \
-      echo "run_storage_command_by_name is only allowed in storage runtime boundary/wbtests"; \
+      echo "run_storage_command_by_name is only allowed in cmd storage_runtime boundary/wbtests"; \
       exit 1; \
     fi
 
