@@ -9,6 +9,69 @@ async fn show_commit_command_help() -> Unit {
 }
 
 ///|
+fn commit_storage_runtime_parsed_args(
+  args : Array[String],
+) -> @runtime.StorageCommitArgs? {
+  let parsed = storage_runtime_parse_command("commit", args) catch {
+    _ => return None
+  }
+  match parsed {
+    @runtime.StorageCommand::Commit(commit_args) if not(commit_args.all_modified) =>
+      Some(commit_args)
+    _ => None
+  }
+}
+
+///|
+fn commit_should_use_storage_runtime(args : Array[String]) -> Bool {
+  commit_storage_runtime_parsed_args(args) is Some(_)
+}
+
+///|
+fn commit_has_no_verify_flag(args : Array[String]) -> Bool {
+  for arg in args {
+    if arg == "--no-verify" {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn commit_has_merge_state(
+  fs : OsFs,
+  git_dir : String,
+) -> Bool {
+  fs.is_file(git_dir + "/MERGE_HEAD") ||
+  fs.is_file(git_dir + "/MERGE_MSG") ||
+  fs.is_file(git_dir + "/MERGE_MODE") ||
+  fs.is_file(git_dir + "/SQUASH_MSG")
+}
+
+///|
+fn commit_storage_runtime_delegate_args(
+  fs : OsFs,
+  git_dir : String,
+  args : Array[String],
+) -> @runtime.StorageCommitArgs? {
+  let parsed = match commit_storage_runtime_parsed_args(args) {
+    Some(value) => value
+    None => return None
+  }
+  if commit_has_merge_state(fs, git_dir) {
+    return None
+  }
+  if not(commit_has_no_verify_flag(args)) &&
+    fs.is_file(git_dir + "/hooks/pre-commit") {
+    return None
+  }
+  if not(parsed.quiet) && get_subdir_info(fs, git_dir) is Some(_) {
+    return None
+  }
+  Some(parsed)
+}
+
+///|
 async fn handle_commit(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
@@ -23,6 +86,20 @@ async fn handle_commit(args : Array[String]) -> Unit raise Error {
   if commit_args_require_standalone_error(args) {
     eprint_line("fatal: this commit mode is not supported in standalone mode")
     @sys.exit(1)
+  }
+  if commit_should_use_storage_runtime(args) {
+    match commit_storage_runtime_delegate_args(fs, git_dir, args) {
+      Some(commit_args) => {
+        @runtime.run_storage_command(
+          fs,
+          rfs,
+          root,
+          @runtime.StorageCommand::Commit(commit_args),
+        )
+        return
+      }
+      None => ()
+    }
   }
   let commit_message_encoding = resolve_commit_message_encoding()
   let mut message : String? = None

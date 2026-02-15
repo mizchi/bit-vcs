@@ -9,6 +9,24 @@ async fn show_add_command_help() -> Unit {
 }
 
 ///|
+fn add_storage_runtime_delegate_args(
+  args : Array[String],
+) -> @runtime.StorageAddArgs? {
+  let parsed = storage_runtime_parse_command("add", args) catch {
+    _ => return None
+  }
+  match parsed {
+    @runtime.StorageCommand::Add(add_args) if not(add_args.add_all) => Some(add_args)
+    _ => None
+  }
+}
+
+///|
+fn add_should_use_storage_runtime(args : Array[String]) -> Bool {
+  add_storage_runtime_delegate_args(args) is Some(_)
+}
+
+///|
 async fn handle_add(args : Array[String]) -> Unit raise Error {
   if has_interactive_add_flag(args) {
     run_add_interactive(args)
@@ -23,6 +41,20 @@ async fn handle_add(args : Array[String]) -> Unit raise Error {
       "fatal: add with this repository object format is not supported in standalone mode",
     )
     @sys.exit(1)
+  }
+  if add_should_use_storage_runtime(args) {
+    match add_storage_runtime_delegate_args(args) {
+      Some(add_args) => {
+        @runtime.run_storage_command(
+          fs,
+          rfs,
+          root,
+          @runtime.StorageCommand::Add(add_args),
+        )
+        return
+      }
+      None => ()
+    }
   }
   let mut add_all = false
   let mut force = false

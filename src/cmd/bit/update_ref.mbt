@@ -1,4 +1,54 @@
 ///|
+fn update_ref_storage_runtime_parsed_args(
+  args : Array[String],
+) -> @runtime.StorageUpdateRefArgs? {
+  let parsed = storage_runtime_parse_command("update-ref", args) catch {
+    _ => return None
+  }
+  match parsed {
+    @runtime.StorageCommand::UpdateRef(update_args) => Some(update_args)
+    _ => None
+  }
+}
+
+///|
+fn update_ref_should_use_storage_runtime_args(args : Array[String]) -> Bool {
+  update_ref_storage_runtime_parsed_args(args) is Some(_)
+}
+
+///|
+fn update_ref_storage_runtime_delegate_args(
+  fs : &@git.RepoFileSystem,
+  git_dir : String,
+  is_bare : Bool,
+  args : Array[String],
+) -> @runtime.StorageUpdateRefArgs? {
+  let parsed = match update_ref_storage_runtime_parsed_args(args) {
+    Some(value) => value
+    None => return None
+  }
+  // Keep cmd implementation for delete/reflog/symbolic-ref sensitive paths.
+  if parsed.delete_mode {
+    return None
+  }
+  if not(parsed.refname.has_prefix("refs/")) {
+    return None
+  }
+  if resolve_symbolic_ref_target(fs, git_dir, parsed.refname) is Some(_) {
+    return None
+  }
+  let (should_log, always) = @gitrepo.should_log_ref(
+    fs, git_dir, parsed.refname, is_bare,
+  ) catch {
+    _ => return None
+  }
+  if should_log || always || @gitrepo.reflog_exists(fs, git_dir, parsed.refname) {
+    return None
+  }
+  Some(parsed)
+}
+
+///|
 async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
@@ -9,6 +59,21 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
       "fatal: update-ref on reftable repository is not supported in standalone mode",
     )
     @sys.exit(1)
+  }
+  let is_bare = is_bare_repo_dir(root)
+  if update_ref_should_use_storage_runtime_args(args) {
+    match update_ref_storage_runtime_delegate_args(rfs, git_dir, is_bare, args) {
+      Some(update_args) => {
+        @runtime.run_storage_command(
+          fs,
+          rfs,
+          root,
+          @runtime.StorageCommand::UpdateRef(update_args),
+        )
+        return
+      }
+      None => ()
+    }
   }
   let mut delete_mode = false
   let mut create_reflog = false
@@ -34,7 +99,6 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
     }
     i += 1
   }
-  let is_bare = is_bare_repo_dir(root)
   let actual_git_dir = git_dir
   let head_target = resolve_symbolic_ref_target(fs, actual_git_dir, "HEAD")
   // Get current timestamp for reflog

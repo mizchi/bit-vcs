@@ -10,3 +10,11 @@ test "hash-object: standalone error only when -w and compat format is sha256" {
 test "hash-object: standalone check normalizes compat format value" {
   assert_true(hash_object_requires_standalone_error(true, Some(" \"SHA256\" ")))
 }
+
+///|
+test "hash-object: storage runtime routing follows parser support" {
+  assert_true(hash_object_should_use_storage_runtime(["--stdin"]))
+  assert_true(hash_object_should_use_storage_runtime(["-t", "blob", "a.txt"]))
+
+  assert_false(hash_object_should_use_storage_runtime(["--stdin-paths"]))
+}

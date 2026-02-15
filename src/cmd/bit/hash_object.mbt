@@ -1,7 +1,39 @@
 ///|
+fn hash_object_storage_runtime_delegate_args(
+  args : Array[String],
+) -> @runtime.StorageHashObjectArgs? {
+  let parsed = storage_runtime_parse_command("hash-object", args) catch {
+    _ => return None
+  }
+  match parsed {
+    @runtime.StorageCommand::HashObject(hash_args) => Some(hash_args)
+    _ => None
+  }
+}
+
+///|
+fn hash_object_should_use_storage_runtime(args : Array[String]) -> Bool {
+  hash_object_storage_runtime_delegate_args(args) is Some(_)
+}
+
+///|
 async fn handle_hash_object(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let fs = OsFs::new()
+  if hash_object_should_use_storage_runtime(args) {
+    match hash_object_storage_runtime_delegate_args(args) {
+      Some(hash_args) => {
+        @runtime.run_storage_command(
+          fs,
+          fs,
+          root,
+          @runtime.StorageCommand::HashObject(hash_args),
+        )
+        return
+      }
+      None => ()
+    }
+  }
   let mut write_object = false
   let mut stdin_mode = false
   let mut obj_type = "blob"

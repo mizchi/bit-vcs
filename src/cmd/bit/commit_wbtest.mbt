@@ -75,3 +75,13 @@ test "commit: read MERGE_HEAD supports multiple parents" {
   assert_eq(merge_heads[0].to_hex(), "1111111111111111111111111111111111111111")
   assert_eq(merge_heads[1].to_hex(), "2222222222222222222222222222222222222222")
 }
+
+///|
+test "commit: storage runtime routing excludes all-modified mode" {
+  assert_true(commit_should_use_storage_runtime(["-m", "msg"]))
+  assert_true(commit_should_use_storage_runtime(["--no-verify", "-m", "msg"]))
+
+  assert_false(commit_should_use_storage_runtime(["-am", "msg"]))
+  assert_false(commit_should_use_storage_runtime(["--amend", "-m", "msg"]))
+  assert_false(commit_should_use_storage_runtime(["-F", "MSG_FILE"]))
+}
