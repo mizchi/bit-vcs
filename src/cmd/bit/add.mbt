@@ -16,7 +16,7 @@ fn add_storage_runtime_delegate_args(
     _ => return None
   }
   match parsed {
-    @runtime.StorageCommand::Add(add_args) if not(add_args.add_all) => Some(add_args)
+    @runtime.StorageCommand::Add(add_args) => Some(add_args)
     _ => None
   }
 }

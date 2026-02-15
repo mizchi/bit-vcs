@@ -738,3 +738,124 @@ test "storage runtime: status porcelain lines report staged add modify delete" {
     "BIT_STORAGE_RUNTIME_QUIET", prev_quiet,
   )
 }
+
+///|
+test "storage runtime: add -A stages untracked modified deleted" {
+  let fs = @git.TestFs::new()
+  let root = "/repo-storage-runtime-add-all"
+  let prev_quiet = setup_storage_runtime_quiet_for_wbtest()
+  let (
+    prev_author_name,
+    prev_author_email,
+    prev_committer_name,
+    prev_committer_email,
+  ) = setup_identity_for_storage_runtime_wbtest()
+  run_storage_command(fs, fs, root, storage_runtime_wbtest_init_command()) catch {
+    err => fail("init failed: \{err}")
+  }
+  fs.write_string(root + "/keep.txt", "keep\n")
+  fs.write_string(root + "/delete.txt", "delete\n")
+  run_storage_command(
+    fs,
+    fs,
+    root,
+    storage_runtime_wbtest_add_command(["keep.txt", "delete.txt"]),
+  ) catch {
+    err => fail("add initial failed: \{err}")
+  }
+  run_storage_command(
+    fs,
+    fs,
+    root,
+    storage_runtime_wbtest_commit_command("initial"),
+  ) catch {
+    err => fail("commit initial failed: \{err}")
+  }
+  fs.write_string(root + "/keep.txt", "modified\n")
+  fs.remove_file(root + "/delete.txt") catch {
+    err => fail("remove tracked file failed: \{err}")
+  }
+  fs.write_string(root + "/new.txt", "new\n")
+  run_storage_command(
+    fs,
+    fs,
+    root,
+    storage_runtime_wbtest_add_command([], add_all=true),
+  ) catch {
+    err => fail("add -A failed: \{err}")
+  }
+  let lines = storage_status_porcelain_lines(fs, root, false) catch {
+    err => {
+      fail("status lines failed: \{err}")
+      []
+    }
+  }
+  assert_true(storage_runtime_wbtest_has_line(lines, "M  keep.txt"))
+  assert_true(storage_runtime_wbtest_has_line(lines, "D  delete.txt"))
+  assert_true(storage_runtime_wbtest_has_line(lines, "A  new.txt"))
+  restore_identity_for_storage_runtime_wbtest(
+    prev_author_name, prev_author_email, prev_committer_name, prev_committer_email,
+  )
+  restore_env_var_for_storage_runtime_wbtest(
+    "BIT_STORAGE_RUNTIME_QUIET", prev_quiet,
+  )
+}
+
+///|
+test "storage runtime: commit -a stages tracked only" {
+  let fs = @git.TestFs::new()
+  let root = "/repo-storage-runtime-commit-all-modified"
+  let prev_quiet = setup_storage_runtime_quiet_for_wbtest()
+  let (
+    prev_author_name,
+    prev_author_email,
+    prev_committer_name,
+    prev_committer_email,
+  ) = setup_identity_for_storage_runtime_wbtest()
+  run_storage_command(fs, fs, root, storage_runtime_wbtest_init_command()) catch {
+    err => fail("init failed: \{err}")
+  }
+  fs.write_string(root + "/tracked.txt", "base\n")
+  run_storage_command(
+    fs,
+    fs,
+    root,
+    storage_runtime_wbtest_add_command(["tracked.txt"]),
+  ) catch {
+    err => fail("add initial failed: \{err}")
+  }
+  run_storage_command(
+    fs,
+    fs,
+    root,
+    storage_runtime_wbtest_commit_command("initial"),
+  ) catch {
+    err => fail("commit initial failed: \{err}")
+  }
+  fs.write_string(root + "/tracked.txt", "updated\n")
+  fs.write_string(root + "/untracked.txt", "new\n")
+  run_storage_command(
+    fs,
+    fs,
+    root,
+    storage_runtime_wbtest_commit_command("auto stage", all_modified=true),
+  ) catch {
+    err => fail("commit -a failed: \{err}")
+  }
+  let lines = storage_status_porcelain_lines(fs, root, false) catch {
+    err => {
+      fail("status lines failed: \{err}")
+      []
+    }
+  }
+  assert_true(storage_runtime_wbtest_has_line(lines, "?? untracked.txt"))
+  assert_false(storage_runtime_wbtest_has_line(lines, " M tracked.txt"))
+  let log_lines = @gitlib.log_head_oneline(fs, root + "/.git", max_count=1)
+  assert_true(log_lines[0].contains("auto stage"))
+  restore_identity_for_storage_runtime_wbtest(
+    prev_author_name, prev_author_email, prev_committer_name, prev_committer_email,
+  )
+  restore_env_var_for_storage_runtime_wbtest(
+    "BIT_STORAGE_RUNTIME_QUIET", prev_quiet,
+  )
+}

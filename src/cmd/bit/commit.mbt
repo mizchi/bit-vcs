@@ -16,8 +16,7 @@ fn commit_storage_runtime_parsed_args(
     _ => return None
   }
   match parsed {
-    @runtime.StorageCommand::Commit(commit_args) if not(commit_args.all_modified) =>
-      Some(commit_args)
+    @runtime.StorageCommand::Commit(commit_args) => Some(commit_args)
     _ => None
   }
 }

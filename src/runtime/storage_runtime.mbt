@@ -493,13 +493,51 @@ fn storage_handle_add(
   let git_dir = storage_resolve_git_dir(rfs, root)
   storage_require_sha1_repo("add", rfs, git_dir)
   if args.add_all {
-    @gitlib.add_paths(fs, rfs, root, ["."])
+    let add_all_paths = storage_collect_add_all_paths(rfs, root)
+    if add_all_paths.length() > 0 {
+      @gitlib.add_paths(fs, rfs, root, add_all_paths)
+    }
     return
   }
   if args.paths.length() == 0 {
     raise @git.GitError::InvalidObject("add requires pathspec")
   }
   @gitlib.add_paths(fs, rfs, root, args.paths)
+}
+
+///|
+fn storage_collect_add_all_paths(
+  rfs : &@git.RepoFileSystem,
+  root : String,
+) -> Array[String] raise Error {
+  let snapshot = storage_collect_status_snapshot(rfs, root)
+  let paths : Array[String] = []
+  for p in snapshot.untracked {
+    paths.push(p)
+  }
+  for p in snapshot.unstaged_modified {
+    paths.push(p)
+  }
+  for p in snapshot.unstaged_deleted {
+    paths.push(p)
+  }
+  paths
+}
+
+///|
+fn storage_collect_commit_all_modified_paths(
+  rfs : &@git.RepoFileSystem,
+  root : String,
+) -> Array[String] raise Error {
+  let snapshot = storage_collect_status_snapshot(rfs, root)
+  let paths : Array[String] = []
+  for p in snapshot.unstaged_modified {
+    paths.push(p)
+  }
+  for p in snapshot.unstaged_deleted {
+    paths.push(p)
+  }
+  paths
 }
 
 ///|
@@ -517,7 +555,10 @@ fn storage_handle_commit(
     )
   }
   if args.all_modified {
-    @gitlib.add_paths(fs, rfs, root, ["."])
+    let all_modified_paths = storage_collect_commit_all_modified_paths(rfs, root)
+    if all_modified_paths.length() > 0 {
+      @gitlib.add_paths(fs, rfs, root, all_modified_paths)
+    }
   }
   let timestamp = storage_get_commit_timestamp()
   let committer = storage_get_committer_string()

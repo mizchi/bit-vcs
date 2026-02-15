@@ -77,11 +77,11 @@ test "commit: read MERGE_HEAD supports multiple parents" {
 }
 
 ///|
-test "commit: storage runtime routing excludes all-modified mode" {
+test "commit: storage runtime routing handles normal and -a mode" {
   assert_true(commit_should_use_storage_runtime(["-m", "msg"]))
   assert_true(commit_should_use_storage_runtime(["--no-verify", "-m", "msg"]))
+  assert_true(commit_should_use_storage_runtime(["-am", "msg"]))
 
-  assert_false(commit_should_use_storage_runtime(["-am", "msg"]))
   assert_false(commit_should_use_storage_runtime(["--amend", "-m", "msg"]))
   assert_false(commit_should_use_storage_runtime(["-F", "MSG_FILE"]))
 }
