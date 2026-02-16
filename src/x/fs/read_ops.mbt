@@ -300,25 +300,44 @@ fn Fs::find_in_tree(
     return None
   }
   let mut current_tree = tree_id
+  let mut prefix = ""
   for i = 0; i < parts.length(); i = i + 1 {
     let part = parts[i]
     let entries = self.get_tree_entries(backing_fs, current_tree) catch {
       _ => return None
     }
+    let cache_prefix = if prefix.length() == 0 { "" } else { prefix + "/" }
+    if self.layers.length() == 0 {
+      for entry in entries {
+        let cached_path = cache_prefix + entry.name
+        if self.cache.get_path(cached_path) is None {
+          if is_tree_mode(entry.mode) {
+            self.cache.set_path(cached_path, None)
+          } else {
+            self.cache.set_path(cached_path, Some(entry.id))
+          }
+        }
+      }
+    }
     let mut found = false
     for entry in entries {
       if entry.name == part {
+        let full_path = cache_prefix + part
         if i == parts.length() - 1 {
           if (entry.mode |> is_tree_mode |> not) {
+            self.cache.set_path(full_path, Some(entry.id))
             return Some(entry.id)
           } else {
+            self.cache.set_path(full_path, None)
             return None
           }
         } else if is_tree_mode(entry.mode) {
           current_tree = entry.id
+          prefix = full_path
           found = true
           break
         } else {
+          self.cache.set_path(full_path, None)
           return None
         }
       }

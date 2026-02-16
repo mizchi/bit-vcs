@@ -108,3 +108,18 @@ test "ensure_parent_dirs creates parent directories" {
   assert_true(layer.dirs.contains("a/b/c"))
   assert_false(layer.dirs.contains("a/b/c/file.txt"))
 }
+
+///|
+test "read_ops: sibling path cache is warmed on first lookup" {
+  let fs = @git.TestFs::new()
+  @lib.init_repo(fs, "/repo")
+  let bitfs = Fs::empty("/repo/.git")
+  bitfs.write_file("a.txt", b"a")
+  bitfs.write_file("b.txt", b"b")
+  let snap = bitfs.snapshot(fs, fs, "seed", "Bench <bench@example.com>", 1000L)
+  bitfs.checkout_snapshot(fs, snap.commit_id)
+  assert_eq(bitfs.cache.path_cache.length(), 0)
+  let _ = bitfs.read_file(fs, "a.txt")
+  assert_true(bitfs.cache.get_path("a.txt") is Some(Some(_)))
+  assert_true(bitfs.cache.get_path("b.txt") is Some(Some(_)))
+}
