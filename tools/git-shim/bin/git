@@ -57,6 +57,7 @@ has_command_support() {
 
 resolve_real_git() {
   subcmd="${1:-}"
+  shift
   support_cmd="$subcmd"
   if [ "$subcmd" = "help" ]; then
     seen_help=0
@@ -246,7 +247,7 @@ if [ "$subcmd" = "version" ]; then
     fi
   done
     if [ "$has_build_opts" -eq 1 ]; then
-    real_bin="$(resolve_real_git "$@")"
+    real_bin="$(resolve_real_git "$subcmd" "$@")"
     set +e
     output=$("$real_bin" "$@" 2>&1)
     status=$?
@@ -394,7 +395,7 @@ if [ "$subcmd" = "index-pack" ]; then
 fi
 
 log "pass $subcmd $*"
-real_bin="$(resolve_real_git "$@")"
+real_bin="$(resolve_real_git "$subcmd" "$@")"
 if [ "$capture_stderr" = "1" ]; then
   exec_real_git "$real_bin" "$@"
 else
