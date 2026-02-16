@@ -57,15 +57,32 @@ has_command_support() {
 
 resolve_real_git() {
   subcmd="${1:-}"
+  support_cmd="$subcmd"
+  if [ "$subcmd" = "help" ]; then
+    seen_help=0
+    for arg in "$@"; do
+      if [ "$seen_help" -eq 1 ]; then
+        case "$arg" in
+          -*) ;;
+          *) support_cmd="$arg"; break ;;
+        esac
+      fi
+      case "$arg" in
+        help)
+          seen_help=1
+          ;;
+      esac
+    done
+  fi
   if [ -z "$subcmd" ] || [ -z "$fallback_real_git" ]; then
     printf '%s\n' "$real_git"
     return 0
   fi
-  if has_command_support "$real_git" "$subcmd"; then
+  if has_command_support "$real_git" "$support_cmd"; then
     printf '%s\n' "$real_git"
     return 0
   fi
-  if has_command_support "$fallback_real_git" "$subcmd"; then
+  if has_command_support "$fallback_real_git" "$support_cmd"; then
     log "fallback $subcmd $*"
     printf '%s\n' "$fallback_real_git"
     return 0
@@ -228,8 +245,8 @@ if [ "$subcmd" = "version" ]; then
       break
     fi
   done
-  if [ "$has_build_opts" -eq 1 ]; then
-    real_bin="$(resolve_real_git "$subcmd")"
+    if [ "$has_build_opts" -eq 1 ]; then
+    real_bin="$(resolve_real_git "$@")"
     set +e
     output=$("$real_bin" "$@" 2>&1)
     status=$?
@@ -377,7 +394,7 @@ if [ "$subcmd" = "index-pack" ]; then
 fi
 
 log "pass $subcmd $*"
-real_bin="$(resolve_real_git "$subcmd")"
+real_bin="$(resolve_real_git "$@")"
 if [ "$capture_stderr" = "1" ]; then
   exec_real_git "$real_bin" "$@"
 else

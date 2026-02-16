@@ -51,4 +51,15 @@ test_expect_success 'no fallback when primary git supports subcommand' '
   ! grep -q "^fallback:" trace
 '
 
+test_expect_success 'fallback is used when primary lacks help target subcommand' '
+  setup_stubs &&
+  : >trace &&
+  SHIM_TEST_TRACE="$PWD/trace" \
+  SHIM_REAL_GIT="$PWD/primary-git" \
+  SHIM_REAL_GIT_FALLBACK="$PWD/fallback-git" \
+  "$shim" help send-email &&
+  grep -q "^fallback:help send-email$" trace &&
+  ! grep -q "^primary:help send-email$" trace
+'
+
 test_done
