@@ -13,6 +13,12 @@ let hub_notes_ns : String = "bit-hub"
 let hub_notes_ref : String = "refs/notes/" + hub_notes_ns
 
 ///|
+let work_item_meta_prefix_value : String = "hub/work-item/"
+
+///|
+let canonical_work_item_record_kind_value : String = "work-item"
+
+///|
 pub fn hub_notes_ref_name() -> String {
   hub_notes_ref
 }
@@ -23,8 +29,13 @@ pub fn hub_notes_ns_name() -> String {
 }
 
 ///|
-pub fn pr_meta_key(pr_id : String) -> String {
-  "hub/pr/" + pr_id + "/meta"
+pub fn work_item_meta_prefix() -> String {
+  work_item_meta_prefix_value
+}
+
+///|
+pub fn work_item_meta_key(work_item_id : String) -> String {
+  work_item_meta_prefix_value + work_item_id + "/meta"
 }
 
 ///|
@@ -58,11 +69,6 @@ pub fn pr_review_key(pr_id : String, review_id : String) -> String {
 }
 
 ///|
-pub fn issue_meta_key(issue_id : String) -> String {
-  "hub/issue/" + issue_id + "/meta"
-}
-
-///|
 pub fn issue_comment_prefix(issue_id : String) -> String {
   "hub/issue/" + issue_id + "/comment/"
 }
@@ -70,6 +76,16 @@ pub fn issue_comment_prefix(issue_id : String) -> String {
 ///|
 pub fn issue_comment_key(issue_id : String, comment_id : String) -> String {
   issue_comment_prefix(issue_id) + comment_id
+}
+
+///|
+pub fn canonical_work_item_record_kind() -> String {
+  canonical_work_item_record_kind_value
+}
+
+///|
+pub fn is_work_item_record_kind(kind : String) -> Bool {
+  kind == canonical_work_item_record_kind_value
 }
 
 ///|

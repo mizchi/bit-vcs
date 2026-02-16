@@ -121,9 +121,9 @@ pub fn Hub::create_pr(
       objects,
       refs,
       clock,
-      pr_meta_key(pr_id),
-      "pr",
-      pr.serialize(),
+      work_item_meta_key(pr_id),
+      canonical_work_item_record_kind(),
+      pr.to_work_item().serialize(),
       author,
     ),
   )
@@ -137,18 +137,10 @@ pub fn Hub::get_pr(
   objects : &@lib.ObjectStore,
   pr_id : String,
 ) -> PullRequest? {
-  let record = self.store.get_record(objects, pr_meta_key(pr_id))
-  match record {
+  let work_item = self.get_work_item(objects, pr_id)
+  match work_item {
     None => None
-    Some(r) => {
-      let result : Result[PullRequest, PrError] = try? parse_pull_request(
-        r.payload,
-      )
-      match result {
-        Ok(pr) => Some(pr)
-        Err(_) => None
-      }
-    }
+    Some(item) => item.to_pull_request()
   }
 }
 
@@ -159,27 +151,22 @@ pub fn Hub::list_prs(
   objects : &@lib.ObjectStore,
   state? : PrState? = None,
 ) -> Array[PullRequest] {
+  let item_state = match state {
+    None => None
+    Some(s) => Some(s.to_work_item_state())
+  }
+  let items = self.list_work_items(
+    objects,
+    state=item_state,
+    kind=Some(WorkItemKind::PullRequest),
+  )
   let result : Array[PullRequest] = []
-  let records = self.store.list_records(objects, "hub/pr/")
-  for record in records {
-    if not(record.key.has_suffix("/meta")) || record.kind != "pr" {
-      continue
-    }
-    let pr = parse_pull_request(record.payload) catch { _ => continue }
-    match state {
-      None => result.push(pr)
-      Some(s) => if pr.state == s { result.push(pr) }
+  for item in items {
+    match item.to_pull_request() {
+      Some(pr) => result.push(pr)
+      None => ()
     }
   }
-  result.sort_by(fn(a, b) {
-    if a.created_at < b.created_at {
-      -1
-    } else if a.created_at > b.created_at {
-      1
-    } else {
-      0
-    }
-  })
   result
 }
 
@@ -232,9 +219,9 @@ pub fn Hub::update_pr(
       objects,
       refs,
       clock,
-      pr_meta_key(pr_id),
-      "pr",
-      updated.serialize(),
+      work_item_meta_key(pr_id),
+      canonical_work_item_record_kind(),
+      updated.to_work_item().serialize(),
       existing.author,
     ),
   )
@@ -279,9 +266,9 @@ pub fn Hub::close_pr(
       objects,
       refs,
       clock,
-      pr_meta_key(pr_id),
-      "pr",
-      updated.serialize(),
+      work_item_meta_key(pr_id),
+      canonical_work_item_record_kind(),
+      updated.to_work_item().serialize(),
       existing.author,
     ),
   )
@@ -324,9 +311,9 @@ pub fn Hub::reopen_pr(
       objects,
       refs,
       clock,
-      pr_meta_key(pr_id),
-      "pr",
-      updated.serialize(),
+      work_item_meta_key(pr_id),
+      canonical_work_item_record_kind(),
+      updated.to_work_item().serialize(),
       existing.author,
     ),
   )

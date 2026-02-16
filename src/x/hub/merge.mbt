@@ -801,9 +801,9 @@ fn mark_pr_merged(
       objects,
       refs,
       clock,
-      pr_meta_key(pr_id),
-      "pr",
-      updated.serialize(),
+      work_item_meta_key(pr_id),
+      canonical_work_item_record_kind(),
+      updated.to_work_item().serialize(),
       existing.author,
     ),
   )

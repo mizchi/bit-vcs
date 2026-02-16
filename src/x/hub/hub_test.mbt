@@ -190,6 +190,11 @@ test "pr: init creates notes ref on first write" {
 }
 
 ///|
+test "work item: meta key uses canonical namespace" {
+  assert_eq(work_item_meta_key("abc"), "hub/work-item/abc/meta")
+}
+
+///|
 test "pr: create and get PR" {
   let (_fs, objects, refs, clock) = setup_repo_with_branch()
   let prs = Hub::init(objects, refs)
@@ -208,6 +213,89 @@ test "pr: create and get PR" {
   assert_eq(r.title(), "Fix authentication bug")
   assert_eq(r.source_branch(), "refs/heads/feature")
   assert_eq(r.target_branch(), "refs/heads/main")
+  let record = prs.store.get_record(objects, work_item_meta_key(pr_id))
+  guard record is Some(stored) else { panic() }
+  assert_eq(stored.kind, "work-item")
+  assert_true(stored.payload.has_prefix("work-item "))
+}
+
+///|
+test "pr: get/list supports canonical work-item record" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let hub = Hub::init(objects, refs)
+  let source = refs.resolve("refs/heads/feature")
+  guard source is Some(source_commit) else { panic() }
+  let target = refs.resolve("refs/heads/main")
+  guard target is Some(target_commit) else { panic() }
+  let imported = PullRequest::new(
+    "work-item-pr",
+    "WorkItem PR",
+    "stored as work-item kind",
+    "refs/heads/feature",
+    source_commit,
+    "refs/heads/main",
+    target_commit,
+    "alice@example.com",
+    100L,
+    100L,
+    PrState::Open,
+    [],
+  )
+  ignore(
+    hub.store.put_record(
+      objects,
+      refs,
+      clock,
+      work_item_meta_key(imported.id()),
+      canonical_work_item_record_kind(),
+      imported.to_work_item().serialize(),
+      imported.author(),
+    ),
+  )
+  let found = hub.get_pr(objects, imported.id())
+  assert_true(found is Some(_))
+  let prs = hub.list_prs(objects)
+  assert_eq(prs.length(), 1)
+  assert_eq(prs[0].id(), imported.id())
+}
+
+///|
+test "pr: list ignores legacy namespace records" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let hub = Hub::init(objects, refs)
+  let source = refs.resolve("refs/heads/feature")
+  guard source is Some(source_commit) else { panic() }
+  let target = refs.resolve("refs/heads/main")
+  guard target is Some(target_commit) else { panic() }
+  let legacy_pr = PullRequest::new(
+    "legacy-pr",
+    "Legacy namespace PR",
+    "out of canonical namespace",
+    "refs/heads/feature",
+    source_commit,
+    "refs/heads/main",
+    target_commit,
+    "alice@example.com",
+    100L,
+    100L,
+    PrState::Open,
+    [],
+  )
+  ignore(
+    hub.store.put_record(
+      objects,
+      refs,
+      clock,
+      "hub/pr/\{legacy_pr.id()}/meta",
+      canonical_work_item_record_kind(),
+      legacy_pr.to_work_item().serialize(),
+      legacy_pr.author(),
+    ),
+  )
+  let found = hub.get_pr(objects, legacy_pr.id())
+  assert_true(found is None)
+  let prs = hub.list_prs(objects)
+  assert_eq(prs.length(), 0)
 }
 
 ///|
@@ -267,7 +355,7 @@ test "pr: classify canonical records as full triggers" {
     objects, refs, clock, "Canonical PR", "Should keep full triggers", "refs/heads/feature",
     "refs/heads/main", "erin@example.com",
   )
-  let key = pr_meta_key(pr.id())
+  let key = work_item_meta_key(pr.id())
   let record = hub.store.get_record(objects, key)
   guard record is Some(r) else { panic() }
   assert_eq(classify_record_trigger(r), RecordTriggerClass::Full)
@@ -753,7 +841,7 @@ test "format: serialize and parse PullRequest" {
     ["bug", "urgent"],
   )
   let serialized = pr.serialize()
-  let parsed = parse_pull_request(serialized)
+  let parsed = parse_legacy_pull_request(serialized)
   assert_eq(parsed.id(), "42")
   assert_eq(parsed.title(), "Test PR")
   assert_eq(parsed.labels().length(), 2)
@@ -779,7 +867,7 @@ test "format: serialize and parse PullRequest with source metadata" {
     source_ref=Some("refs/heads/feature"),
   )
   let serialized = pr.serialize()
-  let parsed = parse_pull_request(serialized)
+  let parsed = parse_legacy_pull_request(serialized)
   guard parsed.source_repo() is Some(repo) else { panic() }
   assert_eq(repo, "contrib/bit")
   guard parsed.source_ref() is Some(source_ref) else { panic() }
@@ -845,6 +933,71 @@ test "issue: create and get issue" {
   guard retrieved is Some(i) else { panic() }
   assert_eq(i.title(), "Bug report")
   assert_eq(i.labels().length(), 1)
+  let record = prs.store.get_record(objects, work_item_meta_key(issue_id))
+  guard record is Some(stored) else { panic() }
+  assert_eq(stored.kind, "work-item")
+  assert_true(stored.payload.has_prefix("work-item "))
+}
+
+///|
+test "issue: get/list supports canonical work-item record" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let hub = Hub::init(objects, refs)
+  let imported = Issue::new(
+    "work-item-issue",
+    "WorkItem issue",
+    "stored as work-item kind",
+    "alice@example.com",
+    100L,
+    100L,
+    IssueState::Open,
+  )
+  ignore(
+    hub.store.put_record(
+      objects,
+      refs,
+      clock,
+      work_item_meta_key(imported.id()),
+      canonical_work_item_record_kind(),
+      imported.to_work_item().serialize(),
+      imported.author(),
+    ),
+  )
+  let found = hub.get_issue(objects, imported.id())
+  assert_true(found is Some(_))
+  let issues = hub.list_issues(objects)
+  assert_eq(issues.length(), 1)
+  assert_eq(issues[0].id(), imported.id())
+}
+
+///|
+test "issue: list ignores legacy namespace records" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let hub = Hub::init(objects, refs)
+  let legacy_issue = Issue::new(
+    "legacy-issue",
+    "Legacy namespace issue",
+    "out of canonical namespace",
+    "alice@example.com",
+    100L,
+    100L,
+    IssueState::Open,
+  )
+  ignore(
+    hub.store.put_record(
+      objects,
+      refs,
+      clock,
+      "hub/issue/\{legacy_issue.id()}/meta",
+      canonical_work_item_record_kind(),
+      legacy_issue.to_work_item().serialize(),
+      legacy_issue.author(),
+    ),
+  )
+  let found = hub.get_issue(objects, legacy_issue.id())
+  assert_true(found is None)
+  let issues = hub.list_issues(objects)
+  assert_eq(issues.length(), 0)
 }
 
 ///|
@@ -996,6 +1149,175 @@ test "issue: update issue labels and assignees" {
 }
 
 ///|
+test "work item: get returns unified issue/pr view" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let hub = Hub::init(objects, refs)
+  let issue = hub.create_issue(
+    objects,
+    refs,
+    clock,
+    "Bug",
+    "Needs fix",
+    "alice@example.com",
+    labels=["bug"],
+    assignees=["bob@example.com"],
+  )
+  let pr = hub.create_pr(
+    objects, refs, clock, "Fix bug", "Patch", "refs/heads/feature", "refs/heads/main",
+    "carol@example.com",
+  )
+  let issue_item = hub.get_work_item(objects, issue.id())
+  guard issue_item is Some(found_issue_item) else { panic() }
+  assert_eq(found_issue_item.kind(), WorkItemKind::Issue)
+  assert_eq(found_issue_item.state(), WorkItemState::Open)
+  assert_eq(found_issue_item.assignees().length(), 1)
+  assert_true(found_issue_item.patch() is None)
+
+  let pr_item = hub.get_work_item(objects, pr.id())
+  guard pr_item is Some(found_pr_item) else { panic() }
+  assert_eq(found_pr_item.kind(), WorkItemKind::PullRequest)
+  assert_eq(found_pr_item.state(), WorkItemState::Open)
+  assert_eq(found_pr_item.assignees().length(), 0)
+  guard found_pr_item.patch() is Some(pr_patch) else { panic() }
+  assert_eq(pr_patch.source_branch(), "refs/heads/feature")
+  assert_eq(pr_patch.target_branch(), "refs/heads/main")
+}
+
+///|
+test "work item: list supports kind/state filters" {
+  let (_fs, objects, refs, clock) = setup_repo_with_branch()
+  let hub = Hub::init(objects, refs)
+  let issue = hub.create_issue(
+    objects, refs, clock, "Issue 1", "Body", "alice@example.com",
+  )
+  let pr = hub.create_pr(
+    objects, refs, clock, "PR 1", "Body", "refs/heads/feature", "refs/heads/main",
+    "bob@example.com",
+  )
+  hub.close_issue(objects, refs, clock, issue.id())
+  hub.close_pr(objects, refs, clock, pr.id())
+
+  let all = hub.list_work_items(objects)
+  assert_eq(all.length(), 2)
+
+  let closed = hub.list_work_items(objects, state=Some(WorkItemState::Closed))
+  assert_eq(closed.length(), 2)
+
+  let issue_only = hub.list_work_items(
+    objects,
+    state=Some(WorkItemState::Closed),
+    kind=Some(WorkItemKind::Issue),
+  )
+  assert_eq(issue_only.length(), 1)
+  assert_eq(issue_only[0].kind(), WorkItemKind::Issue)
+
+  let pr_only = hub.list_work_items(
+    objects,
+    state=Some(WorkItemState::Closed),
+    kind=Some(WorkItemKind::PullRequest),
+  )
+  assert_eq(pr_only.length(), 1)
+  assert_eq(pr_only[0].kind(), WorkItemKind::PullRequest)
+
+  let merged = hub.list_work_items(objects, state=Some(WorkItemState::Merged))
+  assert_eq(merged.length(), 0)
+}
+
+///|
+test "work item: kind is derived from patch capability" {
+  let issue_like = WorkItem::new(
+    "w-issue",
+    "Issue title",
+    "Issue body",
+    "alice@example.com",
+    1L,
+    2L,
+    WorkItemState::Open,
+  )
+  assert_eq(issue_like.kind(), WorkItemKind::Issue)
+
+  let patch = WorkItemPatch::new(
+    "refs/heads/feature",
+    @git.ObjectId::zero(),
+    "refs/heads/main",
+    @git.ObjectId::zero(),
+  )
+  let pr_like = WorkItem::new(
+    "w-pr",
+    "PR title",
+    "PR body",
+    "bob@example.com",
+    3L,
+    4L,
+    WorkItemState::Open,
+    patch=Some(patch),
+  )
+  assert_eq(pr_like.kind(), WorkItemKind::PullRequest)
+}
+
+///|
+test "format: serialize and parse WorkItem issue" {
+  let item = WorkItem::new(
+    "w-issue-1",
+    "Issue title",
+    "Issue body",
+    "alice@example.com",
+    1706745600L,
+    1706832000L,
+    WorkItemState::Open,
+    labels=["bug"],
+    assignees=["bob@example.com"],
+    linked_prs=["pr-1"],
+  )
+  let serialized = item.serialize()
+  let parsed = parse_work_item(serialized)
+  assert_eq(parsed.id(), "w-issue-1")
+  assert_eq(parsed.kind(), WorkItemKind::Issue)
+  guard parsed.to_issue() is Some(issue) else { panic() }
+  assert_eq(issue.title(), "Issue title")
+  assert_eq(issue.assignees().length(), 1)
+}
+
+///|
+test "format: serialize and parse WorkItem pull request" {
+  let merge_id = @git.ObjectId::from_hex(
+    "abcdef0123456789abcdef0123456789abcdef01",
+  ) catch {
+    _ => panic()
+  }
+  let patch = WorkItemPatch::new(
+    "refs/heads/feature",
+    @git.ObjectId::zero(),
+    "refs/heads/main",
+    @git.ObjectId::zero(),
+    closes_issues=["issue-1"],
+    merge_commit=Some(merge_id),
+    source_repo=Some("contrib/bit"),
+    source_ref=Some("refs/heads/feature"),
+  )
+  let item = WorkItem::new(
+    "w-pr-1",
+    "PR title",
+    "PR body",
+    "carol@example.com",
+    1706745600L,
+    1706832000L,
+    WorkItemState::Merged,
+    labels=["enhancement"],
+    patch=Some(patch),
+  )
+  let serialized = item.serialize()
+  let parsed = parse_work_item(serialized)
+  assert_eq(parsed.id(), "w-pr-1")
+  assert_eq(parsed.kind(), WorkItemKind::PullRequest)
+  guard parsed.to_pull_request() is Some(pr) else { panic() }
+  assert_eq(pr.state(), PrState::Merged)
+  assert_eq(pr.closes_issues().length(), 1)
+  guard pr.merge_commit() is Some(parsed_merge_id) else { panic() }
+  assert_eq(parsed_merge_id, merge_id)
+}
+
+///|
 test "format: serialize and parse Issue" {
   let issue = Issue::new(
     "42",
@@ -1009,7 +1331,7 @@ test "format: serialize and parse Issue" {
     assignees=["bob@example.com"],
   )
   let serialized = issue.serialize()
-  let parsed = parse_issue(serialized)
+  let parsed = parse_legacy_issue(serialized)
   assert_eq(parsed.id(), "42")
   assert_eq(parsed.title(), "Bug report")
   assert_eq(parsed.labels().length(), 2)
@@ -1174,7 +1496,7 @@ test "pr merge_commit round-trip" {
     merge_commit=Some(merge_id),
   )
   let serialized = pr.serialize()
-  let parsed = parse_pull_request(serialized) catch { _ => panic() }
+  let parsed = parse_legacy_pull_request(serialized) catch { _ => panic() }
   assert_true(parsed.merge_commit() is Some(_))
   guard parsed.merge_commit() is Some(mc) else { panic() }
   assert_eq(mc.to_hex(), "abcdef0123456789abcdef0123456789abcdef01")
@@ -1197,7 +1519,7 @@ test "pr merge_commit none round-trip" {
     [],
   )
   let serialized = pr.serialize()
-  let parsed = parse_pull_request(serialized) catch { _ => panic() }
+  let parsed = parse_legacy_pull_request(serialized) catch { _ => panic() }
   assert_true(parsed.merge_commit() is None)
 }
 

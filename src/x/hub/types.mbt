@@ -16,6 +16,21 @@ pub(all) enum IssueState {
 } derive(Eq)
 
 ///|
+/// Unified state of an Issue/PullRequest work item
+pub(all) enum WorkItemState {
+  Open
+  Merged
+  Closed
+} derive(Eq)
+
+///|
+/// Work item kind
+pub(all) enum WorkItemKind {
+  Issue
+  PullRequest
+} derive(Eq)
+
+///|
 pub fn IssueState::to_string(self : IssueState) -> String {
   match self {
     Open => "open"
@@ -40,6 +55,68 @@ pub fn PrState::to_string(self : PrState) -> String {
 ///|
 pub impl Show for PrState with output(self, logger) {
   logger.write_string(self.to_string())
+}
+
+///|
+pub fn WorkItemState::to_string(self : WorkItemState) -> String {
+  match self {
+    Open => "open"
+    Merged => "merged"
+    Closed => "closed"
+  }
+}
+
+///|
+pub impl Show for WorkItemState with output(self, logger) {
+  logger.write_string(self.to_string())
+}
+
+///|
+pub fn WorkItemKind::to_string(self : WorkItemKind) -> String {
+  match self {
+    Issue => "issue"
+    PullRequest => "pull-request"
+  }
+}
+
+///|
+pub impl Show for WorkItemKind with output(self, logger) {
+  logger.write_string(self.to_string())
+}
+
+///|
+pub fn PrState::to_work_item_state(self : PrState) -> WorkItemState {
+  match self {
+    Open => WorkItemState::Open
+    Merged => WorkItemState::Merged
+    Closed => WorkItemState::Closed
+  }
+}
+
+///|
+pub fn IssueState::to_work_item_state(self : IssueState) -> WorkItemState {
+  match self {
+    Open => WorkItemState::Open
+    Closed => WorkItemState::Closed
+  }
+}
+
+///|
+pub fn WorkItemState::to_pr_state(self : WorkItemState) -> PrState {
+  match self {
+    Open => PrState::Open
+    Merged => PrState::Merged
+    Closed => PrState::Closed
+  }
+}
+
+///|
+pub fn WorkItemState::to_issue_state(self : WorkItemState) -> IssueState? {
+  match self {
+    Open => Some(IssueState::Open)
+    Closed => Some(IssueState::Closed)
+    Merged => None
+  }
 }
 
 ///|
@@ -180,6 +257,269 @@ pub fn PullRequest::closes_issues(self : PullRequest) -> Array[String] {
 ///|
 pub fn PullRequest::merge_commit(self : PullRequest) -> @git.ObjectId? {
   self.merge_commit
+}
+
+///|
+/// Patch capability of a work item
+pub struct WorkItemPatch {
+  source_branch : String
+  source_repo : String?
+  source_ref : String?
+  source_commit : @git.ObjectId
+  target_branch : String
+  target_commit : @git.ObjectId
+  closes_issues : Array[String]
+  merge_commit : @git.ObjectId?
+}
+
+///|
+pub fn WorkItemPatch::new(
+  source_branch : String,
+  source_commit : @git.ObjectId,
+  target_branch : String,
+  target_commit : @git.ObjectId,
+  closes_issues? : Array[String] = [],
+  merge_commit? : @git.ObjectId? = None,
+  source_repo? : String? = None,
+  source_ref? : String? = None,
+) -> WorkItemPatch {
+  {
+    source_branch,
+    source_repo,
+    source_ref,
+    source_commit,
+    target_branch,
+    target_commit,
+    closes_issues,
+    merge_commit,
+  }
+}
+
+///|
+pub fn WorkItemPatch::source_branch(self : WorkItemPatch) -> String {
+  self.source_branch
+}
+
+///|
+pub fn WorkItemPatch::source_repo(self : WorkItemPatch) -> String? {
+  self.source_repo
+}
+
+///|
+pub fn WorkItemPatch::source_ref(self : WorkItemPatch) -> String? {
+  self.source_ref
+}
+
+///|
+pub fn WorkItemPatch::source_commit(self : WorkItemPatch) -> @git.ObjectId {
+  self.source_commit
+}
+
+///|
+pub fn WorkItemPatch::target_branch(self : WorkItemPatch) -> String {
+  self.target_branch
+}
+
+///|
+pub fn WorkItemPatch::target_commit(self : WorkItemPatch) -> @git.ObjectId {
+  self.target_commit
+}
+
+///|
+pub fn WorkItemPatch::closes_issues(self : WorkItemPatch) -> Array[String] {
+  self.closes_issues
+}
+
+///|
+pub fn WorkItemPatch::merge_commit(self : WorkItemPatch) -> @git.ObjectId? {
+  self.merge_commit
+}
+
+///|
+/// Unified work item view of issue and pull request
+pub struct WorkItem {
+  id : String
+  title : String
+  body : String
+  author : String
+  created_at : Int64
+  updated_at : Int64
+  state : WorkItemState
+  labels : Array[String]
+  assignees : Array[String]
+  linked_prs : Array[String]
+  patch : WorkItemPatch?
+}
+
+///|
+pub fn WorkItem::new(
+  id : String,
+  title : String,
+  body : String,
+  author : String,
+  created_at : Int64,
+  updated_at : Int64,
+  state : WorkItemState,
+  labels? : Array[String] = [],
+  assignees? : Array[String] = [],
+  linked_prs? : Array[String] = [],
+  patch? : WorkItemPatch? = None,
+) -> WorkItem {
+  {
+    id,
+    title,
+    body,
+    author,
+    created_at,
+    updated_at,
+    state,
+    labels,
+    assignees,
+    linked_prs,
+    patch,
+  }
+}
+
+///|
+pub fn WorkItem::id(self : WorkItem) -> String {
+  self.id
+}
+
+///|
+pub fn WorkItem::title(self : WorkItem) -> String {
+  self.title
+}
+
+///|
+pub fn WorkItem::body(self : WorkItem) -> String {
+  self.body
+}
+
+///|
+pub fn WorkItem::author(self : WorkItem) -> String {
+  self.author
+}
+
+///|
+pub fn WorkItem::created_at(self : WorkItem) -> Int64 {
+  self.created_at
+}
+
+///|
+pub fn WorkItem::updated_at(self : WorkItem) -> Int64 {
+  self.updated_at
+}
+
+///|
+pub fn WorkItem::state(self : WorkItem) -> WorkItemState {
+  self.state
+}
+
+///|
+pub fn WorkItem::kind(self : WorkItem) -> WorkItemKind {
+  match self.patch {
+    Some(_) => WorkItemKind::PullRequest
+    None => WorkItemKind::Issue
+  }
+}
+
+///|
+pub fn WorkItem::labels(self : WorkItem) -> Array[String] {
+  self.labels
+}
+
+///|
+pub fn WorkItem::assignees(self : WorkItem) -> Array[String] {
+  self.assignees
+}
+
+///|
+pub fn WorkItem::linked_prs(self : WorkItem) -> Array[String] {
+  self.linked_prs
+}
+
+///|
+pub fn WorkItem::patch(self : WorkItem) -> WorkItemPatch? {
+  self.patch
+}
+
+///|
+pub fn WorkItem::to_pull_request(self : WorkItem) -> PullRequest? {
+  match self.patch {
+    None => None
+    Some(patch) =>
+      Some(
+        PullRequest::new(
+          self.id,
+          self.title,
+          self.body,
+          patch.source_branch,
+          patch.source_commit,
+          patch.target_branch,
+          patch.target_commit,
+          self.author,
+          self.created_at,
+          self.updated_at,
+          self.state.to_pr_state(),
+          self.labels,
+          closes_issues=patch.closes_issues,
+          merge_commit=patch.merge_commit,
+          source_repo=patch.source_repo,
+          source_ref=patch.source_ref,
+        ),
+      )
+  }
+}
+
+///|
+pub fn WorkItem::to_issue(self : WorkItem) -> Issue? {
+  match self.patch {
+    Some(_) => None
+    None =>
+      match self.state.to_issue_state() {
+        None => None
+        Some(issue_state) =>
+          Some(
+            Issue::new(
+              self.id,
+              self.title,
+              self.body,
+              self.author,
+              self.created_at,
+              self.updated_at,
+              issue_state,
+              labels=self.labels,
+              assignees=self.assignees,
+              linked_prs=self.linked_prs,
+            ),
+          )
+      }
+  }
+}
+
+///|
+pub fn PullRequest::to_work_item(self : PullRequest) -> WorkItem {
+  let patch = WorkItemPatch::new(
+    self.source_branch,
+    self.source_commit,
+    self.target_branch,
+    self.target_commit,
+    closes_issues=self.closes_issues,
+    merge_commit=self.merge_commit,
+    source_repo=self.source_repo,
+    source_ref=self.source_ref,
+  )
+  WorkItem::new(
+    self.id,
+    self.title,
+    self.body,
+    self.author,
+    self.created_at,
+    self.updated_at,
+    self.state.to_work_item_state(),
+    labels=self.labels,
+    patch=Some(patch),
+  )
 }
 
 ///|
@@ -447,6 +787,22 @@ pub fn Issue::assignees(self : Issue) -> Array[String] {
 ///|
 pub fn Issue::linked_prs(self : Issue) -> Array[String] {
   self.linked_prs
+}
+
+///|
+pub fn Issue::to_work_item(self : Issue) -> WorkItem {
+  WorkItem::new(
+    self.id,
+    self.title,
+    self.body,
+    self.author,
+    self.created_at,
+    self.updated_at,
+    self.state.to_work_item_state(),
+    labels=self.labels,
+    assignees=self.assignees,
+    linked_prs=self.linked_prs,
+  )
 }
 
 ///|

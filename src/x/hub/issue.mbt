@@ -36,9 +36,9 @@ pub fn Hub::create_issue(
       objects,
       refs,
       clock,
-      issue_meta_key(issue_id),
-      "issue",
-      issue.serialize(),
+      work_item_meta_key(issue_id),
+      canonical_work_item_record_kind(),
+      issue.to_work_item().serialize(),
       author,
     ),
   )
@@ -52,16 +52,10 @@ pub fn Hub::get_issue(
   objects : &@lib.ObjectStore,
   issue_id : String,
 ) -> Issue? {
-  let record = self.store.get_record(objects, issue_meta_key(issue_id))
-  match record {
+  let work_item = self.get_work_item(objects, issue_id)
+  match work_item {
     None => None
-    Some(r) => {
-      let result : Result[Issue, PrError] = try? parse_issue(r.payload)
-      match result {
-        Ok(issue) => Some(issue)
-        Err(_) => None
-      }
-    }
+    Some(item) => item.to_issue()
   }
 }
 
@@ -72,27 +66,22 @@ pub fn Hub::list_issues(
   objects : &@lib.ObjectStore,
   state? : IssueState? = None,
 ) -> Array[Issue] {
+  let item_state = match state {
+    None => None
+    Some(s) => Some(s.to_work_item_state())
+  }
+  let items = self.list_work_items(
+    objects,
+    state=item_state,
+    kind=Some(WorkItemKind::Issue),
+  )
   let result : Array[Issue] = []
-  let records = self.store.list_records(objects, "hub/issue/")
-  for record in records {
-    if not(record.key.has_suffix("/meta")) || record.kind != "issue" {
-      continue
-    }
-    let issue = parse_issue(record.payload) catch { _ => continue }
-    match state {
-      None => result.push(issue)
-      Some(s) => if issue.state == s { result.push(issue) }
+  for item in items {
+    match item.to_issue() {
+      Some(issue) => result.push(issue)
+      None => ()
     }
   }
-  result.sort_by(fn(a, b) {
-    if a.created_at < b.created_at {
-      -1
-    } else if a.created_at > b.created_at {
-      1
-    } else {
-      0
-    }
-  })
   result
 }
 
@@ -146,9 +135,9 @@ pub fn Hub::update_issue(
       objects,
       refs,
       clock,
-      issue_meta_key(issue_id),
-      "issue",
-      updated.serialize(),
+      work_item_meta_key(issue_id),
+      canonical_work_item_record_kind(),
+      updated.to_work_item().serialize(),
       existing.author,
     ),
   )
@@ -188,9 +177,9 @@ pub fn Hub::close_issue(
       objects,
       refs,
       clock,
-      issue_meta_key(issue_id),
-      "issue",
-      updated.serialize(),
+      work_item_meta_key(issue_id),
+      canonical_work_item_record_kind(),
+      updated.to_work_item().serialize(),
       existing.author,
     ),
   )
@@ -229,9 +218,9 @@ pub fn Hub::reopen_issue(
       objects,
       refs,
       clock,
-      issue_meta_key(issue_id),
-      "issue",
-      updated.serialize(),
+      work_item_meta_key(issue_id),
+      canonical_work_item_record_kind(),
+      updated.to_work_item().serialize(),
       existing.author,
     ),
   )
@@ -350,9 +339,9 @@ pub fn Hub::link_pr_to_issue(
       objects,
       refs,
       clock,
-      issue_meta_key(issue_id),
-      "issue",
-      updated.serialize(),
+      work_item_meta_key(issue_id),
+      canonical_work_item_record_kind(),
+      updated.to_work_item().serialize(),
       existing.author,
     ),
   )

@@ -8,6 +8,8 @@ import {
 }
 
 // Values
+pub fn canonical_work_item_record_kind() -> String
+
 pub fn classify_record_trigger(HubRecord) -> RecordTriggerClass
 
 pub fn default_record_merge_policy() -> RecordMergePolicy
@@ -20,11 +22,11 @@ pub fn hub_notes_ns_name() -> String
 
 pub fn hub_notes_ref_name() -> String
 
+pub fn is_work_item_record_kind(String) -> Bool
+
 pub fn issue_comment_key(String, String) -> String
 
 pub fn issue_comment_prefix(String) -> String
-
-pub fn issue_meta_key(String) -> String
 
 pub fn merge_notes_commits(Hub, &@types.FileSystem, String, &@lib.ObjectStore, &@lib.RefStore, @object.ObjectId, @object.ObjectId, conflict_policy? : RecordMergePolicy) -> PrSyncResult raise @object.GitError
 
@@ -34,9 +36,11 @@ pub fn merge_record_bytes_with_policy(Bytes, Bytes, RecordMergePolicy) -> Bytes
 
 pub fn parse_hub_record(String) -> HubRecord
 
-pub fn parse_issue(String) -> Issue raise PrError
-
 pub fn parse_issue_comment(String) -> IssueComment raise PrError
+
+pub fn parse_legacy_issue(String) -> Issue raise PrError
+
+pub fn parse_legacy_pull_request(String) -> PullRequest raise PrError
 
 pub fn parse_note(String) -> Note
 
@@ -50,15 +54,13 @@ pub fn parse_pr_workflow_result(String) -> PrWorkflowResult raise PrError
 
 pub fn parse_pr_workflow_status(String) -> PrWorkflowStatus?
 
-pub fn parse_pull_request(String) -> PullRequest raise PrError
-
 pub fn parse_record_merge_policy(String) -> RecordMergePolicy?
+
+pub fn parse_work_item(String) -> WorkItem raise PrError
 
 pub fn pr_comment_key(String, String) -> String
 
 pub fn pr_comment_prefix(String) -> String
-
-pub fn pr_meta_key(String) -> String
 
 pub fn pr_proposal_meta_key(String) -> String
 
@@ -75,6 +77,10 @@ pub fn pr_workflow_prefix(String) -> String
 pub fn record_notify_topic(HubRecord) -> String?
 
 pub fn short_ref_name(String) -> String
+
+pub fn work_item_meta_key(String) -> String
+
+pub fn work_item_meta_prefix() -> String
 
 pub fn write_object_bytes(&@types.FileSystem, String, @object.ObjectId, Bytes) -> Unit raise @object.GitError
 
@@ -105,6 +111,7 @@ pub fn Hub::create_pr(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, Stri
 pub fn Hub::get_issue(Self, &@lib.ObjectStore, String) -> Issue?
 pub fn Hub::get_note(Self, &@lib.ObjectStore, &@lib.RefStore, @object.ObjectId, ns? : String) -> Note? raise @object.GitError
 pub fn Hub::get_pr(Self, &@lib.ObjectStore, String) -> PullRequest?
+pub fn Hub::get_work_item(Self, &@lib.ObjectStore, String) -> WorkItem?
 pub fn Hub::import_issues(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, Array[Issue]) -> ImportStats raise @object.GitError
 pub fn Hub::import_pr_proposals(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, Array[PullRequest]) -> ImportStats raise @object.GitError
 pub fn Hub::import_prs(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, Array[PullRequest]) -> ImportStats raise @object.GitError
@@ -119,6 +126,7 @@ pub fn Hub::list_pr_proposals(Self, &@lib.ObjectStore) -> Array[PullRequest]
 pub fn Hub::list_pr_workflows(Self, &@lib.ObjectStore, String) -> Array[PrWorkflowResult]
 pub fn Hub::list_prs(Self, &@lib.ObjectStore, state? : PrState?) -> Array[PullRequest]
 pub fn Hub::list_reviews(Self, &@lib.ObjectStore, String) -> Array[PrReview]
+pub fn Hub::list_work_items(Self, &@lib.ObjectStore, state? : WorkItemState?, kind? : WorkItemKind?) -> Array[WorkItem]
 pub fn Hub::load(&@lib.ObjectStore, &@lib.RefStore, node_id? : String, signing_key? : String?, require_signed? : Bool) -> Self raise @object.GitError
 pub fn Hub::merge_pr(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, String, String, strategy? : PrMergeStrategy) -> PrMergeResult raise @object.GitError
 pub fn Hub::propose_pr(Self, &@lib.ObjectStore, &@lib.RefStore, &@lib.Clock, String, String, String, String, String, source_repo? : String?, source_ref? : String?) -> PullRequest raise @object.GitError
@@ -192,6 +200,7 @@ pub fn Issue::new(String, String, String, String, Int64, Int64, IssueState, labe
 pub fn Issue::serialize(Self) -> String
 pub fn Issue::state(Self) -> IssueState
 pub fn Issue::title(Self) -> String
+pub fn Issue::to_work_item(Self) -> WorkItem
 pub fn Issue::updated_at(Self) -> Int64
 
 pub struct IssueComment {
@@ -216,6 +225,7 @@ pub(all) enum IssueState {
   Closed
 }
 pub fn IssueState::to_string(Self) -> String
+pub fn IssueState::to_work_item_state(Self) -> WorkItemState
 pub impl Eq for IssueState
 pub impl Show for IssueState
 
@@ -313,6 +323,7 @@ pub(all) enum PrState {
   Closed
 }
 pub fn PrState::to_string(Self) -> String
+pub fn PrState::to_work_item_state(Self) -> WorkItemState
 pub impl Eq for PrState
 pub impl Show for PrState
 
@@ -394,6 +405,7 @@ pub fn PullRequest::state(Self) -> PrState
 pub fn PullRequest::target_branch(Self) -> String
 pub fn PullRequest::target_commit(Self) -> @object.ObjectId
 pub fn PullRequest::title(Self) -> String
+pub fn PullRequest::to_work_item(Self) -> WorkItem
 pub fn PullRequest::updated_at(Self) -> Int64
 
 pub enum RecordMergePolicy {
@@ -416,6 +428,75 @@ pub(all) enum ReviewVerdict {
 pub fn ReviewVerdict::to_string(Self) -> String
 pub impl Eq for ReviewVerdict
 pub impl Show for ReviewVerdict
+
+pub struct WorkItem {
+  id : String
+  title : String
+  body : String
+  author : String
+  created_at : Int64
+  updated_at : Int64
+  state : WorkItemState
+  labels : Array[String]
+  assignees : Array[String]
+  linked_prs : Array[String]
+  patch : WorkItemPatch?
+}
+pub fn WorkItem::assignees(Self) -> Array[String]
+pub fn WorkItem::author(Self) -> String
+pub fn WorkItem::body(Self) -> String
+pub fn WorkItem::created_at(Self) -> Int64
+pub fn WorkItem::id(Self) -> String
+pub fn WorkItem::kind(Self) -> WorkItemKind
+pub fn WorkItem::labels(Self) -> Array[String]
+pub fn WorkItem::linked_prs(Self) -> Array[String]
+pub fn WorkItem::new(String, String, String, String, Int64, Int64, WorkItemState, labels? : Array[String], assignees? : Array[String], linked_prs? : Array[String], patch? : WorkItemPatch?) -> Self
+pub fn WorkItem::patch(Self) -> WorkItemPatch?
+pub fn WorkItem::serialize(Self) -> String
+pub fn WorkItem::state(Self) -> WorkItemState
+pub fn WorkItem::title(Self) -> String
+pub fn WorkItem::to_issue(Self) -> Issue?
+pub fn WorkItem::to_pull_request(Self) -> PullRequest?
+pub fn WorkItem::updated_at(Self) -> Int64
+
+pub(all) enum WorkItemKind {
+  Issue
+  PullRequest
+}
+pub fn WorkItemKind::to_string(Self) -> String
+pub impl Eq for WorkItemKind
+pub impl Show for WorkItemKind
+
+pub struct WorkItemPatch {
+  source_branch : String
+  source_repo : String?
+  source_ref : String?
+  source_commit : @object.ObjectId
+  target_branch : String
+  target_commit : @object.ObjectId
+  closes_issues : Array[String]
+  merge_commit : @object.ObjectId?
+}
+pub fn WorkItemPatch::closes_issues(Self) -> Array[String]
+pub fn WorkItemPatch::merge_commit(Self) -> @object.ObjectId?
+pub fn WorkItemPatch::new(String, @object.ObjectId, String, @object.ObjectId, closes_issues? : Array[String], merge_commit? : @object.ObjectId?, source_repo? : String?, source_ref? : String?) -> Self
+pub fn WorkItemPatch::source_branch(Self) -> String
+pub fn WorkItemPatch::source_commit(Self) -> @object.ObjectId
+pub fn WorkItemPatch::source_ref(Self) -> String?
+pub fn WorkItemPatch::source_repo(Self) -> String?
+pub fn WorkItemPatch::target_branch(Self) -> String
+pub fn WorkItemPatch::target_commit(Self) -> @object.ObjectId
+
+pub(all) enum WorkItemState {
+  Open
+  Merged
+  Closed
+}
+pub fn WorkItemState::to_issue_state(Self) -> IssueState?
+pub fn WorkItemState::to_pr_state(Self) -> PrState
+pub fn WorkItemState::to_string(Self) -> String
+pub impl Eq for WorkItemState
+pub impl Show for WorkItemState
 
 // Type aliases
 

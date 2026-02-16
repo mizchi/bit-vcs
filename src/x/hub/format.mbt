@@ -74,8 +74,8 @@ pub fn PullRequest::serialize(self : PullRequest) -> String {
 }
 
 ///|
-/// Parse PullRequest from Git-style text format
-pub fn parse_pull_request(text : String) -> PullRequest raise PrError {
+/// Parse legacy PullRequest payload (`pr ...`) from Git-style text format
+pub fn parse_legacy_pull_request(text : String) -> PullRequest raise PrError {
   let mut id = ""
   let mut title = ""
   let mut source_branch = ""
@@ -165,6 +165,207 @@ pub fn parse_pull_request(text : String) -> PullRequest raise PrError {
     merge_commit~,
     source_repo~,
     source_ref~,
+  )
+}
+
+///|
+/// Serialize WorkItem to Git-style text format
+pub fn WorkItem::serialize(self : WorkItem) -> String {
+  let sb = StringBuilder::new()
+  sb.write_string("work-item ")
+  sb.write_string(self.id)
+  sb.write_char('\n')
+  sb.write_string("title ")
+  sb.write_string(self.title)
+  sb.write_char('\n')
+  sb.write_string("author ")
+  sb.write_string(self.author)
+  sb.write_char('\n')
+  sb.write_string("created ")
+  sb.write_string(self.created_at.to_string())
+  sb.write_char('\n')
+  sb.write_string("updated ")
+  sb.write_string(self.updated_at.to_string())
+  sb.write_char('\n')
+  sb.write_string("state ")
+  sb.write_string(self.state.to_string())
+  sb.write_char('\n')
+  for label in self.labels {
+    sb.write_string("label ")
+    sb.write_string(label)
+    sb.write_char('\n')
+  }
+  for assignee in self.assignees {
+    sb.write_string("assignee ")
+    sb.write_string(assignee)
+    sb.write_char('\n')
+  }
+  for pr_id in self.linked_prs {
+    sb.write_string("linked-pr ")
+    sb.write_string(pr_id)
+    sb.write_char('\n')
+  }
+  match self.patch {
+    None => ()
+    Some(patch) => {
+      sb.write_string("source ")
+      sb.write_string(patch.source_branch)
+      sb.write_char('\n')
+      match patch.source_repo {
+        Some(repo) => {
+          sb.write_string("source-repo ")
+          sb.write_string(repo)
+          sb.write_char('\n')
+        }
+        None => ()
+      }
+      match patch.source_ref {
+        Some(source_ref) => {
+          sb.write_string("source-ref ")
+          sb.write_string(source_ref)
+          sb.write_char('\n')
+        }
+        None => ()
+      }
+      sb.write_string("source-commit ")
+      sb.write_string(patch.source_commit.to_hex())
+      sb.write_char('\n')
+      sb.write_string("target ")
+      sb.write_string(patch.target_branch)
+      sb.write_char('\n')
+      sb.write_string("target-commit ")
+      sb.write_string(patch.target_commit.to_hex())
+      sb.write_char('\n')
+      for issue_id in patch.closes_issues {
+        sb.write_string("closes ")
+        sb.write_string(issue_id)
+        sb.write_char('\n')
+      }
+      match patch.merge_commit {
+        Some(mc) => {
+          sb.write_string("merge-commit ")
+          sb.write_string(mc.to_hex())
+          sb.write_char('\n')
+        }
+        None => ()
+      }
+    }
+  }
+  sb.write_char('\n')
+  sb.write_string(self.body)
+  sb.to_string()
+}
+
+///|
+/// Parse WorkItem from Git-style text format
+pub fn parse_work_item(text : String) -> WorkItem raise PrError {
+  let mut id = ""
+  let mut title = ""
+  let mut author = ""
+  let mut created_at : Int64 = 0
+  let mut updated_at : Int64 = 0
+  let mut state = WorkItemState::Open
+  let labels : Array[String] = []
+  let assignees : Array[String] = []
+  let linked_prs : Array[String] = []
+  let mut source_branch : String? = None
+  let mut source_repo : String? = None
+  let mut source_ref : String? = None
+  let mut source_commit_hex : String? = None
+  let mut target_branch : String? = None
+  let mut target_commit_hex : String? = None
+  let closes_issues : Array[String] = []
+  let mut merge_commit : @git.ObjectId? = None
+  let body_lines : Array[String] = []
+  let mut in_body = false
+  for line_view in text.split("\n") {
+    let line = line_view.to_string()
+    if in_body {
+      body_lines.push(line)
+      continue
+    }
+    if line.length() == 0 {
+      in_body = true
+      continue
+    }
+    let space = line.find(" ")
+    match space {
+      None => continue
+      Some(idx) => {
+        let key = String::unsafe_substring(line, start=0, end=idx)
+        let value = String::unsafe_substring(
+          line,
+          start=idx + 1,
+          end=line.length(),
+        )
+        match key {
+          "work-item" => id = value
+          "title" => title = value
+          "author" => author = value
+          "created" => created_at = parse_int64(value)
+          "updated" => updated_at = parse_int64(value)
+          "state" => state = parse_work_item_state(value)
+          "label" => labels.push(value)
+          "assignee" => assignees.push(value)
+          "linked-pr" => linked_prs.push(value)
+          "source" => source_branch = Some(value)
+          "source-repo" => source_repo = Some(value)
+          "source-ref" => source_ref = Some(value)
+          "source-commit" => source_commit_hex = Some(value)
+          "target" => target_branch = Some(value)
+          "target-commit" => target_commit_hex = Some(value)
+          "closes" => closes_issues.push(value)
+          "merge-commit" =>
+            merge_commit = Some(
+              @git.ObjectId::from_hex(value) catch {
+                _ => raise PrError::InvalidFormat("Invalid merge-commit hex")
+              },
+            )
+          _ => ()
+        }
+      }
+    }
+  }
+  if id.length() == 0 {
+    raise PrError::InvalidFormat("Missing work item id")
+  }
+  let patch = match
+    (source_branch, source_commit_hex, target_branch, target_commit_hex) {
+    (None, None, None, None) => None
+    (Some(src_branch), Some(src_hex), Some(tgt_branch), Some(tgt_hex)) => {
+      let source_commit = @git.ObjectId::from_hex(src_hex) catch {
+        _ => raise PrError::InvalidFormat("Invalid source-commit hex")
+      }
+      let target_commit = @git.ObjectId::from_hex(tgt_hex) catch {
+        _ => raise PrError::InvalidFormat("Invalid target-commit hex")
+      }
+      Some(
+        WorkItemPatch::new(
+          src_branch,
+          source_commit,
+          tgt_branch,
+          target_commit,
+          closes_issues~,
+          merge_commit~,
+          source_repo~,
+          source_ref~,
+        ),
+      )
+    }
+    _ => raise PrError::InvalidFormat("Incomplete work item patch fields")
+  }
+  WorkItem::new(
+    id,
+    title,
+    body_lines.join("\n"),
+    author,
+    created_at,
+    updated_at,
+    state,
+    labels~,
+    assignees~,
+    linked_prs~,
+    patch~,
   )
 }
 
@@ -409,6 +610,16 @@ fn parse_pr_state(s : String) -> PrState {
 }
 
 ///|
+fn parse_work_item_state(s : String) -> WorkItemState {
+  match s {
+    "open" => WorkItemState::Open
+    "merged" => WorkItemState::Merged
+    "closed" => WorkItemState::Closed
+    _ => WorkItemState::Open
+  }
+}
+
+///|
 fn parse_review_verdict(s : String) -> ReviewVerdict {
   match s {
     "approved" => ReviewVerdict::Approved
@@ -461,8 +672,8 @@ pub fn Issue::serialize(self : Issue) -> String {
 }
 
 ///|
-/// Parse Issue from Git-style text format
-pub fn parse_issue(text : String) -> Issue raise PrError {
+/// Parse legacy Issue payload (`issue ...`) from Git-style text format
+pub fn parse_legacy_issue(text : String) -> Issue raise PrError {
   let mut id = ""
   let mut title = ""
   let mut author = ""

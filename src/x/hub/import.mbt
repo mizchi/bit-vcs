@@ -35,7 +35,7 @@ pub fn Hub::import_prs(
   let mut created = 0
   let mut updated = 0
   for pr in prs {
-    let existing = self.store.get_record(objects, pr_meta_key(pr.id()))
+    let existing = self.store.get_record(objects, work_item_meta_key(pr.id()))
     match existing {
       Some(r) =>
         if r.timestamp >= pr.updated_at {
@@ -50,9 +50,9 @@ pub fn Hub::import_prs(
         objects,
         refs,
         clock,
-        pr_meta_key(pr.id()),
-        "pr",
-        pr.serialize(),
+        work_item_meta_key(pr.id()),
+        canonical_work_item_record_kind(),
+        pr.to_work_item().serialize(),
         pr.author(),
       ),
     )
@@ -114,7 +114,10 @@ pub fn Hub::import_issues(
   let mut created = 0
   let mut updated = 0
   for issue in issues {
-    let existing = self.store.get_record(objects, issue_meta_key(issue.id()))
+    let existing = self.store.get_record(
+      objects,
+      work_item_meta_key(issue.id()),
+    )
     match existing {
       Some(r) =>
         if r.timestamp >= issue.updated_at {
@@ -129,9 +132,9 @@ pub fn Hub::import_issues(
         objects,
         refs,
         clock,
-        issue_meta_key(issue.id()),
-        "issue",
-        issue.serialize(),
+        work_item_meta_key(issue.id()),
+        canonical_work_item_record_kind(),
+        issue.to_work_item().serialize(),
         issue.author(),
       ),
     )

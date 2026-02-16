@@ -83,7 +83,7 @@ pub fn Hub::list_pr_proposals(
     if not(record.key.has_suffix("/meta")) || record.kind != "pr-proposal" {
       continue
     }
-    let pr = parse_pull_request(record.payload) catch { _ => continue }
+    let pr = parse_legacy_pull_request(record.payload) catch { _ => continue }
     result.push(pr)
   }
   result.sort_by(fn(a, b) {
