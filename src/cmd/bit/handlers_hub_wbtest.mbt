@@ -14,6 +14,25 @@ test "hub parser: parse_issue_state handles known and unknown values" {
 }
 
 ///|
+test "hub parser: parse_work_item_state handles known and unknown values" {
+  assert_eq(parse_work_item_state("open"), Some(@hub.WorkItemState::Open))
+  assert_eq(parse_work_item_state("closed"), Some(@hub.WorkItemState::Closed))
+  assert_eq(parse_work_item_state("merged"), Some(@hub.WorkItemState::Merged))
+  assert_eq(parse_work_item_state("draft"), None)
+}
+
+///|
+test "hub parser: parse_work_item_kind handles known and unknown values" {
+  assert_eq(parse_work_item_kind("issue"), Some(@hub.WorkItemKind::Issue))
+  assert_eq(parse_work_item_kind("pr"), Some(@hub.WorkItemKind::PullRequest))
+  assert_eq(
+    parse_work_item_kind("pull-request"),
+    Some(@hub.WorkItemKind::PullRequest),
+  )
+  assert_eq(parse_work_item_kind("comment"), None)
+}
+
+///|
 test "hub parser: parse_review_verdict handles known and unknown values" {
   assert_eq(
     parse_review_verdict("approved"),
@@ -100,6 +119,12 @@ test "hub parser: normalize issue subcommand handles gh aliases" {
 }
 
 ///|
+test "hub parser: normalize work-item subcommand handles aliases" {
+  assert_eq(normalize_hub_work_item_subcommand("view"), "get")
+  assert_eq(normalize_hub_work_item_subcommand("list"), "list")
+}
+
+///|
 test "hub parser: resolve comment subcommand defaults to add" {
   assert_eq(resolve_hub_comment_subcommand("add"), "add")
   assert_eq(resolve_hub_comment_subcommand("list"), "list")
@@ -126,6 +151,36 @@ test "hub parser: parse_issue_state_flag handles gh-style flags" {
   assert_eq(parse_issue_state_flag("--open"), Some(@hub.IssueState::Open))
   assert_eq(parse_issue_state_flag("--closed"), Some(@hub.IssueState::Closed))
   assert_eq(parse_issue_state_flag("--all"), None)
+}
+
+///|
+test "hub parser: parse_work_item_state_flag handles flags" {
+  assert_eq(
+    parse_work_item_state_flag("--open"),
+    Some(@hub.WorkItemState::Open),
+  )
+  assert_eq(
+    parse_work_item_state_flag("--closed"),
+    Some(@hub.WorkItemState::Closed),
+  )
+  assert_eq(
+    parse_work_item_state_flag("--merged"),
+    Some(@hub.WorkItemState::Merged),
+  )
+  assert_eq(parse_work_item_state_flag("--all"), None)
+}
+
+///|
+test "hub parser: parse_work_item_kind_flag handles flags" {
+  assert_eq(
+    parse_work_item_kind_flag("--issue"),
+    Some(@hub.WorkItemKind::Issue),
+  )
+  assert_eq(
+    parse_work_item_kind_flag("--pr"),
+    Some(@hub.WorkItemKind::PullRequest),
+  )
+  assert_eq(parse_work_item_kind_flag("--all"), None)
 }
 
 ///|
@@ -174,6 +229,32 @@ test "hub parser: parse_hub_issue_list_options handles gh-style flags and limit"
 }
 
 ///|
+test "hub parser: parse_hub_work_item_list_options handles filters and limit" {
+  let opts = parse_hub_work_item_list_options([
+    "--closed", "--kind", "issue", "--limit", "4",
+  ])
+  assert_eq(opts.limit, Some(4))
+  match opts.state {
+    Some(@hub.WorkItemState::Closed) => ()
+    _ => fail("expected closed state")
+  }
+  match opts.kind {
+    Some(@hub.WorkItemKind::Issue) => ()
+    _ => fail("expected issue kind")
+  }
+  let opts2 = parse_hub_work_item_list_options(["-L", "2", "--pr", "--open"])
+  assert_eq(opts2.limit, Some(2))
+  match opts2.kind {
+    Some(@hub.WorkItemKind::PullRequest) => ()
+    _ => fail("expected pull request kind")
+  }
+  match opts2.state {
+    Some(@hub.WorkItemState::Open) => ()
+    _ => fail("expected open state")
+  }
+}
+
+///|
 test "hub parser: parse_hub_pr_list_options rejects invalid limit" {
   ignore(
     parse_hub_pr_list_options(["--limit", "0"]) catch {
@@ -193,6 +274,20 @@ test "hub parser: parse_hub_issue_list_options rejects missing limit value" {
     parse_hub_issue_list_options(["-L"]) catch {
       @git.GitError::InvalidObject(message) => {
         assert_true(message.contains("--limit requires a value"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
+}
+
+///|
+test "hub parser: parse_hub_work_item_list_options rejects unknown kind" {
+  ignore(
+    parse_hub_work_item_list_options(["--kind", "review"]) catch {
+      @git.GitError::InvalidObject(message) => {
+        assert_true(message.contains("Unknown work item kind"))
         return ()
       }
       err => fail("unexpected error: \{err.to_string()}")
@@ -773,4 +868,21 @@ test "hub notify: format_hub_notify_message handles hub.pr.proposal" {
     format_hub_notify_message("hub.other", record),
     "[hub.notify] hub.other key=hub/proposal/pr/p-1/meta",
   )
+}
+
+///|
+test "hub format: format_work_item_summary includes kind and state" {
+  let item = @hub.WorkItem::new(
+    "w1",
+    "Unified title",
+    "body",
+    "alice",
+    1L,
+    2L,
+    @hub.WorkItemState::Open,
+  )
+  let out = format_work_item_summary(item)
+  assert_true(out.contains("#w1"))
+  assert_true(out.contains("[issue/open]"))
+  assert_true(out.contains("Unified title"))
 }

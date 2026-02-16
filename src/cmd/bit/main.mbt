@@ -100,79 +100,221 @@ async fn show_simple_command_help(usage : String, summary? : String) -> Unit {
 fn show_command_help_specs() -> Array[(String, String, String)] {
   [
     ("help", "git help [-a | -g | -c] [<command>]", "Show help information."),
-    ("clone", "git clone [<options>] [--] <repo> [<dir>]", "Clone a repository into a new directory."),
-    ("tree", "bit tree [<options>] <repo>[:<path>] [<pathspec>...]", "List tree entries from a remote repository (porcelain)."),
-    ("cat", "bit cat <repo>:<path>", "Show file contents from a remote repository."),
-    ("diff", "git diff [<options>] [--] [<pathspec>...]", "Show changes between commits, commit and working tree, etc."),
-    ("diff-files", "git diff-files [<options>] [<pathspec>...]", "Compare files in the working tree and index."),
-    ("diff-index", "git diff-index [<options>] <tree-ish> [--] [<pathspec>...]", "Compare tree object with working tree and index."),
-    ("branch", "git branch [<options>] [<branchname>]", "List, create, or delete branches."),
-    ("show-branches", "git show-branch [<options>] [<branch>...]", "Show branches and their commits."),
-    ("show-branch", "git show-branch [<options>] [<branch>...]", "Show branches and their commits."),
-    ("checkout", "git checkout [<options>] <branch>", "Switch branches or restore working tree files."),
+    (
+      "clone", "git clone [<options>] [--] <repo> [<dir>]", "Clone a repository into a new directory.",
+    ),
+    (
+      "tree", "bit tree [<options>] <repo>[:<path>] [<pathspec>...]", "List tree entries from a remote repository (porcelain).",
+    ),
+    (
+      "cat", "bit cat <repo>:<path>", "Show file contents from a remote repository.",
+    ),
+    (
+      "diff", "git diff [<options>] [--] [<pathspec>...]", "Show changes between commits, commit and working tree, etc.",
+    ),
+    (
+      "diff-files", "git diff-files [<options>] [<pathspec>...]", "Compare files in the working tree and index.",
+    ),
+    (
+      "diff-index", "git diff-index [<options>] <tree-ish> [--] [<pathspec>...]",
+      "Compare tree object with working tree and index.",
+    ),
+    (
+      "branch", "git branch [<options>] [<branchname>]", "List, create, or delete branches.",
+    ),
+    (
+      "show-branches", "git show-branch [<options>] [<branch>...]", "Show branches and their commits.",
+    ),
+    (
+      "show-branch", "git show-branch [<options>] [<branch>...]", "Show branches and their commits.",
+    ),
+    (
+      "checkout", "git checkout [<options>] <branch>", "Switch branches or restore working tree files.",
+    ),
     ("switch", "git switch [<options>] <branch>", "Switch branches."),
-    ("reset", "git reset [<options>] [<commit>]", "Reset current HEAD to the specified state."),
-    ("rebase", "git rebase [<options>] <upstream> [<branch>]", "Reapply commits on top of another base tip."),
-    ("merge", "git merge [<options>] <commit>...", "Join two or more development histories together."),
-    ("stash", "git stash [<options>] [<message>]", "Stash the changes in a dirty working directory."),
-    ("cherry-pick", "git cherry-pick [<options>] <commit>...", "Apply the changes from existing commits."),
-    ("tag", "git tag [<options>] [<name> [<commit>]]", "Create, list, delete tag objects."),
-    ("fetch", "git fetch [<options>] [<repository> [<refspec>...]]", "Download objects and refs from another repository."),
-    ("pull", "git pull [<options>] [<repository> [<refspec>...]]", "Fetch from and integrate with another repository."),
-    ("push", "git push [<options>] [<repository> [<refspec>...]]", "Update remote refs along with associated objects."),
-    ("remote", "git remote [<command>] [<args>]", "Manage set of tracked repositories."),
-    ("mv", "git mv <source> <destination>", "Move or rename a file, a directory, or a symlink."),
-    ("rm", "git rm [<options>] <file>...", "Remove files from the working tree and from the index."),
-    ("bundle", "git bundle <command> [<args>]", "Create, verify, list-heads, and unbundle Git bundles."),
-    ("clean", "git clean [<options>] [--] <pathspec>...", "Remove untracked files from the working tree."),
-    ("cat-file", "git cat-file <type> <object>", "Provide content or type info for repository objects."),
-    ("config", "git config [<options>] <name> [<value>]", "Get and set repository options."),
-    ("describe", "git describe [<options>] <commit-ish>", "Give an object a human readable name based on a ref."),
-    ("format-patch", "git format-patch [<options>] <since>..<until>", "Prepare patches for e-mail submission."),
-    ("fsck", "git fsck [<options>]", "Verify the connectivity and validity of objects."),
-    ("gc", "git gc [<options>]", "Cleanup unnecessary files and optimize the local repository."),
-    ("grep", "git grep [<options>] <pattern> [--] <pathspec>...", "Print lines matching a pattern."),
-    ("hash-object", "git hash-object [<options>] <file>...", "Compute object ID and optionally creates a blob."),
-    ("index-pack", "git index-pack [<options>] <pack> [<idx>]", "Build pack index file for an existing packed archive."),
-    ("ls-files", "git ls-files [<options>] [<file>...]", "Show information about files in the index."),
-    ("ls-tree", "git ls-tree [<options>] <tree-ish> [<path>...]", "List the contents of a tree object."),
-    ("pack-objects", "git pack-objects [<options>] <base-name>", "Create a packed archive of objects."),
-    ("pack-refs", "git pack-refs [<options>]", "Pack heads and tags for efficient repository access."),
-    ("prune", "git prune [<options>]", "Prune all unreachable objects from the object database."),
+    (
+      "reset", "git reset [<options>] [<commit>]", "Reset current HEAD to the specified state.",
+    ),
+    (
+      "rebase", "git rebase [<options>] <upstream> [<branch>]", "Reapply commits on top of another base tip.",
+    ),
+    (
+      "merge", "git merge [<options>] <commit>...", "Join two or more development histories together.",
+    ),
+    (
+      "stash", "git stash [<options>] [<message>]", "Stash the changes in a dirty working directory.",
+    ),
+    (
+      "cherry-pick", "git cherry-pick [<options>] <commit>...", "Apply the changes from existing commits.",
+    ),
+    (
+      "tag", "git tag [<options>] [<name> [<commit>]]", "Create, list, delete tag objects.",
+    ),
+    (
+      "fetch", "git fetch [<options>] [<repository> [<refspec>...]]", "Download objects and refs from another repository.",
+    ),
+    (
+      "pull", "git pull [<options>] [<repository> [<refspec>...]]", "Fetch from and integrate with another repository.",
+    ),
+    (
+      "push", "git push [<options>] [<repository> [<refspec>...]]", "Update remote refs along with associated objects.",
+    ),
+    (
+      "remote", "git remote [<command>] [<args>]", "Manage set of tracked repositories.",
+    ),
+    (
+      "mv", "git mv <source> <destination>", "Move or rename a file, a directory, or a symlink.",
+    ),
+    (
+      "rm", "git rm [<options>] <file>...", "Remove files from the working tree and from the index.",
+    ),
+    (
+      "bundle", "git bundle <command> [<args>]", "Create, verify, list-heads, and unbundle Git bundles.",
+    ),
+    (
+      "clean", "git clean [<options>] [--] <pathspec>...", "Remove untracked files from the working tree.",
+    ),
+    (
+      "cat-file", "git cat-file <type> <object>", "Provide content or type info for repository objects.",
+    ),
+    (
+      "config", "git config [<options>] <name> [<value>]", "Get and set repository options.",
+    ),
+    (
+      "describe", "git describe [<options>] <commit-ish>", "Give an object a human readable name based on a ref.",
+    ),
+    (
+      "format-patch", "git format-patch [<options>] <since>..<until>", "Prepare patches for e-mail submission.",
+    ),
+    (
+      "fsck", "git fsck [<options>]", "Verify the connectivity and validity of objects.",
+    ),
+    (
+      "gc", "git gc [<options>]", "Cleanup unnecessary files and optimize the local repository.",
+    ),
+    (
+      "grep", "git grep [<options>] <pattern> [--] <pathspec>...", "Print lines matching a pattern.",
+    ),
+    (
+      "hash-object", "git hash-object [<options>] <file>...", "Compute object ID and optionally creates a blob.",
+    ),
+    (
+      "index-pack", "git index-pack [<options>] <pack> [<idx>]", "Build pack index file for an existing packed archive.",
+    ),
+    (
+      "ls-files", "git ls-files [<options>] [<file>...]", "Show information about files in the index.",
+    ),
+    (
+      "ls-tree", "git ls-tree [<options>] <tree-ish> [<path>...]", "List the contents of a tree object.",
+    ),
+    (
+      "pack-objects", "git pack-objects [<options>] <base-name>", "Create a packed archive of objects.",
+    ),
+    (
+      "pack-refs", "git pack-refs [<options>]", "Pack heads and tags for efficient repository access.",
+    ),
+    (
+      "prune", "git prune [<options>]", "Prune all unreachable objects from the object database.",
+    ),
     ("reflog", "git reflog [<options>] [<ref>]", "Manage reflog information."),
-    ("repack", "git repack [<options>]", "Pack unpacked objects in a repository."),
-    ("revert", "git revert [<options>] <commit>...", "Revert some existing commits."),
+    (
+      "repack", "git repack [<options>]", "Pack unpacked objects in a repository.",
+    ),
+    (
+      "revert", "git revert [<options>] <commit>...", "Revert some existing commits.",
+    ),
     ("notes", "git notes [<command>] [<args>]", "Add or inspect object notes."),
-    ("bisect", "git bisect [<options>] <subcommand> [<args>]", "Find by binary search the change that introduced a bug."),
-    ("blame", "git blame [<options>] <file>", "Show what revision and author last modified each line."),
-    ("receive-pack", "git receive-pack <git-dir>", "Receive what is pushed into the repository."),
-    ("git-receive-pack", "git receive-pack <git-dir>", "Receive what is pushed into the repository."),
-    ("rev-list", "git rev-list [<options>] <commit>...", "List commit objects in reverse chronological order."),
-    ("rev-parse", "git rev-parse [<options>] <arg>...", "Parse revision specifications."),
-    ("request-pull", "git request-pull <start> <url> [<end>]", "Generate a summary of pending changes."),
-    ("send-pack", "git send-pack [<options>] <repository> [<refspec>...]", "Push objects over git protocol to another repository."),
-    ("show-ref", "git show-ref [<options>] [<pattern>...]", "List references in a local repository."),
-    ("shortlog", "git shortlog [<options>] [<revision-range>]", "Summarize git log output."),
-    ("symbolic-ref", "git symbolic-ref [<options>] <name> [<ref>]", "Read, modify and delete symbolic refs."),
-    ("submodule", "git submodule [<command>] [<args>]", "Initialize, update or inspect submodules."),
-    ("sparse-checkout", "git sparse-checkout [<command>] [<args>]", "Initialize and modify the sparse-checkout config."),
-    ("read-tree", "git read-tree [<options>] <tree-ish>", "Read tree information into the index."),
-    ("update-index", "git update-index [<options>] [--] <file>...", "Register file contents in the index."),
-    ("mktree", "git mktree [<options>]", "Build a tree-object from ls-tree formatted text."),
-    ("maintenance", "git maintenance [<command>] [<options>]", "Run tasks to optimize Git repository data."),
-    ("unpack-objects", "git unpack-objects [<options>]", "Unpack objects from a packed archive."),
-    ("update-ref", "git update-ref [<options>] <refname> <newvalue> [<oldvalue>]", "Update the object name stored in a ref safely."),
-    ("upload-pack", "git upload-pack [<options>] <git-dir>", "Send objects packed back to git-fetch-pack."),
-    ("git-upload-pack", "git upload-pack [<options>] <git-dir>", "Send objects packed back to git-fetch-pack."),
-    ("verify-pack", "git verify-pack [<options>] <pack>...", "Validate packed Git archive files."),
-    ("write-tree", "git write-tree", "Create a tree object from the current index."),
-    ("range-diff", "git range-diff [<options>] <range1> <range2>", "Compare two commit ranges."),
-    ("multi-pack-index", "git multi-pack-index [<options>] <subcommand>", "Write and verify multi-pack-indexes."),
-    ("cherry", "git cherry [<options>] <upstream> [<head>]", "Find commits yet to be applied to upstream."),
-    ("am", "git am [<options>] <mbox>", "Apply a series of patches from a mailbox."),
-    ("apply", "git apply [<options>] <patch>...", "Apply a patch to files and/or to the index."),
-    ("completion", "bit completion <bash|zsh>", "Generate shell completion scripts.\n\nInstall:\n  bash: eval \"$(bit completion bash)\"\n  zsh:  eval \"$(bit completion zsh)\""),
-    ("shell", "bit shell [--login] [<path>]", "Start an interactive bit shell with command forwarding."),
+    (
+      "bisect", "git bisect [<options>] <subcommand> [<args>]", "Find by binary search the change that introduced a bug.",
+    ),
+    (
+      "blame", "git blame [<options>] <file>", "Show what revision and author last modified each line.",
+    ),
+    (
+      "receive-pack", "git receive-pack <git-dir>", "Receive what is pushed into the repository.",
+    ),
+    (
+      "git-receive-pack", "git receive-pack <git-dir>", "Receive what is pushed into the repository.",
+    ),
+    (
+      "rev-list", "git rev-list [<options>] <commit>...", "List commit objects in reverse chronological order.",
+    ),
+    (
+      "rev-parse", "git rev-parse [<options>] <arg>...", "Parse revision specifications.",
+    ),
+    (
+      "request-pull", "git request-pull <start> <url> [<end>]", "Generate a summary of pending changes.",
+    ),
+    (
+      "send-pack", "git send-pack [<options>] <repository> [<refspec>...]", "Push objects over git protocol to another repository.",
+    ),
+    (
+      "show-ref", "git show-ref [<options>] [<pattern>...]", "List references in a local repository.",
+    ),
+    (
+      "shortlog", "git shortlog [<options>] [<revision-range>]", "Summarize git log output.",
+    ),
+    (
+      "symbolic-ref", "git symbolic-ref [<options>] <name> [<ref>]", "Read, modify and delete symbolic refs.",
+    ),
+    (
+      "submodule", "git submodule [<command>] [<args>]", "Initialize, update or inspect submodules.",
+    ),
+    (
+      "sparse-checkout", "git sparse-checkout [<command>] [<args>]", "Initialize and modify the sparse-checkout config.",
+    ),
+    (
+      "read-tree", "git read-tree [<options>] <tree-ish>", "Read tree information into the index.",
+    ),
+    (
+      "update-index", "git update-index [<options>] [--] <file>...", "Register file contents in the index.",
+    ),
+    (
+      "mktree", "git mktree [<options>]", "Build a tree-object from ls-tree formatted text.",
+    ),
+    (
+      "maintenance", "git maintenance [<command>] [<options>]", "Run tasks to optimize Git repository data.",
+    ),
+    (
+      "unpack-objects", "git unpack-objects [<options>]", "Unpack objects from a packed archive.",
+    ),
+    (
+      "update-ref", "git update-ref [<options>] <refname> <newvalue> [<oldvalue>]",
+      "Update the object name stored in a ref safely.",
+    ),
+    (
+      "upload-pack", "git upload-pack [<options>] <git-dir>", "Send objects packed back to git-fetch-pack.",
+    ),
+    (
+      "git-upload-pack", "git upload-pack [<options>] <git-dir>", "Send objects packed back to git-fetch-pack.",
+    ),
+    (
+      "verify-pack", "git verify-pack [<options>] <pack>...", "Validate packed Git archive files.",
+    ),
+    (
+      "write-tree", "git write-tree", "Create a tree object from the current index.",
+    ),
+    (
+      "range-diff", "git range-diff [<options>] <range1> <range2>", "Compare two commit ranges.",
+    ),
+    (
+      "multi-pack-index", "git multi-pack-index [<options>] <subcommand>", "Write and verify multi-pack-indexes.",
+    ),
+    (
+      "cherry", "git cherry [<options>] <upstream> [<head>]", "Find commits yet to be applied to upstream.",
+    ),
+    (
+      "am", "git am [<options>] <mbox>", "Apply a series of patches from a mailbox.",
+    ),
+    (
+      "apply", "git apply [<options>] <patch>...", "Apply a patch to files and/or to the index.",
+    ),
+    (
+      "completion", "bit completion <bash|zsh>", "Generate shell completion scripts.\n\nInstall:\n  bash: eval \"$(bit completion bash)\"\n  zsh:  eval \"$(bit completion zsh)\"",
+    ),
+    (
+      "shell", "bit shell [--login] [<path>]", "Start an interactive bit shell with command forwarding.",
+    ),
     ("version", "git version", "Show version information."),
   ]
 }
@@ -219,9 +361,7 @@ fn load_opt_in_help_text(cmd : String) -> String? {
   // not grow with long-form help text.
   let path = normalize_path(dir + "/" + help_text_detail_key(cmd) + ".txt")
   let fs = OsFs::new()
-  let bytes = fs.read_file(path) catch {
-    _ => return None
-  }
+  let bytes = fs.read_file(path) catch { _ => return None }
   let text = decode_bytes(bytes) |> trim_string
   if text.length() == 0 {
     None
@@ -239,7 +379,7 @@ async fn show_command_help_from_specs(cmd : String, silent : Bool) -> Bool {
           Some(details) => spec.2 + "\n\n" + details
           None => spec.2
         }
-        show_simple_command_help(spec.1, summary=summary)
+        show_simple_command_help(spec.1, summary~)
       }
       return true
     }

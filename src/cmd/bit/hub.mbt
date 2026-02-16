@@ -126,6 +126,7 @@ fn print_hub_usage() -> Unit {
   println("  init          Initialize hub metadata")
   println("  pr            Manage pull requests")
   println("  issue         Manage issues")
+  println("  work-item     Manage unified issue/pull-request view")
   println("  note          Manage notes")
   println("  sync          Sync hub refs with remotes")
   println("  dump          Dump raw hub records from notes")
@@ -211,6 +212,18 @@ fn print_hub_issue_usage() -> Unit {
   )
   println("  comment list <issue-id>")
   println("  link <issue-id> <pr-id>")
+}
+
+///|
+fn print_hub_work_item_usage() -> Unit {
+  println("Usage: bit hub work-item <subcommand> [<args>]")
+  println("")
+  println("Subcommands:")
+  println(
+    "  list [--state <open|closed|merged> | --open | --closed | --merged] [--kind <issue|pr|pull-request> | --issue | --pr] [--limit <n>]",
+  )
+  println("  get <id>")
+  println("  view <id>                             (alias: get)")
 }
 
 ///|
@@ -991,6 +1004,7 @@ async fn handle_hub(args : Array[String]) -> Unit raise Error {
     "init" => handle_hub_init(rest)
     "pr" => handle_hub_pr(rest)
     "issue" => handle_hub_issue(rest)
+    "work-item" | "workitem" | "item" => handle_hub_work_item(rest)
     "note" => handle_hub_note(rest)
     "sync" => handle_hub_sync(rest)
     "dump" => handle_hub_dump(rest)
@@ -1073,62 +1087,12 @@ fn parse_positive_list_limit(value : String) -> Int raise @git.GitError {
 fn parse_hub_pr_list_options(
   args : Array[String],
 ) -> HubPrListOptions raise @git.GitError {
-  let mut state : @hub.PrState? = None
-  let mut limit : Int? = None
-  let mut i = 0
-  while i < args.length() {
-    let arg = args[i]
-    if parse_pr_state_flag(arg) is Some(flag_state) {
-      state = Some(flag_state)
-      i += 1
-      continue
-    }
-    match arg {
-      "--state" if i + 1 < args.length() => {
-        let value = args[i + 1]
-        if parse_pr_state(value) is Some(s) {
-          state = Some(s)
-        } else {
-          raise @git.GitError::InvalidObject("Unknown PR state: \{value}")
-        }
-        i += 2
-        continue
-      }
-      "--state" =>
-        raise @git.GitError::InvalidObject(
-          "hub pr list: --state requires a value",
-        )
-      _ if arg.has_prefix("--state=") => {
-        let value = String::unsafe_substring(arg, start=8, end=arg.length())
-        if parse_pr_state(value) is Some(s) {
-          state = Some(s)
-        } else {
-          raise @git.GitError::InvalidObject("Unknown PR state: \{value}")
-        }
-        i += 1
-        continue
-      }
-      "--limit" | "-L" if i + 1 < args.length() => {
-        limit = Some(parse_positive_list_limit(args[i + 1]))
-        i += 2
-        continue
-      }
-      "--limit" | "-L" =>
-        raise @git.GitError::InvalidObject(
-          "hub pr list: --limit requires a value",
-        )
-      _ if arg.has_prefix("--limit=") => {
-        let value = String::unsafe_substring(arg, start=8, end=arg.length())
-        limit = Some(parse_positive_list_limit(value))
-        i += 1
-        continue
-      }
-      _ if arg.has_prefix("-") => ()
-      _ => ()
-    }
-    i += 1
+  let common = parse_hub_list_options(args, "hub pr list", "PR", true, false)
+  let state = match common.state {
+    None => None
+    Some(work_item_state) => Some(work_item_state.to_pr_state())
   }
-  { state, limit }
+  { state, limit: common.limit }
 }
 
 ///|
@@ -2549,46 +2513,142 @@ async fn handle_hub_issue(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
+async fn handle_hub_work_item(args : Array[String]) -> Unit raise Error {
+  if args.length() == 0 {
+    print_hub_work_item_usage()
+    return ()
+  }
+  let subcmd = normalize_hub_work_item_subcommand(args[0])
+  let rest = collect_args(args, 1)
+  match subcmd {
+    "list" => handle_hub_work_item_list(rest)
+    "get" => handle_hub_work_item_get(rest)
+    "help" | "-h" | "--help" => print_hub_work_item_usage()
+    _ => {
+      eprint_line("bit hub work-item: unknown subcommand '\{subcmd}'")
+      print_hub_work_item_usage()
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
+struct HubWorkItemListOptions {
+  state : @hub.WorkItemState?
+  kind : @hub.WorkItemKind?
+  limit : Int?
+}
+
+///|
 struct HubIssueListOptions {
   state : @hub.IssueState?
   limit : Int?
 }
 
 ///|
-fn parse_hub_issue_list_options(
+fn parse_work_item_state_for_list(
+  value : String,
+  unknown_state_label : String,
+  allow_merged : Bool,
+) -> @hub.WorkItemState raise @git.GitError {
+  let state = parse_work_item_state(value)
+  guard state is Some(parsed) else {
+    raise @git.GitError::InvalidObject(
+      "Unknown \{unknown_state_label} state: \{value}",
+    )
+  }
+  if not(allow_merged) && parsed == @hub.WorkItemState::Merged {
+    raise @git.GitError::InvalidObject(
+      "Unknown \{unknown_state_label} state: \{value}",
+    )
+  }
+  parsed
+}
+
+///|
+fn parse_hub_list_options(
   args : Array[String],
-) -> HubIssueListOptions raise @git.GitError {
-  let mut state : @hub.IssueState? = None
+  context : String,
+  unknown_state_label : String,
+  allow_merged : Bool,
+  allow_kind : Bool,
+) -> HubWorkItemListOptions raise @git.GitError {
+  let mut state : @hub.WorkItemState? = None
+  let mut kind : @hub.WorkItemKind? = None
   let mut limit : Int? = None
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
-    if parse_issue_state_flag(arg) is Some(flag_state) {
-      state = Some(flag_state)
+    if allow_kind {
+      if parse_work_item_state_flag(arg) is Some(flag_state) {
+        state = Some(flag_state)
+        i += 1
+        continue
+      }
+    } else if allow_merged {
+      if parse_pr_state_flag(arg) is Some(flag_state) {
+        state = Some(flag_state.to_work_item_state())
+        i += 1
+        continue
+      }
+    } else if parse_issue_state_flag(arg) is Some(flag_state) {
+      state = Some(flag_state.to_work_item_state())
       i += 1
       continue
     }
+    if allow_kind {
+      if parse_work_item_kind_flag(arg) is Some(flag_kind) {
+        kind = Some(flag_kind)
+        i += 1
+        continue
+      }
+    }
     match arg {
       "--state" if i + 1 < args.length() => {
-        let value = args[i + 1]
-        if parse_issue_state(value) is Some(s) {
-          state = Some(s)
-        } else {
-          raise @git.GitError::InvalidObject("Unknown issue state: \{value}")
-        }
+        state = Some(
+          parse_work_item_state_for_list(
+            args[i + 1],
+            unknown_state_label,
+            allow_merged,
+          ),
+        )
         i += 2
         continue
       }
       "--state" =>
         raise @git.GitError::InvalidObject(
-          "hub issue list: --state requires a value",
+          "\{context}: --state requires a value",
         )
       _ if arg.has_prefix("--state=") => {
         let value = String::unsafe_substring(arg, start=8, end=arg.length())
-        if parse_issue_state(value) is Some(s) {
-          state = Some(s)
+        state = Some(
+          parse_work_item_state_for_list(
+            value, unknown_state_label, allow_merged,
+          ),
+        )
+        i += 1
+        continue
+      }
+      "--kind" if allow_kind && i + 1 < args.length() => {
+        let value = args[i + 1]
+        if parse_work_item_kind(value) is Some(k) {
+          kind = Some(k)
         } else {
-          raise @git.GitError::InvalidObject("Unknown issue state: \{value}")
+          raise @git.GitError::InvalidObject("Unknown work item kind: \{value}")
+        }
+        i += 2
+        continue
+      }
+      "--kind" if allow_kind =>
+        raise @git.GitError::InvalidObject(
+          "\{context}: --kind requires a value",
+        )
+      _ if allow_kind && arg.has_prefix("--kind=") => {
+        let value = String::unsafe_substring(arg, start=7, end=arg.length())
+        if parse_work_item_kind(value) is Some(k) {
+          kind = Some(k)
+        } else {
+          raise @git.GitError::InvalidObject("Unknown work item kind: \{value}")
         }
         i += 1
         continue
@@ -2600,7 +2660,7 @@ fn parse_hub_issue_list_options(
       }
       "--limit" | "-L" =>
         raise @git.GitError::InvalidObject(
-          "hub issue list: --limit requires a value",
+          "\{context}: --limit requires a value",
         )
       _ if arg.has_prefix("--limit=") => {
         let value = String::unsafe_substring(arg, start=8, end=arg.length())
@@ -2613,7 +2673,28 @@ fn parse_hub_issue_list_options(
     }
     i += 1
   }
-  { state, limit }
+  { state, kind, limit }
+}
+
+///|
+fn parse_hub_issue_list_options(
+  args : Array[String],
+) -> HubIssueListOptions raise @git.GitError {
+  let common = parse_hub_list_options(
+    args, "hub issue list", "issue", false, false,
+  )
+  let state = match common.state {
+    None => None
+    Some(work_item_state) => work_item_state.to_issue_state()
+  }
+  { state, limit: common.limit }
+}
+
+///|
+fn parse_hub_work_item_list_options(
+  args : Array[String],
+) -> HubWorkItemListOptions raise @git.GitError {
+  parse_hub_list_options(args, "hub work-item list", "work item", true, true)
 }
 
 ///|
@@ -2637,6 +2718,35 @@ async fn handle_hub_issue_list(args : Array[String]) -> Unit raise Error {
   let mut i = 0
   while i < limit {
     issues[i] |> format_issue_summary |> print_line
+    i += 1
+  }
+}
+
+///|
+async fn handle_hub_work_item_list(args : Array[String]) -> Unit raise Error {
+  let options = parse_hub_work_item_list_options(args)
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let (objects, refs, _clock) = make_hub_stores(git_dir)
+  let hub = load_hub_store(objects, refs)
+  let items = hub.list_work_items(
+    objects,
+    state=options.state,
+    kind=options.kind,
+  )
+  let raw_limit = options.limit.unwrap_or(items.length())
+  let limit = if raw_limit < items.length() {
+    raw_limit
+  } else {
+    items.length()
+  }
+  if limit == 0 {
+    print_line("No work items")
+    return ()
+  }
+  let mut i = 0
+  while i < limit {
+    items[i] |> format_work_item_summary |> print_line
     i += 1
   }
 }
@@ -2803,6 +2913,43 @@ async fn handle_hub_issue_get(args : Array[String]) -> Unit raise Error {
     raise @git.GitError::InvalidObject("Issue not found: \{id}")
   }
   print_line(val.serialize())
+}
+
+///|
+async fn handle_hub_work_item_get(args : Array[String]) -> Unit raise Error {
+  if args.length() == 0 {
+    print_hub_work_item_usage()
+    return ()
+  }
+  let first = args[0]
+  if first == "-h" || first == "--help" || first == "help" {
+    print_hub_work_item_usage()
+    return ()
+  }
+  let mut work_item_id : String? = None
+  for arg in args {
+    if arg.has_prefix("-") {
+      warn_unimplemented_arg("hub work-item get", arg)
+      continue
+    }
+    if work_item_id is None {
+      work_item_id = Some(arg)
+    } else {
+      warn_unimplemented_arg("hub work-item get", arg)
+    }
+  }
+  guard work_item_id is Some(id) else {
+    raise @git.GitError::InvalidObject("Work item id is required")
+  }
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let (objects, refs, _clock) = make_hub_stores(git_dir)
+  let hub = load_hub_store(objects, refs)
+  let work_item = hub.get_work_item(objects, id)
+  guard work_item is Some(val) else {
+    raise @git.GitError::InvalidObject("Work item not found: \{id}")
+  }
+  print_line(format_work_item_detail(val))
 }
 
 ///|
@@ -3697,7 +3844,7 @@ fn collect_changed_notify_records(
 fn format_hub_notify_message(topic : String, record : @hub.HubRecord) -> String {
   match topic {
     "hub.pr.proposal" => {
-      let proposal = @hub.parse_pull_request(record.payload) catch {
+      let proposal = @hub.parse_legacy_pull_request(record.payload) catch {
         _ => return "[hub.notify] hub.pr.proposal key=\{record.key}"
       }
       "[hub.notify] hub.pr.proposal #\{proposal.id()} [\{proposal.state().to_string()}] \{proposal.title()}"
@@ -4281,19 +4428,35 @@ fn pr_matches_branch(pr : @hub.PullRequest, branch : String) -> Bool {
 
 ///|
 fn parse_pr_state_flag(value : String) -> @hub.PrState? {
-  match value {
-    "--open" => Some(@hub.PrState::Open)
-    "--closed" => Some(@hub.PrState::Closed)
-    "--merged" => Some(@hub.PrState::Merged)
-    _ => None
+  match parse_work_item_state_flag(value) {
+    Some(work_item_state) => Some(work_item_state.to_pr_state())
+    None => None
   }
 }
 
 ///|
 fn parse_issue_state_flag(value : String) -> @hub.IssueState? {
+  match parse_work_item_state_flag(value) {
+    Some(work_item_state) => work_item_state.to_issue_state()
+    None => None
+  }
+}
+
+///|
+fn parse_work_item_state_flag(value : String) -> @hub.WorkItemState? {
   match value {
-    "--open" => Some(@hub.IssueState::Open)
-    "--closed" => Some(@hub.IssueState::Closed)
+    "--open" => Some(@hub.WorkItemState::Open)
+    "--closed" => Some(@hub.WorkItemState::Closed)
+    "--merged" => Some(@hub.WorkItemState::Merged)
+    _ => None
+  }
+}
+
+///|
+fn parse_work_item_kind_flag(value : String) -> @hub.WorkItemKind? {
+  match value {
+    "--issue" => Some(@hub.WorkItemKind::Issue)
+    "--pr" | "--pull-request" => Some(@hub.WorkItemKind::PullRequest)
     _ => None
   }
 }
@@ -4313,6 +4476,14 @@ fn normalize_hub_issue_subcommand(subcmd : String) -> String {
   match subcmd {
     "view" => "get"
     "edit" => "update"
+    _ => subcmd
+  }
+}
+
+///|
+fn normalize_hub_work_item_subcommand(subcmd : String) -> String {
+  match subcmd {
+    "view" => "get"
     _ => subcmd
   }
 }
@@ -4355,19 +4526,36 @@ fn parse_merge_strategy_flag(value : String) -> @hub.PrMergeStrategy? {
 
 ///|
 fn parse_pr_state(value : String) -> @hub.PrState? {
-  match value {
-    "open" => Some(@hub.PrState::Open)
-    "closed" => Some(@hub.PrState::Closed)
-    "merged" => Some(@hub.PrState::Merged)
-    _ => None
+  match parse_work_item_state(value) {
+    Some(work_item_state) => Some(work_item_state.to_pr_state())
+    None => None
   }
 }
 
 ///|
 fn parse_issue_state(value : String) -> @hub.IssueState? {
+  match parse_work_item_state(value) {
+    Some(work_item_state) => work_item_state.to_issue_state()
+    None => None
+  }
+}
+
+///|
+fn parse_work_item_state(value : String) -> @hub.WorkItemState? {
   match value {
-    "open" => Some(@hub.IssueState::Open)
-    "closed" => Some(@hub.IssueState::Closed)
+    "open" => Some(@hub.WorkItemState::Open)
+    "closed" => Some(@hub.WorkItemState::Closed)
+    "merged" => Some(@hub.WorkItemState::Merged)
+    _ => None
+  }
+}
+
+///|
+fn parse_work_item_kind(value : String) -> @hub.WorkItemKind? {
+  match value {
+    "issue" => Some(@hub.WorkItemKind::Issue)
+    "pr" | "pull-request" | "pullrequest" =>
+      Some(@hub.WorkItemKind::PullRequest)
     _ => None
   }
 }
@@ -4408,6 +4596,105 @@ fn format_issue_summary(issue : @hub.Issue) -> String {
   let title = issue.title()
   let state = issue.state().to_string()
   "#\{id} [\{state}] \{title}"
+}
+
+///|
+fn format_work_item_summary(item : @hub.WorkItem) -> String {
+  let id = item.id()
+  let title = item.title()
+  let kind = item.kind().to_string()
+  let state = item.state().to_string()
+  "#\{id} [\{kind}/\{state}] \{title}"
+}
+
+///|
+fn format_work_item_detail(item : @hub.WorkItem) -> String {
+  let sb = StringBuilder::new()
+  sb.write_string("id ")
+  sb.write_string(item.id())
+  sb.write_char('\n')
+  sb.write_string("kind ")
+  sb.write_string(item.kind().to_string())
+  sb.write_char('\n')
+  sb.write_string("state ")
+  sb.write_string(item.state().to_string())
+  sb.write_char('\n')
+  sb.write_string("author ")
+  sb.write_string(item.author())
+  sb.write_char('\n')
+  sb.write_string("created-at ")
+  sb.write_string(item.created_at().to_string())
+  sb.write_char('\n')
+  sb.write_string("updated-at ")
+  sb.write_string(item.updated_at().to_string())
+  sb.write_char('\n')
+  for label in item.labels() {
+    sb.write_string("label ")
+    sb.write_string(label)
+    sb.write_char('\n')
+  }
+  for assignee in item.assignees() {
+    sb.write_string("assignee ")
+    sb.write_string(assignee)
+    sb.write_char('\n')
+  }
+  for linked_pr in item.linked_prs() {
+    sb.write_string("linked-pr ")
+    sb.write_string(linked_pr)
+    sb.write_char('\n')
+  }
+  match item.patch() {
+    None => ()
+    Some(patch) => {
+      sb.write_string("source-branch ")
+      sb.write_string(patch.source_branch())
+      sb.write_char('\n')
+      match patch.source_repo() {
+        Some(source_repo) => {
+          sb.write_string("source-repo ")
+          sb.write_string(source_repo)
+          sb.write_char('\n')
+        }
+        None => ()
+      }
+      match patch.source_ref() {
+        Some(source_ref) => {
+          sb.write_string("source-ref ")
+          sb.write_string(source_ref)
+          sb.write_char('\n')
+        }
+        None => ()
+      }
+      sb.write_string("source-commit ")
+      sb.write_string(patch.source_commit().to_hex())
+      sb.write_char('\n')
+      sb.write_string("target-branch ")
+      sb.write_string(patch.target_branch())
+      sb.write_char('\n')
+      sb.write_string("target-commit ")
+      sb.write_string(patch.target_commit().to_hex())
+      sb.write_char('\n')
+      for closes_issue in patch.closes_issues() {
+        sb.write_string("closes-issue ")
+        sb.write_string(closes_issue)
+        sb.write_char('\n')
+      }
+      match patch.merge_commit() {
+        Some(merge_commit) => {
+          sb.write_string("merge-commit ")
+          sb.write_string(merge_commit.to_hex())
+          sb.write_char('\n')
+        }
+        None => ()
+      }
+    }
+  }
+  sb.write_string("title ")
+  sb.write_string(item.title())
+  sb.write_char('\n')
+  sb.write_char('\n')
+  sb.write_string(item.body())
+  sb.to_string()
 }
 
 ///|
