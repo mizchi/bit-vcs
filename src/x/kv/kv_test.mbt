@@ -82,6 +82,15 @@ priv struct TestObjectStore {
 }
 
 ///|
+// Test adapter: ObjectStore with filesystem-backed get() call counter
+priv struct CountingTestObjectStore {
+  backing_fs : &@git.RepoFileSystem
+  write_fs : &@git.FileSystem
+  git_dir : String
+  counter_path : String
+}
+
+///|
 impl @lib.ObjectStore for TestObjectStore with get(self, id) {
   let db = @lib.ObjectDb::load(self.backing_fs, self.git_dir)
   db.get(self.backing_fs, id)
@@ -94,6 +103,37 @@ impl @lib.ObjectStore for TestObjectStore with put(self, obj_type, data) {
 
 ///|
 impl @lib.ObjectStore for TestObjectStore with has(self, id) {
+  let db = @lib.ObjectDb::load(self.backing_fs, self.git_dir) catch {
+    _ => return false
+  }
+  let obj = db.get(self.backing_fs, id) catch { _ => return false }
+  obj is Some(_)
+}
+
+///|
+fn counter_touch(store : CountingTestObjectStore) -> Unit {
+  let prev = store.backing_fs.read_file(store.counter_path) catch { _ => b"" }
+  let next = prev.to_array()
+  next.push(b'x')
+  store.write_fs.write_file(store.counter_path, Bytes::from_array(next)) catch {
+    _ => ()
+  }
+}
+
+///|
+impl @lib.ObjectStore for CountingTestObjectStore with get(self, id) {
+  counter_touch(self)
+  let db = @lib.ObjectDb::load(self.backing_fs, self.git_dir)
+  db.get(self.backing_fs, id)
+}
+
+///|
+impl @lib.ObjectStore for CountingTestObjectStore with put(self, obj_type, data) {
+  @lib.write_loose_object(self.write_fs, self.git_dir, obj_type, data)
+}
+
+///|
+impl @lib.ObjectStore for CountingTestObjectStore with has(self, id) {
   let db = @lib.ObjectDb::load(self.backing_fs, self.git_dir) catch {
     _ => return false
   }
@@ -126,6 +166,37 @@ fn make_test_kv_simple(node_id : String) -> Kv {
     git_dir: "/repo/.git",
   }
   Kv::new(NodeId::new(node_id), tree, store, @git.ObjectId::zero())
+}
+
+///|
+fn make_counting_test_kv(
+  node_id : String,
+  git_dir : String,
+) -> (Kv, @git.TestFs, String) raise @git.GitError {
+  let fs = @git.TestFs::new()
+  @lib.init_repo(fs, "/repo")
+  let bitfs = @fs.Fs::empty(git_dir)
+  let tree : TestWorkingTree = { fs: bitfs, backing_fs: fs, write_fs: fs }
+  let counter_path = "/counter/get_calls"
+  let store : CountingTestObjectStore = {
+    backing_fs: fs,
+    write_fs: fs,
+    git_dir,
+    counter_path,
+  }
+  let kv = Kv::new(NodeId::new(node_id), tree, store, @git.ObjectId::zero())
+  (kv, fs, counter_path)
+}
+
+///|
+fn read_counter(fs : @git.TestFs, counter_path : String) -> Int {
+  let bytes = fs.read_file(counter_path) catch { _ => b"" }
+  bytes.length()
+}
+
+///|
+fn reset_counter(fs : @git.TestFs, counter_path : String) -> Unit {
+  fs.write_file(counter_path, b"")
 }
 
 ///|
@@ -436,4 +507,42 @@ test "Kv: commit and rollback" {
   // key1 and key2 should still exist (from commit)
   let v1 = db.get("key1")
   assert_eq(v1, Some(b"value1"))
+}
+
+///|
+test "Kv: serialize snapshot cache avoids repeated object reads when clean" {
+  let (db, fs, counter_path) = make_counting_test_kv("test", "/repo/.git")
+  db.set("a.txt", b"a")
+  let _ = db.commit("c1", 1000L)
+  reset_counter(fs, counter_path)
+  let _ = db.serialize_snapshot(mode=TreeAndBlobOnly)
+  let first = read_counter(fs, counter_path)
+  let _ = db.serialize_snapshot(mode=TreeAndBlobOnly)
+  let second = read_counter(fs, counter_path)
+  assert_true(first > 0)
+  assert_eq(second, first)
+  db.set("b.txt", b"b")
+  let _ = db.commit("c2", 1001L)
+  let _ = db.serialize_snapshot(mode=TreeAndBlobOnly)
+  let third = read_counter(fs, counter_path)
+  assert_true(third > second)
+}
+
+///|
+test "Kv: serialize_snapshot_bytes cache avoids repeated object reads when clean" {
+  let (db, fs, counter_path) = make_counting_test_kv("test", "/repo/.git")
+  db.set("a.txt", b"a")
+  let _ = db.commit("c1", 1000L)
+  reset_counter(fs, counter_path)
+  let _ = db.serialize_snapshot_bytes(mode=TreeAndBlobOnly)
+  let first = read_counter(fs, counter_path)
+  let _ = db.serialize_snapshot_bytes(mode=TreeAndBlobOnly)
+  let second = read_counter(fs, counter_path)
+  assert_true(first > 0)
+  assert_eq(second, first)
+  db.set("b.txt", b"b")
+  let _ = db.commit("c2", 1001L)
+  let _ = db.serialize_snapshot_bytes(mode=TreeAndBlobOnly)
+  let third = read_counter(fs, counter_path)
+  assert_true(third > second)
 }

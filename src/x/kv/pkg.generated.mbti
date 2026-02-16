@@ -40,6 +40,8 @@ pub struct Kv {
   mut head : @object.ObjectId
   sync_engine : SyncEngine
   pending_objects : Map[String, GitObject]
+  snapshot_cache : Map[Int, SerializedSnapshot]
+  snapshot_bytes_cache : Map[Int, Bytes]
 }
 pub fn Kv::add_peer(Self, PeerInfo) -> Unit
 pub fn Kv::apply_pending_objects(Self) -> Int raise @object.GitError
@@ -65,7 +67,8 @@ pub fn Kv::record_peer_sync_result(Self, NodeId, Bool, Int64) -> Unit
 pub fn Kv::remove_peer(Self, NodeId) -> Bool
 pub fn Kv::rollback(Self) -> Unit
 pub fn Kv::select_gossip_peers(Self, Int, Int64, timestamp? : Int64) -> Array[PeerInfo]
-pub fn Kv::serialize_snapshot(Self) -> SerializedSnapshot
+pub fn Kv::serialize_snapshot(Self, mode? : SnapshotMode) -> SerializedSnapshot
+pub fn Kv::serialize_snapshot_bytes(Self, mode? : SnapshotMode) -> Bytes
 pub fn Kv::set(Self, String, Bytes) -> Unit
 pub fn Kv::set_peer_cursor(Self, NodeId, Int64) -> Unit
 pub fn Kv::set_string(Self, String, String) -> Unit
@@ -142,6 +145,12 @@ pub fn SerializedSnapshot::byte_size(Self) -> Int
 pub fn SerializedSnapshot::from_bytes(Bytes) -> Self
 pub fn SerializedSnapshot::stats(Self) -> SerializationStats
 pub fn SerializedSnapshot::to_bytes(Self) -> Bytes
+
+pub(all) enum SnapshotMode {
+  FullHistory
+  HeadState
+  TreeAndBlobOnly
+}
 
 pub(all) struct SyncEngine {
   config : SyncEngineConfig

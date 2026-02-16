@@ -194,6 +194,8 @@ pub struct Kv {
   mut head : @git.ObjectId
   sync_engine : SyncEngine
   pending_objects : Map[String, GitObject] // object_id hex -> object
+  snapshot_cache : Map[Int, SerializedSnapshot] // mode -> snapshot
+  snapshot_bytes_cache : Map[Int, Bytes] // mode -> bytes
 }
 
 ///|

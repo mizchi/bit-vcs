@@ -233,7 +233,7 @@ fn bench_serialize_snapshot_backend(
 ) -> Unit {
   let fixture = try! create_bench_fixture(backend, file_count, file_size)
   let db = fixture.kv()
-  b.bench(fn() { b.keep(db.serialize_snapshot()) })
+  b.bench(fn() { b.keep(db.serialize_snapshot(mode=TreeAndBlobOnly)) })
 }
 
 ///|
@@ -246,7 +246,7 @@ fn bench_roundtrip_backend(
   let fixture = try! create_bench_fixture(backend, file_count, file_size)
   let db = fixture.kv()
   b.bench(fn() {
-    let snapshot = db.serialize_snapshot()
+    let snapshot = db.serialize_snapshot(mode=TreeAndBlobOnly)
     let bytes = snapshot.to_bytes()
     b.keep(SerializedSnapshot::from_bytes(bytes))
   })
@@ -417,6 +417,22 @@ test "serialization: stats" {
   assert_eq(stats.blob_count, 2)
   assert_eq(stats.blob_bytes, 300)
   println("Stats: \{stats.total_bytes} bytes, \{stats.object_count} objects")
+}
+
+///|
+test "serialization: tree+blob mode excludes commit history" {
+  let (db, _fs) = make_test_kv("test-node", "/repo/.git")
+  db.set("a.txt", b"a")
+  let _ = db.commit("c1", 1000L)
+  db.set("b.txt", b"b")
+  let _ = db.commit("c2", 1001L)
+  let full = db.serialize_snapshot()
+  let tree_blob = db.serialize_snapshot(mode=TreeAndBlobOnly)
+  let full_stats = full.stats()
+  let tree_blob_stats = tree_blob.stats()
+  assert_true(full_stats.commit_count >= 2)
+  assert_eq(tree_blob_stats.commit_count, 0)
+  assert_true(tree_blob.objects.length() < full.objects.length())
 }
 
 ///|

@@ -16,6 +16,8 @@ pub fn Kv::new(
     head,
     sync_engine: SyncEngine::new(),
     pending_objects: {},
+    snapshot_cache: {},
+    snapshot_bytes_cache: {},
   }
 }
 
