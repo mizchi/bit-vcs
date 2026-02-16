@@ -1,0 +1,13 @@
+diff --git a/t/t5540-http-push-webdav.sh b/t/t5540-http-push-webdav.sh
+index 3fa05ff..29b0437 100644
+--- a/t/t5540-http-push-webdav.sh
++++ b/t/t5540-http-push-webdav.sh
+@@ -23,6 +23,8 @@ then
+ 	skip_all='skipping test; dumb HTTP protocol not supported with reftable.'
+ 	test_done
+ fi
++skip_all="skipping test; WebDAV transport is intentionally unsupported in this project"
++test_done
+ 
+ LIB_HTTPD_DAV=t
+ . "$TEST_DIRECTORY"/lib-httpd.sh
