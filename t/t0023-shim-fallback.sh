@@ -62,4 +62,15 @@ test_expect_success 'fallback is used when primary lacks help target subcommand'
   ! grep -q "^primary:help send-email$" trace
 '
 
+test_expect_success 'fallback is used when primary lacks help target with help options' '
+  setup_stubs &&
+  : >trace &&
+  SHIM_TEST_TRACE="$PWD/trace" \
+  SHIM_REAL_GIT="$PWD/primary-git" \
+  SHIM_REAL_GIT_FALLBACK="$PWD/fallback-git" \
+  "$shim" help --man send-email &&
+  grep -q "^fallback:help --man send-email$" trace &&
+  ! grep -q "^primary:help --man send-email$" trace
+'
+
 test_done
