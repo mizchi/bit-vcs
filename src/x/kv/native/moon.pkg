@@ -1,0 +1,22 @@
+import {
+  "moonbitlang/async" @async,
+  "mizchi/bit" @git,
+  "mizchi/bit/lib" @lib,
+  "mizchi/bit/x/fs" @fs,
+  "mizchi/bit/x/kv" @kv,
+  "moonbitlang/async/http" @http,
+  "moonbitlang/async/websocket" @websocket,
+  "moonbitlang/core/encoding/base64" @base64,
+  "moonbitlang/core/encoding/utf8" @utf8,
+  "moonbitlang/core/json" @json,
+  "moonbitlang/core/strconv" @strconv,
+}
+
+warnings = "-29"
+
+options(
+  targets: {
+    "sync_native.mbt": [ "native" ],
+    "sync_native_wbtest.mbt": [ "native" ],
+  },
+)

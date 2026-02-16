@@ -21,28 +21,19 @@ pub fn Kv::get_gossip_state(self : Kv, timestamp : Int64) -> GossipState {
 ///|
 /// Add or update a peer
 pub fn Kv::add_peer(self : Kv, peer : PeerInfo) -> Unit {
-  self.peers[peer.node_id.id] = peer
+  self.sync_engine.upsert_peer(peer)
 }
 
 ///|
 /// Remove a peer
 pub fn Kv::remove_peer(self : Kv, node_id : NodeId) -> Bool {
-  if self.peers.contains(node_id.id) {
-    self.peers.remove(node_id.id)
-    true
-  } else {
-    false
-  }
+  self.sync_engine.remove_peer(node_id)
 }
 
 ///|
 /// Get all peers
 pub fn Kv::get_peers(self : Kv) -> Array[PeerInfo] {
-  let result : Array[PeerInfo] = []
-  for entry in self.peers {
-    result.push(entry.1)
-  }
-  result
+  self.sync_engine.get_peers()
 }
 
 ///|
@@ -51,24 +42,97 @@ pub fn Kv::select_gossip_peers(
   self : Kv,
   count : Int,
   seed : Int64,
+  timestamp? : Int64 = seed,
 ) -> Array[PeerInfo] {
-  let peers = self.get_peers()
-  if peers.length() <= count {
-    return peers
-  }
-  // Simple deterministic selection based on seed
-  let selected : Array[PeerInfo] = []
-  let mut current_seed = seed
-  let used : Map[Int, Bool] = {}
-  while selected.length() < count && used.length() < peers.length() {
-    current_seed = (current_seed * 1103515245L + 12345L) % 2147483648L
-    let idx = (current_seed % peers.length().to_int64()).to_int()
-    if not(used.contains(idx)) {
-      used[idx] = true
-      selected.push(peers[idx])
+  self.sync_engine.select_peers(count, seed, timestamp)
+}
+
+///|
+/// Set per-peer sync cursor
+pub fn Kv::set_peer_cursor(self : Kv, node_id : NodeId, cursor : Int64) -> Unit {
+  self.sync_engine.set_cursor(node_id, cursor)
+}
+
+///|
+/// Get per-peer sync cursor
+pub fn Kv::get_peer_cursor(self : Kv, node_id : NodeId) -> Int64? {
+  self.sync_engine.get_cursor(node_id)
+}
+
+///|
+/// Record sync result to update retry state
+pub fn Kv::record_peer_sync_result(
+  self : Kv,
+  node_id : NodeId,
+  success : Bool,
+  timestamp : Int64,
+) -> Unit {
+  self.sync_engine.record_sync_result(node_id, success, timestamp)
+}
+
+///|
+/// Run one anti-entropy round against selected peers via injected transport.
+/// The exchange callback sends one message to a peer and returns an optional response.
+pub fn Kv::sync_round(
+  self : Kv,
+  count : Int,
+  seed : Int64,
+  timestamp : Int64,
+  exchange : (PeerInfo, GossipMessage) -> Result[GossipMessage?, String],
+) -> SyncRoundResult {
+  let peers = self.select_gossip_peers(count, seed, timestamp~)
+  let mut attempted = 0
+  let mut succeeded = 0
+  let mut failed = 0
+  let mut messages_sent = 0
+  let mut messages_received = 0
+  for peer in peers {
+    attempted += 1
+    let mut ok = true
+    let mut did_send = false
+    let mut steps = 0
+    let mut outbound : GossipMessage? = Some(
+      Announce(self.get_gossip_state(timestamp)),
+    )
+    while outbound is Some(msg) {
+      steps += 1
+      if steps > 8 {
+        ok = false
+        break
+      }
+      did_send = true
+      messages_sent += 1
+      let response = exchange(peer, msg)
+      match response {
+        Err(_) => {
+          ok = false
+          break
+        }
+        Ok(None) => outbound = None
+        Ok(Some(inbound)) => {
+          messages_received += 1
+          outbound = self.handle_gossip(inbound, timestamp)
+        }
+      }
+    }
+    if ok && did_send {
+      succeeded += 1
+      self.record_peer_sync_result(peer.node_id, true, timestamp)
+      let cursor = self.get_peer_cursor(peer.node_id).unwrap_or(0L) + 1L
+      self.set_peer_cursor(peer.node_id, cursor)
+    } else {
+      failed += 1
+      self.record_peer_sync_result(peer.node_id, false, timestamp)
     }
   }
-  selected
+  {
+    selected: peers.length(),
+    attempted,
+    succeeded,
+    failed,
+    messages_sent,
+    messages_received,
+  }
 }
 
 ///|

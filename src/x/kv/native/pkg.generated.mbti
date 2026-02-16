@@ -1,0 +1,28 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/bit/x/kv/native"
+
+import {
+  "mizchi/bit/x/kv",
+}
+
+// Values
+pub fn decode_gossip_message(String) -> Result[@kv.GossipMessage?, String]
+
+pub fn encode_gossip_message(@kv.GossipMessage) -> String
+
+pub async fn sync_round_http(@kv.Kv, Int, Int64, Int64, headers? : Map[String, String]) -> @kv.SyncRoundResult
+
+pub async fn sync_round_native(@kv.Kv, Int, Int64, Int64, headers? : Map[String, String]) -> @kv.SyncRoundResult
+
+pub async fn sync_round_websocket(@kv.Kv, Int, Int64, Int64, headers? : Map[String, String]) -> @kv.SyncRoundResult
+
+pub async fn sync_round_with_exchange(@kv.Kv, Int, Int64, Int64, async (@kv.PeerInfo, @kv.GossipMessage) -> Result[@kv.GossipMessage?, String]) -> @kv.SyncRoundResult
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+

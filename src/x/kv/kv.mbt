@@ -14,7 +14,7 @@ pub fn Kv::new(
     store,
     clock: VectorClock::new(),
     head,
-    peers: {},
+    sync_engine: SyncEngine::new(),
     pending_objects: {},
   }
 }

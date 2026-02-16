@@ -38,7 +38,7 @@ pub struct Kv {
   store : &@lib.ObjectStore
   mut clock : VectorClock
   mut head : @object.ObjectId
-  peers : Map[String, PeerInfo]
+  sync_engine : SyncEngine
   pending_objects : Map[String, GitObject]
 }
 pub fn Kv::add_peer(Self, PeerInfo) -> Unit
@@ -48,6 +48,7 @@ pub fn Kv::commit(Self, String, Int64) -> @object.ObjectId raise @object.GitErro
 pub fn Kv::delete(Self, String) -> Unit
 pub fn Kv::get(Self, String) -> Bytes?
 pub fn Kv::get_gossip_state(Self, Int64) -> GossipState
+pub fn Kv::get_peer_cursor(Self, NodeId) -> Int64?
 pub fn Kv::get_peers(Self) -> Array[PeerInfo]
 pub fn Kv::handle_gossip(Self, GossipMessage, Int64) -> GossipMessage?
 pub fn Kv::has(Self, String) -> Bool
@@ -60,12 +61,15 @@ pub fn Kv::merge(Self, @object.ObjectId, VectorClock, MergeStrategy, Int64) -> M
 pub fn Kv::new(NodeId, &@lib.WorkingTree, &@lib.ObjectStore, @object.ObjectId) -> Self
 pub fn Kv::node_id(Self) -> NodeId
 pub fn Kv::pending_object_count(Self) -> Int
+pub fn Kv::record_peer_sync_result(Self, NodeId, Bool, Int64) -> Unit
 pub fn Kv::remove_peer(Self, NodeId) -> Bool
 pub fn Kv::rollback(Self) -> Unit
-pub fn Kv::select_gossip_peers(Self, Int, Int64) -> Array[PeerInfo]
+pub fn Kv::select_gossip_peers(Self, Int, Int64, timestamp? : Int64) -> Array[PeerInfo]
 pub fn Kv::serialize_snapshot(Self) -> SerializedSnapshot
 pub fn Kv::set(Self, String, Bytes) -> Unit
+pub fn Kv::set_peer_cursor(Self, NodeId, Int64) -> Unit
 pub fn Kv::set_string(Self, String, String) -> Unit
+pub fn Kv::sync_round(Self, Int, Int64, Int64, (PeerInfo, GossipMessage) -> Result[GossipMessage?, String]) -> SyncRoundResult
 
 pub(all) struct KvConfig {
   node_id : NodeId
@@ -103,6 +107,15 @@ pub(all) struct PeerInfo {
   endpoint : String
 }
 
+pub(all) struct PeerSyncState {
+  peer : PeerInfo
+  cursor : Int64?
+  last_sync_at : Int64?
+  last_attempt_at : Int64?
+  retry_count : Int
+  next_retry_at : Int64
+}
+
 pub(all) struct SerializationStats {
   total_bytes : Int
   object_count : Int
@@ -130,11 +143,40 @@ pub fn SerializedSnapshot::from_bytes(Bytes) -> Self
 pub fn SerializedSnapshot::stats(Self) -> SerializationStats
 pub fn SerializedSnapshot::to_bytes(Self) -> Bytes
 
+pub(all) struct SyncEngine {
+  config : SyncEngineConfig
+  peers : Map[String, PeerSyncState]
+}
+pub fn SyncEngine::get_cursor(Self, NodeId) -> Int64?
+pub fn SyncEngine::get_peers(Self) -> Array[PeerInfo]
+pub fn SyncEngine::new(config? : SyncEngineConfig) -> Self
+pub fn SyncEngine::record_sync_result(Self, NodeId, Bool, Int64) -> Unit
+pub fn SyncEngine::remove_peer(Self, NodeId) -> Bool
+pub fn SyncEngine::select_peers(Self, Int, Int64, Int64) -> Array[PeerInfo]
+pub fn SyncEngine::set_cursor(Self, NodeId, Int64) -> Unit
+pub fn SyncEngine::upsert_peer(Self, PeerInfo) -> Unit
+
+pub(all) struct SyncEngineConfig {
+  anti_entropy_interval_ms : Int64
+  retry_base_ms : Int64
+  retry_max_ms : Int64
+}
+pub fn SyncEngineConfig::default() -> Self
+
 pub(all) struct SyncResult {
   objects_sent : Int
   objects_received : Int
   conflicts : Array[String]
   new_head : @object.ObjectId
+}
+
+pub(all) struct SyncRoundResult {
+  selected : Int
+  attempted : Int
+  succeeded : Int
+  failed : Int
+  messages_sent : Int
+  messages_received : Int
 }
 
 pub(all) struct VectorClock {

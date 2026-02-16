@@ -278,6 +278,142 @@ test "Kv: select gossip peers" {
 }
 
 ///|
+fn peers_contains(peers : Array[PeerInfo], node_id : String) -> Bool {
+  for peer in peers {
+    if peer.node_id.id == node_id {
+      return true
+    }
+  }
+  false
+}
+
+///|
+test "Kv: sync cursor roundtrip" {
+  let db = make_test_kv_simple("node1")
+  let peer : PeerInfo = {
+    node_id: NodeId::new("peer1"),
+    last_seen: 1000L,
+    head: @git.ObjectId::zero(),
+    endpoint: "wss://peer1.example.com",
+  }
+  db.add_peer(peer)
+  assert_eq(db.get_peer_cursor(NodeId::new("peer1")), None)
+  db.set_peer_cursor(NodeId::new("peer1"), 42L)
+  assert_eq(db.get_peer_cursor(NodeId::new("peer1")), Some(42L))
+}
+
+///|
+test "Kv: failed peer is throttled until retry window" {
+  let db = make_test_kv_simple("node1")
+  let peer1 : PeerInfo = {
+    node_id: NodeId::new("peer1"),
+    last_seen: 1000L,
+    head: @git.ObjectId::zero(),
+    endpoint: "wss://peer1.example.com",
+  }
+  let peer2 : PeerInfo = {
+    node_id: NodeId::new("peer2"),
+    last_seen: 1000L,
+    head: @git.ObjectId::zero(),
+    endpoint: "wss://peer2.example.com",
+  }
+  db.add_peer(peer1)
+  db.add_peer(peer2)
+  db.record_peer_sync_result(NodeId::new("peer1"), false, 1000L)
+  let early = db.select_gossip_peers(2, 123L, timestamp=1500L)
+  assert_false(peers_contains(early, "peer1"))
+  let late = db.select_gossip_peers(2, 123L, timestamp=2500L)
+  assert_true(peers_contains(late, "peer1"))
+}
+
+///|
+test "Kv: sync_round success increments peer cursor" {
+  let db = make_test_kv_simple("node1")
+  let peer : PeerInfo = {
+    node_id: NodeId::new("peer1"),
+    last_seen: 1000L,
+    head: @git.ObjectId::zero(),
+    endpoint: "wss://peer1.example.com",
+  }
+  db.add_peer(peer)
+  let mut saw_announce = false
+  let result = db.sync_round(1, 11L, 1000L, fn(_peer, msg) {
+    match msg {
+      Announce(_) => saw_announce = true
+      _ => ()
+    }
+    Ok(None)
+  })
+  assert_true(saw_announce)
+  assert_eq(result.selected, 1)
+  assert_eq(result.attempted, 1)
+  assert_eq(result.succeeded, 1)
+  assert_eq(result.failed, 0)
+  assert_eq(result.messages_sent, 1)
+  assert_eq(result.messages_received, 0)
+  assert_eq(db.get_peer_cursor(NodeId::new("peer1")), Some(1L))
+}
+
+///|
+test "Kv: sync_round processes response and follow-up message" {
+  let db = make_test_kv_simple("node1")
+  let remote_head = @git.ObjectId::from_hex(
+    "1111111111111111111111111111111111111111",
+  ) catch {
+    _ => fail("invalid remote head")
+  }
+  let remote_state : GossipState = {
+    node_id: NodeId::new("peer1"),
+    head: remote_head,
+    clock: VectorClock::new().increment(NodeId::new("peer1")),
+    timestamp: 1000L,
+  }
+  let peer : PeerInfo = {
+    node_id: NodeId::new("peer1"),
+    last_seen: 1000L,
+    head: remote_head,
+    endpoint: "wss://peer1.example.com",
+  }
+  db.add_peer(peer)
+  let mut call_count = 0
+  let result = db.sync_round(1, 33L, 1000L, fn(_peer, _msg) {
+    call_count += 1
+    if call_count == 1 {
+      Ok(Some(Announce(remote_state)))
+    } else {
+      Ok(None)
+    }
+  })
+  assert_eq(call_count, 2)
+  assert_eq(result.succeeded, 1)
+  assert_eq(result.failed, 0)
+  assert_eq(result.messages_sent, 2)
+  assert_eq(result.messages_received, 1)
+}
+
+///|
+test "Kv: sync_round failure applies retry backoff" {
+  let db = make_test_kv_simple("node1")
+  let peer : PeerInfo = {
+    node_id: NodeId::new("peer1"),
+    last_seen: 1000L,
+    head: @git.ObjectId::zero(),
+    endpoint: "wss://peer1.example.com",
+  }
+  db.add_peer(peer)
+  let result = db.sync_round(1, 77L, 1000L, fn(_peer, _msg) {
+    Err("network error")
+  })
+  assert_eq(result.succeeded, 0)
+  assert_eq(result.failed, 1)
+  assert_eq(db.get_peer_cursor(NodeId::new("peer1")), None)
+  let early = db.select_gossip_peers(1, 77L, timestamp=1500L)
+  assert_false(peers_contains(early, "peer1"))
+  let late = db.select_gossip_peers(1, 77L, timestamp=2500L)
+  assert_true(peers_contains(late, "peer1"))
+}
+
+///|
 test "Kv: commit and rollback" {
   let (db, _fs) = make_test_kv("test", "/repo/.git")
   // Make some changes

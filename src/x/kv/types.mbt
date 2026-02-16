@@ -152,6 +152,39 @@ pub(all) struct PeerInfo {
 }
 
 ///|
+/// Configuration for sync peer selection and retry
+pub(all) struct SyncEngineConfig {
+  anti_entropy_interval_ms : Int64
+  retry_base_ms : Int64
+  retry_max_ms : Int64
+}
+
+///|
+pub fn SyncEngineConfig::default() -> SyncEngineConfig {
+  {
+    anti_entropy_interval_ms: 5000L,
+    retry_base_ms: 1000L,
+    retry_max_ms: 60000L,
+  }
+}
+
+///|
+pub(all) struct PeerSyncState {
+  peer : PeerInfo
+  cursor : Int64?
+  last_sync_at : Int64?
+  last_attempt_at : Int64?
+  retry_count : Int
+  next_retry_at : Int64
+}
+
+///|
+pub(all) struct SyncEngine {
+  config : SyncEngineConfig
+  peers : Map[String, PeerSyncState] // node_id -> peer state
+}
+
+///|
 /// Main Kv structure
 pub struct Kv {
   node_id : NodeId
@@ -159,7 +192,7 @@ pub struct Kv {
   store : &@lib.ObjectStore
   mut clock : VectorClock
   mut head : @git.ObjectId
-  peers : Map[String, PeerInfo] // node_id -> peer
+  sync_engine : SyncEngine
   pending_objects : Map[String, GitObject] // object_id hex -> object
 }
 
@@ -195,4 +228,15 @@ pub(all) struct SyncResult {
   objects_received : Int
   conflicts : Array[String] // paths with conflicts
   new_head : @git.ObjectId
+}
+
+///|
+/// Result of one anti-entropy sync round
+pub(all) struct SyncRoundResult {
+  selected : Int
+  attempted : Int
+  succeeded : Int
+  failed : Int
+  messages_sent : Int
+  messages_received : Int
 }
