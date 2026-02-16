@@ -7,6 +7,7 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
   let mut show_others = false
   let mut show_deleted = false
   let mut show_directory = false
+  let mut no_empty_directory = false
   let mut recurse_submodules = false
   let mut use_nul = false
   let mut error_unmatch = false
@@ -24,6 +25,7 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
         "-o" | "--others" => show_others = true
         "-d" | "--deleted" => show_deleted = true
         "--directory" => show_directory = true
+        "--no-empty-directory" => no_empty_directory = true
         "--recurse-submodules" => recurse_submodules = true
         "--error-unmatch" => error_unmatch = true
         "-z" => use_nul = true
@@ -66,23 +68,111 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
         }
       }
     }
+    let all_files = @ignore.list_working_files_async(fs, root)
+    let untracked_file_set : Map[String, Bool] = {}
+    for path in all_files {
+      if tracked.contains(path) {
+        continue
+      }
+      untracked_file_set[path] = true
+    }
     if show_directory {
-      // Show untracked directories (not individual files)
-      let untracked_dirs = collect_untracked_dirs(fs, root, tracked_dirs)
-      for dir in untracked_dirs {
-        let out_path = dir + "/"
-        if ls_files_matches_filters(out_path, filters) {
-          print_str(out_path + terminator)
+      // Show untracked directories and explicit file matches that can bypass
+      // directory output.
+      let wildcard_file_filters : Array[String] = filters.filter(fn(filter) {
+        ls_files_filter_has_wildcard(filter) &&
+        ls_files_filter_prefers_file_output(filter)
+      })
+      let explicit_file_filters : Map[String, Bool] = {}
+      for filter in filters {
+        if not(ls_files_filter_has_wildcard(filter)) &&
+          untracked_file_set.contains(filter) {
+          explicit_file_filters[filter] = true
         }
+      }
+      let outputs : Array[String] = []
+      let output_set : Map[String, Bool] = {}
+      let compress_dirs : Array[String] = []
+      for dir in collect_untracked_dirs(fs, root, tracked_dirs) {
+        let out_path = dir + "/"
+        let should_output = if filters.length() == 0 {
+          let parent = match dir.rev_find("/") {
+            Some(idx) => String::unsafe_substring(dir, start=0, end=idx)
+            None => ""
+          }
+          if dir == "" {
+            false
+          } else {
+            parent.length() == 0 || tracked_dirs.contains(parent)
+          }
+        } else {
+          ls_files_matches_filters(out_path, filters)
+        }
+        if should_output {
+          if no_empty_directory &&
+            not(ls_files_has_matching_file(dir, all_files, untracked_file_set)) {
+            continue
+          }
+          if not(output_set.contains(out_path)) {
+            output_set[out_path] = true
+            outputs.push(out_path)
+            compress_dirs.push(dir)
+          }
+        }
+      }
+      if filters.length() == 0 {
+        for file in all_files {
+          if not(untracked_file_set.contains(file)) {
+            continue
+          }
+          if ls_files_is_within_untracked_dir(file, compress_dirs) {
+            continue
+          }
+          if not(output_set.contains(file)) {
+            output_set[file] = true
+            outputs.push(file)
+          }
+        }
+      } else if explicit_file_filters.length() > 0 ||
+        wildcard_file_filters.length() > 0 {
+        for file in all_files {
+          if not(untracked_file_set.contains(file)) {
+            continue
+          }
+          if explicit_file_filters.contains(file) {
+            if not(output_set.contains(file)) {
+              output_set[file] = true
+              outputs.push(file)
+            }
+            continue
+          }
+          for filter in wildcard_file_filters {
+            if ls_files_pathspec_matches(file, filter) {
+              if not(output_set.contains(file)) {
+                output_set[file] = true
+                outputs.push(file)
+              }
+              break
+            }
+          }
+        }
+      }
+      outputs.sort_by(fn(a, b) { ls_files_compare_paths(a, b) })
+      for output in outputs {
+        print_str(output + terminator)
       }
     } else {
       // Show untracked files
-      let all_files = @ignore.list_working_files_async(fs, root)
+      let outputs : Array[String] = []
       for path in all_files {
-        if not(tracked.contains(path)) &&
+        if untracked_file_set.contains(path) &&
           ls_files_matches_filters(path, filters) {
-          print_str(path + terminator)
+          outputs.push(path)
         }
+      }
+      outputs.sort_by(fn(a, b) { ls_files_compare_paths(a, b) })
+      for output in outputs {
+        print_str(output + terminator)
       }
     }
     return ()
@@ -363,14 +453,66 @@ fn ls_files_matches_filters(path : String, filters : Array[String]) -> Bool {
     path
   }
   for filter in filters {
-    if normalized == filter {
-      return true
-    }
-    if normalized.has_prefix(filter + "/") {
+    if ls_files_pathspec_matches(normalized, filter) {
       return true
     }
   }
   false
+}
+
+///|
+fn ls_files_is_within_untracked_dir(
+  file : String,
+  dirs : Array[String],
+) -> Bool {
+  for dir in dirs {
+    if file.has_prefix(dir + "/") {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn ls_files_has_matching_file(
+  dir : String,
+  files : Array[String],
+  untracked_file_set : Map[String, Bool],
+) -> Bool {
+  let prefix = dir + "/"
+  for file in files {
+    if untracked_file_set.contains(file) && file.has_prefix(prefix) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn ls_files_compare_paths(left : String, right : String) -> Int {
+  let left_chars = left.to_array()
+  let right_chars = right.to_array()
+  let common = if left_chars.length() < right_chars.length() {
+    left_chars.length()
+  } else {
+    right_chars.length()
+  }
+  for i in 0..<common {
+    if left_chars[i] != right_chars[i] {
+      if left_chars[i] < right_chars[i] {
+        return -1
+      } else {
+        return 1
+      }
+    }
+  }
+  if left_chars.length() == right_chars.length() {
+    0
+  } else if left_chars.length() < right_chars.length() {
+    -1
+  } else {
+    1
+  }
 }
 
 ///|
@@ -379,11 +521,85 @@ fn ls_files_filter_has_match(
   entries : Array[@gitlib.IndexEntry],
 ) -> Bool {
   for entry in entries {
-    if entry.path == filter || entry.path.has_prefix(filter + "/") {
+    if ls_files_pathspec_matches(entry.path, filter) {
       return true
     }
   }
   false
+}
+
+///|
+fn ls_files_pathspec_matches(path : String, pattern : String) -> Bool {
+  if ls_files_filter_has_wildcard(pattern) {
+    ls_files_simple_wildcard_match(path, pattern)
+  } else {
+    path == pattern || path.has_prefix(pattern + "/")
+  }
+}
+
+///|
+fn ls_files_filter_has_wildcard(pattern : String) -> Bool {
+  pattern.find("*") is Some(_) ||
+  pattern.find("?") is Some(_) ||
+  pattern.find("[") is Some(_)
+}
+
+///|
+fn ls_files_filter_prefers_file_output(pattern : String) -> Bool {
+  // Heuristic for `--directory`:
+  // wildcard patterns that have an extension-like final segment are treated as file globs.
+  let segment = match pattern.rev_find("/") {
+    Some(idx) =>
+      String::unsafe_substring(pattern, start=idx + 1, end=pattern.length())
+    None => pattern
+  }
+  segment.contains(".")
+}
+
+///|
+fn ls_files_simple_wildcard_match(path : String, pattern : String) -> Bool {
+  let p_chars = pattern.to_array()
+  let t_chars = path.to_array()
+  let mut pi = 0
+  let mut ti = 0
+  let mut star_index = -1
+  let mut match_index = 0
+  while ti < t_chars.length() {
+    if pi < p_chars.length() && p_chars[pi] == '\\' && pi + 1 < p_chars.length() {
+      pi += 1
+      if pi >= p_chars.length() {
+        return false
+      }
+      if p_chars[pi] != t_chars[ti] {
+        return false
+      }
+      pi += 1
+      ti += 1
+    } else if pi < p_chars.length() && p_chars[pi] == '?' {
+      if ti >= t_chars.length() {
+        return false
+      }
+      pi += 1
+      ti += 1
+    } else if pi < p_chars.length() && p_chars[pi] == '*' {
+      star_index = pi
+      match_index = ti
+      pi += 1
+    } else if pi < p_chars.length() && p_chars[pi] == t_chars[ti] {
+      pi += 1
+      ti += 1
+    } else if star_index != -1 {
+      pi = star_index + 1
+      match_index += 1
+      ti = match_index
+    } else {
+      return false
+    }
+  }
+  while pi < p_chars.length() && p_chars[pi] == '*' {
+    pi += 1
+  }
+  pi == p_chars.length()
 }
 
 ///|
@@ -395,7 +611,7 @@ fn collect_untracked_dirs(
 ) -> Array[String] raise @git.GitError {
   let result : Array[String] = []
   collect_untracked_dirs_recursive(fs, root, "", tracked_dirs, result)
-  result.sort()
+  result.sort_by(fn(a, b) { ls_files_compare_paths(a, b) })
   result
 }
 
@@ -408,23 +624,32 @@ fn collect_untracked_dirs_recursive(
   out : Array[String],
 ) -> Unit raise @git.GitError {
   let dir = if prefix == "" { root } else { root + "/" + prefix }
+  if prefix != "" {
+    let git_marker = dir + "/.git"
+    let bit_marker = dir + "/.bit"
+    if fs.is_file(git_marker) ||
+      fs.is_dir(git_marker) ||
+      fs.is_file(bit_marker) ||
+      fs.is_dir(bit_marker) {
+      return ()
+    }
+  }
   let items = fs.readdir(dir)
   for name in items {
-    if name == "." || name == ".." || name == ".git" {
+    if name == "." || name == ".." || name == ".git" || name == ".bit" {
+      continue
+    }
+    if name == ".jj" {
       continue
     }
     let rel_path = if prefix == "" { name } else { prefix + "/" + name }
     let abs_path = root + "/" + rel_path
     if fs.is_dir(abs_path) {
-      // Check if this directory or any of its subdirectories are tracked
-      if tracked_dirs.contains(rel_path) {
-        // This directory has tracked content, recurse into it
-        collect_untracked_dirs_recursive(fs, root, rel_path, tracked_dirs, out)
-      } else {
-        // This directory is completely untracked, add it and don't recurse
-        out.push(rel_path)
-      }
+      collect_untracked_dirs_recursive(fs, root, rel_path, tracked_dirs, out)
     }
+  }
+  if prefix != "" && not(tracked_dirs.contains(prefix)) {
+    out.push(prefix)
   }
 }
 
