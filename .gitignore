@@ -21,7 +21,9 @@ git-repo/
 /repo/
 repo-git/
 repo-moongit/
-third_party/
+third_party/*
+!third_party/mizchi_x/
+!third_party/mizchi_x/**
 tmp/
 goodbye.ts
 version.ts

@@ -7,7 +7,10 @@
     "moonbitlang/x": "0.4.40",
     "mizchi/tempfile": "0.1.0",
     "mizchi/llm": "0.2.2",
-    "mizchi/bitflow": "0.3.1"
+    "mizchi/bitflow": "0.3.1",
+    "mizchi/x": {
+      "path": "third_party/mizchi_x"
+    }
   },
   "readme": "README.mbt.md",
   "repository": "https://github.com/mizchi/bit-vcs",

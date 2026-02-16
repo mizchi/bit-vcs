@@ -386,7 +386,7 @@ async fn exchange_http_peer(
     request_headers["Content-Type"] = "application/json"
   }
   let payload = encode_gossip_message(msg)
-  let (response, body) = @http.post(
+  let (response, body) = @xhttp.post(
     peer.endpoint,
     payload,
     headers=request_headers,
@@ -409,7 +409,7 @@ async fn exchange_websocket_peer(
   if not(is_websocket_endpoint(peer.endpoint)) {
     return Err("peer endpoint is not ws(s): \{peer.endpoint}")
   }
-  let conn = @websocket.connect(peer.endpoint, headers~) catch {
+  let conn = @xws.Conn::connect(peer.endpoint, headers~) catch {
     err => return Err("websocket connect failed: \{err.to_string()}")
   }
   defer conn.close()
@@ -419,11 +419,9 @@ async fn exchange_websocket_peer(
   let incoming = conn.recv() catch {
     err => return Err("websocket recv failed: \{err.to_string()}")
   }
-  let payload = incoming.read_all() catch {
-    err => return Err("websocket read failed: \{err.to_string()}")
-  }
-  let text = payload.text() catch {
-    _ => @utf8.decode_lossy(payload.binary()[:])
+  let text = match incoming {
+    @xws.Message::Text(value) => value
+    @xws.Message::Binary(bytes) => @utf8.decode_lossy(bytes[:])
   }
   decode_gossip_message(text)
 }
