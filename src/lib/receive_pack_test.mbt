@@ -93,3 +93,36 @@ test "receive-pack: reject non-fast-forward" {
   assert_true(refname == "refs/heads/main")
   assert_true(msg.contains("non-fast-forward"))
 }
+
+///|
+test "receive-pack: reject invalid refname" {
+  let fs = @git.TestFs::new()
+  ignore(try? init_repo(fs, "/dst"))
+  let req = build_receive_request(
+    @git.ObjectId::zero(),
+    @git.ObjectId::zero(),
+    "../refs/heads/main",
+    @protocol.pktline_flush(),
+  )
+  let _ = parse_receive_pack_request(req) catch {
+    _ => return ()
+  }
+  assert_true(false)
+}
+
+///|
+test "receive-pack: reject path traversal from /tmp repo" {
+  let fs = @git.TestFs::new()
+  let tmp_repo = "/tmp/bit-receive-pack-poc"
+  ignore(try? init_repo(fs, tmp_repo))
+  let bad_req = build_receive_request(
+    @git.ObjectId::zero(),
+    @git.ObjectId::zero(),
+    "../" + "tmp/bit-receive-pack-poc/.git/HEAD",
+    @protocol.pktline_flush(),
+  )
+  let _ = parse_receive_pack_request(bad_req) catch {
+    _ => return ()
+  }
+  assert_true(false)
+}

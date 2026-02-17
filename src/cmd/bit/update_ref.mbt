@@ -31,21 +31,27 @@ fn update_ref_storage_runtime_delegate_args(
   if parsed.delete_mode {
     return None
   }
+  let normalized_refname = @gitlib.normalize_repo_path(parsed.refname) catch {
+    _ => return None
+  }
   if not(parsed.refname.has_prefix("refs/")) {
     return None
   }
-  if resolve_symbolic_ref_target(fs, git_dir, parsed.refname) is Some(_) {
+  if not(normalized_refname.has_prefix("refs/")) {
+    return None
+  }
+  if resolve_symbolic_ref_target(fs, git_dir, normalized_refname) is Some(_) {
     return None
   }
   let (should_log, always) = @gitrepo.should_log_ref(
     fs,
     git_dir,
-    parsed.refname,
+    normalized_refname,
     is_bare,
   ) catch {
     _ => return None
   }
-  if should_log || always || @gitrepo.reflog_exists(fs, git_dir, parsed.refname) {
+  if should_log || always || @gitrepo.reflog_exists(fs, git_dir, normalized_refname) {
     return None
   }
   Some(parsed)
@@ -189,10 +195,11 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
             eprint_line("fatal: update-ref: verify requires <ref> [<oldvalue>]")
             @sys.exit(128)
           }
+          let refname = normalize_update_ref_name(tokens[1])
           let refname = resolve_update_target_ref(
             fs,
             actual_git_dir,
-            tokens[1],
+            refname,
             stdin_no_deref,
           )
           let current_id = read_ref_value(fs, actual_git_dir, refname)
@@ -222,10 +229,10 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
     return ()
   }
   if delete_mode {
-    if positional.length() < 1 {
+  if positional.length() < 1 {
       raise @git.GitError::InvalidObject("usage: git update-ref -d <refname>")
     }
-    let input_refname = positional[0]
+    let input_refname = normalize_update_ref_name(positional[0])
     let refname = resolve_update_target_ref(
       fs, actual_git_dir, input_refname, no_deref,
     )
@@ -320,7 +327,7 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
       "usage: git update-ref <refname> <newvalue> [<oldvalue>]",
     )
   }
-  let input_refname = positional[0]
+  let input_refname = normalize_update_ref_name(positional[0])
   let refname = resolve_update_target_ref(
     fs, actual_git_dir, input_refname, no_deref,
   )
@@ -415,6 +422,18 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
         timezone, msg,
       )
     }
+  }
+}
+
+///|
+fn normalize_update_ref_name(refname : String) -> String raise @git.GitError {
+  let normalized = @gitlib.normalize_repo_path(refname) catch {
+    _ => raise @git.GitError::InvalidObject("invalid refname: " + refname)
+  }
+  if normalized == "HEAD" || normalized.has_prefix("refs/") {
+    normalized
+  } else {
+    raise @git.GitError::InvalidObject("invalid refname: " + refname)
   }
 }
 

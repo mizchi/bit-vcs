@@ -99,7 +99,16 @@ fn show_ref_exists_without_resolution(
   git_dir : String,
   refname : String,
 ) -> Bool {
-  let loose_path = git_dir + "/" + refname
+  let normalized = if refname == "HEAD" {
+    "HEAD"
+  } else {
+    let normalized = @gitlib.normalize_repo_path(refname) catch { _ => return false }
+    if not(normalized.has_prefix("refs/")) {
+      return false
+    }
+    normalized
+  }
+  let loose_path = git_dir + "/" + normalized
   if fs.is_file(loose_path) {
     return true
   }
@@ -124,7 +133,7 @@ fn show_ref_exists_without_resolution(
           start=idx + 1,
           end=line.length(),
         )
-        if packed_ref == refname {
+        if packed_ref == normalized {
           return true
         }
       }

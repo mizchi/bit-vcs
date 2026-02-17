@@ -43,10 +43,11 @@ async fn handle_reflog(args : Array[String]) -> Unit raise Error {
         git_dir,
         parsed.grep_pattern_type_override,
       )
+      let refname = normalize_reflog_refname(parsed.refname)
       show_reflog(
         rfs,
         git_dir,
-        parsed.refname,
+        refname,
         parsed.no_abbrev_commit,
         parsed.max_count,
         parsed.grep_patterns,
@@ -59,7 +60,7 @@ async fn handle_reflog(args : Array[String]) -> Unit raise Error {
         @stdio.stderr.write("usage: git reflog exists <ref>")
         @sys.exit(1)
       }
-      let refname = rest[0]
+      let refname = normalize_reflog_refname(rest[0])
       if @gitrepo.reflog_exists(rfs, git_dir, refname) {
         @sys.exit(0)
       } else {
@@ -71,7 +72,7 @@ async fn handle_reflog(args : Array[String]) -> Unit raise Error {
         @stdio.stderr.write("usage: git reflog delete <ref>")
         @sys.exit(1)
       }
-      let refname = rest[0]
+      let refname = normalize_reflog_refname(rest[0])
       @gitrepo.delete_reflog(wfs, rfs, git_dir, refname)
     }
     "expire" =>
@@ -87,11 +88,12 @@ async fn handle_reflog(args : Array[String]) -> Unit raise Error {
         git_dir,
         parsed.grep_pattern_type_override,
       )
+      let refname = normalize_reflog_refname(parsed.refname)
       // Treat as a ref name for show
       show_reflog(
         rfs,
         git_dir,
-        parsed.refname,
+        refname,
         parsed.no_abbrev_commit,
         parsed.max_count,
         parsed.grep_patterns,
@@ -233,6 +235,15 @@ fn parse_reflog_show_args(args : Array[String]) -> ReflogShowArgs {
     grep_patterns,
     grep_pattern_type_override,
     grep_ignore_case,
+  }
+}
+
+fn normalize_reflog_refname(refname : String) -> String raise @git.GitError {
+  if refname == "HEAD" {
+    return refname
+  }
+  @gitlib.normalize_repo_path(refname) catch {
+    _ => raise @git.GitError::InvalidObject("invalid refname: " + refname)
   }
 }
 

@@ -113,9 +113,9 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
               start=idx + 1,
               end=upstream.length(),
             )
-            merge_ref = "refs/heads/" + name
+            merge_ref = normalize_local_branch_ref(name)
           }
-          None => merge_ref = "refs/heads/" + upstream
+      None => merge_ref = normalize_local_branch_ref(upstream)
         }
       }
       @gitlib.set_config_key(
@@ -179,7 +179,7 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
                   )
                   @sys.exit(1)
                 }
-                let refname = "refs/heads/" + name
+    let refname = normalize_local_branch_ref(name)
                 if not(force_create) &&
                   @gitlib.resolve_ref(fs, git_dir, refname) is Some(_) {
                   @stdio.stderr.write(
@@ -221,9 +221,9 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
                           start=idx + 1,
                           end=upstream.length(),
                         )
-                        merge_ref = "refs/heads/" + up_name
+                        merge_ref = normalize_local_branch_ref(up_name)
                       }
-                      None => merge_ref = "refs/heads/" + upstream
+                      None => merge_ref = normalize_local_branch_ref(upstream)
                     }
                   }
                   @gitlib.set_config_key(
@@ -258,5 +258,16 @@ async fn handle_branch(args : Array[String]) -> Unit raise Error {
             }
           }
       }
+  }
+}
+
+fn normalize_local_branch_ref(name : String) -> String raise @git.GitError {
+  let normalized = @gitlib.normalize_repo_path(name) catch {
+    _ => raise @git.GitError::InvalidObject("invalid branch name: " + name)
+  }
+  if normalized.has_prefix("refs/heads/") {
+    normalized
+  } else {
+    "refs/heads/" + normalized
   }
 }

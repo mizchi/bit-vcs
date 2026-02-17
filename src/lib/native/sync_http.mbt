@@ -230,15 +230,55 @@ fn sync_is_ancestor(
 }
 
 ///|
-fn sync_remote_refname(refname : String) -> String {
-  if refname.has_prefix("refs/heads/") {
-    let name = String::unsafe_substring(refname, start=11, end=refname.length())
-    "refs/remotes/origin/" + name
-  } else if refname == "HEAD" {
-    "refs/remotes/origin/HEAD"
-  } else {
-    "refs/remotes/origin/" + refname
+fn sync_remote_refname(refname : String) -> String raise @git.GitError {
+  let normalized = @gitlib.normalize_repo_path(refname) catch {
+    _ => raise @git.GitError::InvalidObject("invalid refname: " + refname)
   }
+  if normalized == "HEAD" || normalized.has_prefix("refs/") {
+    if normalized.has_prefix("refs/heads/") {
+      let name = String::unsafe_substring(
+        normalized,
+        start=11,
+        end=normalized.length(),
+      )
+      "refs/remotes/origin/" + name
+    } else if normalized == "HEAD" {
+      "refs/remotes/origin/HEAD"
+    } else {
+      "refs/remotes/origin/" + normalized
+    }
+  } else {
+    raise @git.GitError::InvalidObject("invalid refname: " + refname)
+  }
+}
+
+///|
+test "sync_remote_refname normalizes and maps refs/heads" {
+  assert_eq(
+    sync_remote_refname("refs/heads/main"),
+    "refs/remotes/origin/main",
+  )
+  assert_eq(sync_remote_refname("HEAD"), "refs/remotes/origin/HEAD")
+  assert_eq(
+    sync_remote_refname("refs/tags/v1.0.0"),
+    "refs/remotes/origin/refs/tags/v1.0.0",
+  )
+}
+
+///|
+test "sync_remote_refname rejects invalid refname" {
+  let _ = sync_remote_refname("main") catch {
+    _ => return ()
+  }
+  assert_true(false)
+}
+
+///|
+test "sync_remote_refname rejects traversal-like refname" {
+  let _ = sync_remote_refname("refs/heads/../../config") catch {
+    _ => return ()
+  }
+  assert_true(false)
 }
 
 ///|

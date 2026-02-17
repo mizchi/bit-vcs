@@ -18,7 +18,7 @@ async fn handle_symbolic_ref(args : Array[String]) -> Unit raise Error {
   if positional.length() == 0 {
     raise @git.GitError::InvalidObject("usage: git symbolic-ref <name> [<ref>]")
   }
-  let name = positional[0]
+  let name = symbolic_ref_normalize_refname(positional[0])
   let ref_path = if name == "HEAD" {
     git_dir + "/HEAD"
   } else {
@@ -55,9 +55,46 @@ async fn handle_symbolic_ref(args : Array[String]) -> Unit raise Error {
     }
   } else {
     // Write mode
-    let target = positional[1]
+    let target = symbolic_ref_normalize_refname(positional[1])
     fs.write_string(ref_path, "ref: \{target}\n")
   }
+}
+
+///|
+fn symbolic_ref_normalize_refname(name : String) -> String raise @git.GitError {
+  let normalized = @gitlib.normalize_repo_path(name) catch {
+    _ => raise @git.GitError::InvalidObject("invalid refname: " + name)
+  }
+  if normalized == "HEAD" || normalized.has_prefix("refs/") {
+    normalized
+  } else {
+    raise @git.GitError::InvalidObject("invalid refname: " + name)
+  }
+}
+
+///|
+test "symbolic-ref: normalize allows refs and HEAD" {
+  assert_eq(symbolic_ref_normalize_refname("HEAD"), "HEAD")
+  assert_eq(
+    symbolic_ref_normalize_refname("refs/heads/main"),
+    "refs/heads/main",
+  )
+}
+
+///|
+test "symbolic-ref: normalize rejects bare ref name" {
+  let _ = symbolic_ref_normalize_refname("main") catch {
+    _ => return ()
+  }
+  assert_true(false)
+}
+
+///|
+test "symbolic-ref: normalize rejects path traversal" {
+  let _ = symbolic_ref_normalize_refname("../config") catch {
+    _ => return ()
+  }
+  assert_true(false)
 }
 
 ///|

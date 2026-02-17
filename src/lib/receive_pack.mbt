@@ -52,6 +52,17 @@ pub fn build_receive_pack_advertisement(
 }
 
 ///|
+fn normalize_receive_refname(refname : String) -> String raise @git.GitError {
+  let normalized = normalize_repo_path(refname) catch {
+    _ => raise @git.GitError::ProtocolError("Invalid receive-pack ref: " + refname)
+  }
+  if not(normalized.has_prefix("refs/")) {
+    raise @git.GitError::ProtocolError("Invalid receive-pack ref: " + refname)
+  }
+  normalized
+}
+
+///|
 pub fn parse_receive_pack_request(
   data : Bytes,
 ) -> ReceivePackRequest raise @git.GitError {
@@ -96,7 +107,7 @@ pub fn parse_receive_pack_request(
     }
     let old_id = @git.ObjectId::from_hex(parts[0])
     let new_id = @git.ObjectId::from_hex(parts[1])
-    let refname = parts[2]
+    let refname = normalize_receive_refname(parts[2])
     updates.push({ old_id, new_id, refname })
     i += len
   }
@@ -120,39 +131,45 @@ pub fn apply_receive_pack(
   let updated : Array[String] = []
   let rejected : Array[(String, String)] = []
   for upd in req.updates {
-    let current = resolve_ref(rfs, git_dir, upd.refname)
+    let refname = normalize_receive_refname(upd.refname) catch {
+      _ => {
+        rejected.push((upd.refname, "invalid refname"))
+        continue
+      }
+    }
+    let current = resolve_ref(rfs, git_dir, refname)
     let current_id = match current {
       None => @git.ObjectId::zero()
       Some(id) => id
     }
     if current_id != upd.old_id {
-      rejected.push((upd.refname, "old id mismatch"))
+      rejected.push((refname, "old id mismatch"))
       continue
     }
-    if upd.refname.has_prefix("refs/heads/") {
+    if refname.has_prefix("refs/heads/") {
       if current_id != @git.ObjectId::zero() &&
         upd.new_id != @git.ObjectId::zero() {
         let ff = receive_is_ancestor_commit(db, rfs, current_id, upd.new_id) catch {
           _ => false
         }
         if not(ff) {
-          rejected.push((upd.refname, "non-fast-forward"))
+          rejected.push((refname, "non-fast-forward"))
           continue
         }
       }
     }
     if upd.new_id == @git.ObjectId::zero() {
-      if not(receive_delete_ref(fs, rfs, git_dir, upd.refname)) {
-        rejected.push((upd.refname, "ref not found"))
+      if not(receive_delete_ref(fs, rfs, git_dir, refname)) {
+        rejected.push((refname, "ref not found"))
         continue
       }
     } else {
-      let ref_path = join_path(git_dir, upd.refname)
+      let ref_path = join_path(git_dir, refname)
       let dir = parent_dir(ref_path)
       fs.mkdir_p(dir)
       fs.write_string(ref_path, upd.new_id.to_hex() + "\n")
     }
-    updated.push(upd.refname)
+    updated.push(refname)
   }
   { updated, rejected }
 }
@@ -243,7 +260,10 @@ fn receive_delete_ref(
   git_dir : String,
   refname : String,
 ) -> Bool raise @git.GitError {
-  let ref_path = join_path(git_dir, refname)
+  let normalized = normalize_receive_refname(refname) catch {
+    _ => return false
+  }
+  let ref_path = join_path(git_dir, normalized)
   if rfs.is_file(ref_path) {
     fs.remove_file(ref_path)
     return true
@@ -281,7 +301,7 @@ fn receive_delete_ref(
           start=idx + 1,
           end=line.length(),
         )
-        if name == refname {
+        if name == normalized {
           removed = true
           skip_peeled = true
         } else {

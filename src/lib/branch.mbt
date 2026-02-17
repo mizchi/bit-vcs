@@ -433,7 +433,10 @@ pub fn resolve_ref(
   git_dir : String,
   refname : String,
 ) -> @git.ObjectId? raise @git.GitError {
-  resolve_ref_inner(fs, git_dir, refname, 0)
+  let normalized = normalize_repo_path(refname) catch {
+    _ => return None
+  }
+  resolve_ref_inner(fs, git_dir, normalized, 0)
 }
 
 ///|
@@ -462,6 +465,9 @@ fn resolve_ref_inner(
   refname : String,
   depth : Int,
 ) -> @git.ObjectId? raise @git.GitError {
+  let refname = normalize_repo_path(refname) catch {
+    _ => return None
+  }
   if depth > 8 {
     return None
   }
@@ -562,11 +568,26 @@ fn collect_packed_heads(
 }
 
 ///|
-fn branch_ref_name(name : String) -> String {
-  if name.has_prefix("refs/heads/") {
-    name
+fn branch_ref_name(name : String) -> String raise @git.GitError {
+  let normalized = normalize_repo_path(name) catch {
+    _ => raise @git.GitError::InvalidObject("invalid branch name: " + name)
+  }
+  if normalized.has_prefix("refs/heads/") {
+    normalized
   } else {
-    "refs/heads/" + name
+    "refs/heads/" + normalized
+  }
+}
+
+///|
+fn normalize_tag_ref(name : String) -> String raise @git.GitError {
+  let normalized = normalize_repo_path(name) catch {
+    _ => raise @git.GitError::InvalidObject("invalid tag name: " + name)
+  }
+  if normalized.has_prefix("refs/tags/") {
+    normalized
+  } else {
+    "refs/tags/" + normalized
   }
 }
 
@@ -724,7 +745,8 @@ pub fn delete_tag(
   git_dir : String,
   name : String,
 ) -> Unit raise @git.GitError {
-  let ref_path = join_path(git_dir, "refs/tags/" + name)
+  let refname = normalize_tag_ref(name)
+  let ref_path = join_path(git_dir, refname)
   fs.remove_file(ref_path)
 }
 
@@ -738,7 +760,8 @@ pub fn create_lightweight_tag(
 ) -> Unit raise @git.GitError {
   let tags_dir = join_path(git_dir, "refs/tags")
   fs.mkdir_p(tags_dir)
-  let ref_path = join_path(git_dir, "refs/tags/" + name)
+  let refname = normalize_tag_ref(name)
+  let ref_path = join_path(git_dir, refname)
   fs.write_string(ref_path, target.to_hex() + "\n")
 }
 
@@ -774,7 +797,8 @@ pub fn create_annotated_tag(
   // Create ref pointing to tag object
   let tags_dir = join_path(git_dir, "refs/tags")
   fs.mkdir_p(tags_dir)
-  let ref_path = join_path(git_dir, "refs/tags/" + name)
+  let refname = normalize_tag_ref(name)
+  let ref_path = join_path(git_dir, refname)
   fs.write_string(ref_path, tag_id.to_hex() + "\n")
 }
 

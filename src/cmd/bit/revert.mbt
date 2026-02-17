@@ -328,12 +328,15 @@ fn remove_from_index(
 }
 
 ///|
-fn normalize_notes_ref(ref_name : String?) -> String {
+fn normalize_notes_ref(ref_name : String?) -> String raise @git.GitError {
   let name = ref_name.unwrap_or("commits")
-  if name.has_prefix("refs/") {
-    name
+  let normalized = @gitlib.normalize_repo_path(name) catch {
+    _ => raise @git.GitError::InvalidObject("invalid notes ref: " + name)
+  }
+  if normalized.has_prefix("refs/") {
+    normalized
   } else {
-    "refs/notes/" + name
+    "refs/notes/" + normalized
   }
 }
 

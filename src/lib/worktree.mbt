@@ -25,11 +25,15 @@ pub async fn status(
     git_dir
   }
   let autocrlf = read_autocrlf_setting(fs, actual_git_dir)
+  let skip_worktree_paths = read_skip_worktree_paths(fs, actual_git_dir)
   let racy_git = racy_git_enabled()
   let index_entries = read_index_entries(fs, actual_git_dir)
   t0 = profile_lap(profile, "status read_index_entries", t0)
   let index_map : Map[String, IndexEntry] = {}
   for e in index_entries {
+    if skip_worktree_paths.contains(e.path) {
+      continue
+    }
     index_map[e.path] = e
   }
   let untracked : Array[String] = []
@@ -157,7 +161,12 @@ pub async fn status(
   let staged_modified : Array[String] = []
   let staged_deleted : Array[String] = []
   collect_staged_changes_from_head(
-    fs, actual_git_dir, index_map, staged_modified, staged_deleted,
+    fs,
+    actual_git_dir,
+    index_map,
+    skip_worktree_paths,
+    staged_modified,
+    staged_deleted,
   )
   t0 = profile_lap(profile, "status read_head_entries", t0)
   for item in index_map.to_array() {
@@ -522,11 +531,20 @@ async fn expand_paths_async(
 }
 
 ///|
-fn normalize_rel_path(path : String) -> String {
-  if path.has_prefix("./") {
+fn normalize_rel_path(path : String) -> String raise @git.GitError {
+  if path == "." {
+    return "."
+  }
+  let normalized = if path.has_prefix("./") {
     String::unsafe_substring(path, start=2, end=path.length())
   } else {
     path
+  }
+  if normalized == "." || normalized == "" {
+    return "."
+  }
+  normalize_repo_path(normalized) catch {
+    _ => raise @git.GitError::InvalidObject("invalid path: " + path)
   }
 }
 
@@ -1115,6 +1133,7 @@ fn collect_staged_changes_from_head(
   fs : &@git.RepoFileSystem,
   git_dir : String,
   index_map : Map[String, IndexEntry],
+  skip_worktree_paths : Map[String, Bool],
   staged_modified : Array[String],
   staged_deleted : Array[String],
 ) -> Unit raise @git.GitError {
@@ -1138,6 +1157,7 @@ fn collect_staged_changes_from_head(
             info.tree,
             "",
             index_map,
+            skip_worktree_paths,
             staged_modified,
             staged_deleted,
           )
@@ -1154,6 +1174,7 @@ fn collect_staged_changes_db(
   tree_id : @git.ObjectId,
   prefix : String,
   index_map : Map[String, IndexEntry],
+  skip_worktree_paths : Map[String, Bool],
   staged_modified : Array[String],
   staged_deleted : Array[String],
 ) -> Unit raise @git.GitError {
@@ -1171,6 +1192,9 @@ fn collect_staged_changes_db(
         } else {
           prefix + "/" + entry.name
         }
+        if skip_worktree_paths.contains(path) {
+          continue
+        }
         if is_tree_mode(entry.mode) {
           collect_staged_changes_db(
             db,
@@ -1178,6 +1202,7 @@ fn collect_staged_changes_db(
             entry.id,
             path,
             index_map,
+            skip_worktree_paths,
             staged_modified,
             staged_deleted,
           )
@@ -1315,7 +1340,7 @@ fn expand_rm_paths(
   root : String,
   paths : Array[String],
   index_map : Map[String, IndexEntry],
-) -> Array[String] {
+) -> Array[String] raise @git.GitError {
   let result : Array[String] = []
   for p in paths {
     let norm_path = normalize_rel_path(p)

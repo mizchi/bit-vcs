@@ -94,11 +94,12 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
     guard branch is Some(name) else {
       raise @git.GitError::InvalidObject("No branch specified")
     }
+    let branch_name = normalize_switch_branch_ref(name)
     if not(ignore_other_worktrees) {
-      match switch_branch_in_use_path(rfs, root, name) {
+      match switch_branch_in_use_path(rfs, root, branch_name) {
         Some(_) => {
           eprint_line(
-            "fatal: '\{name}' is already checked out at another worktree",
+            "fatal: '\{branch_name}' is already checked out at another worktree",
           )
           @sys.exit(1)
         }
@@ -106,9 +107,9 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
       }
     }
     ignore(discard_changes)
-    switch_write_head_ref(fs, git_dir, name)
+    switch_write_head_ref(fs, git_dir, branch_name)
     @gitlib.write_index_entries(fs, git_dir, [])
-    println("Switched to a new branch '\{name}'")
+    println("Switched to a new branch '\{branch_name}'")
     return
   }
   if create {
@@ -132,21 +133,24 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
     guard branch is Some(name) else {
       raise @git.GitError::InvalidObject("No branch specified")
     }
+    let branch_name = normalize_switch_branch_ref(name)
     if not(ignore_other_worktrees) {
-      match switch_branch_in_use_path(rfs, root, name) {
+      match switch_branch_in_use_path(rfs, root, branch_name) {
         Some(_) => {
           eprint_line(
-            "fatal: '\{name}' is already checked out at another worktree",
+            "fatal: '\{branch_name}' is already checked out at another worktree",
           )
           @sys.exit(1)
         }
         None => ()
       }
     }
-    let refname = "refs/heads/" + name
+    let refname = branch_name
     if @gitlib.resolve_ref(rfs, git_dir, refname) is Some(_) &&
       not(force_create) {
-      raise @git.GitError::InvalidObject("branch '\{name}' already exists")
+      raise @git.GitError::InvalidObject(
+        "branch '\{branch_name}' already exists",
+      )
     }
     let target_id = match start_point {
       Some(spec) =>
@@ -158,26 +162,26 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
       None => @gitlib.resolve_ref(rfs, git_dir, "HEAD")
     }
     let previous_location = current_checkout_location(rfs, git_dir)
-    match target_id {
+      match target_id {
       Some(id) => {
-        @gitlib.create_branch_at(fs, rfs, root, name, id)
+        @gitlib.create_branch_at(fs, rfs, root, branch_name, id)
         switch_apply_tracking_config(
-          fs, rfs, git_dir, name, start_point, track_mode,
+          fs, rfs, git_dir, branch_name, start_point, track_mode,
         )
-        @gitlib.switch_branch(fs, rfs, root, name)
+        @gitlib.switch_branch(fs, rfs, root, branch_name)
       }
       None => {
         let ref_path = git_dir + "/" + refname
         ensure_dir(parent_dir(ref_path))
         fs.write_string(ref_path, "")
         switch_apply_tracking_config(
-          fs, rfs, git_dir, name, start_point, track_mode,
+          fs, rfs, git_dir, branch_name, start_point, track_mode,
         )
-        switch_write_head_ref(fs, git_dir, name)
+        switch_write_head_ref(fs, git_dir, branch_name)
       }
     }
     save_previous_checkout_location(fs, git_dir, previous_location)
-    println("Switched to a new branch '\{name}'")
+    println("Switched to a new branch '\{branch_name}'")
     return
   }
   if detach {
@@ -192,12 +196,12 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
   } else {
     raise @git.GitError::InvalidObject("No branch specified")
   }
-  let head_branch_ref = "refs/heads/" + target
-  let local_branch_exists = @gitlib.resolve_ref(rfs, git_dir, head_branch_ref)
+    let target_ref = normalize_switch_branch_ref(target)
+  let local_branch_exists = @gitlib.resolve_ref(rfs, git_dir, target_ref)
     is Some(_)
   if local_branch_exists {
     if not(ignore_other_worktrees) {
-      match switch_branch_in_use_path(rfs, root, target) {
+      match switch_branch_in_use_path(rfs, root, target_ref) {
         Some(_) => {
           eprint_line(
             "fatal: '\{target}' is already checked out at another worktree",
@@ -206,11 +210,11 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
         }
         None => ()
       }
-    }
-    let previous_location = current_checkout_location(rfs, git_dir)
-    ignore(checkout_with_promisor_retry(fs, root, target))
-    save_previous_checkout_location(fs, git_dir, previous_location)
-    println("Switched to branch '\{target}'")
+      }
+      let previous_location = current_checkout_location(rfs, git_dir)
+      ignore(checkout_with_promisor_retry(fs, root, target))
+      save_previous_checkout_location(fs, git_dir, previous_location)
+      println("Switched to branch '\{target}'")
     return
   }
   let guess = switch_effective_guess(rfs, git_dir, guess_mode)
@@ -233,13 +237,24 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
   raise @git.GitError::InvalidObject("Invalid ref: \{target}")
 }
 
+fn normalize_switch_branch_ref(name : String) -> String raise @git.GitError {
+  let normalized = @gitlib.normalize_repo_path(name) catch {
+    _ => raise @git.GitError::InvalidObject("invalid branch name: " + name)
+  }
+  if normalized.has_prefix("refs/heads/") {
+    normalized
+  } else {
+    "refs/heads/" + normalized
+  }
+}
+
 ///|
 fn switch_write_head_ref(
   fs : &@git.FileSystem,
   git_dir : String,
   branch : String,
 ) -> Unit raise Error {
-  fs.write_string(git_dir + "/HEAD", "ref: refs/heads/" + branch + "\n")
+  fs.write_string(git_dir + "/HEAD", "ref: " + branch + "\n")
 }
 
 ///|
