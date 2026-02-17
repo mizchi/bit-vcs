@@ -1,3 +1,6 @@
 [submodule "third_party/git"]
 	path = third_party/git
 	url = https://github.com/git/git.git
+[submodule "octorus"]
+	path = octorus
+	url = https://github.com/ushironoko/octorus
