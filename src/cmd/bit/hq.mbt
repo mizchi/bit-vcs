@@ -40,6 +40,7 @@ async fn print_hq_get_usage() -> Unit {
     #|  <repo>    Repository URL or shorthand:
     #|            - user/repo              → github.com/user/repo
     #|            - user/repo/path         → sparse checkout path
+    #|            - user/repo:path         → sparse checkout path
     #|            - github.com/user/repo   → normalized to user/repo
     #|            - gitlab.com/user/repo   → keeps host prefix
     #|            - https://github.com/... → full URL
@@ -47,7 +48,9 @@ async fn print_hq_get_usage() -> Unit {
     #|
     #|Options:
     #|  -u, --update     Update if already exists (git pull)
+    #|  --depth <n>      Clone depth override
     #|  --shallow        Shallow clone (--depth=1)
+    #|  --unshallow      Unshallow existing repository
     #|  -p, --ssh        Use SSH protocol
     #|  -b, --branch     Clone specific branch
     #|
@@ -87,7 +90,9 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
   let mut update = false
   let mut shallow = false
   let mut ssh = false
+  let mut depth = 0
   let mut branch : String? = None
+  let mut unshallow = false
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -98,14 +103,40 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
       }
       "-u" | "--update" => update = true
       "--shallow" => shallow = true
+      "--unshallow" => {
+        unshallow = true
+        update = true
+      }
       "-p" | "--ssh" => ssh = true
       "-b" | "--branch" =>
-        if i + 1 < args.length() {
-          i += 1
-          branch = Some(args[i])
+      if i + 1 < args.length() {
+        i += 1
+        branch = Some(args[i])
+      }
+    "--depth" if i + 1 < args.length() => {
+      depth = @strconv.parse_int(args[i + 1]) catch {
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          0
         }
-      _ if arg.has_prefix("-") => warn_unimplemented_arg("hq get", arg)
-      _ => if url is None { url = Some(arg) }
+      }
+      i += 1
+    }
+    _ if arg.has_prefix("--depth=") => {
+      let depth_str = String::unsafe_substring(arg, start=8, end=arg.length())
+      depth = @strconv.parse_int(depth_str) catch {
+        err => {
+          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+            raise err
+          }
+          0
+        }
+      }
+    }
+    _ if arg.has_prefix("-") => warn_unimplemented_arg("hq get", arg)
+    _ => if url is None { url = Some(arg) }
     }
     i += 1
   }
@@ -121,13 +152,30 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
   }
   // Load configuration
   let config = @hq.load_config(get_env_hq, get_git_config_hq)
-  let options = @hq.HqGetOptions::new(update~, shallow~, ssh~, branch~)
+  let options = @hq.HqGetOptions::new(
+    update~,
+    shallow~,
+    depth=depth,
+    ssh~,
+    branch~,
+    unshallow~,
+  )
   let local_path = r.local_path(config.root)
   // Check if exists
   let fs = OsFs::new()
   let exists = fs.is_dir(local_path)
   if exists {
     if update {
+      if options.unshallow {
+        let unshallow_code = run_git_command(
+          ["-C", local_path, "fetch", "--unshallow"],
+          cwd=None,
+        )
+        if unshallow_code != 0 {
+          eprint_line("bit hq get: failed to unshallow")
+          @sys.exit(1)
+        }
+      }
       // Update existing
       print_line("Updating \{contract_path_hq(local_path)}...")
       let code = run_git_command(
@@ -162,11 +210,17 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
     }
   }
   let clone_args : Array[String] = ["clone"]
-  if options.shallow {
-    clone_args.push("--depth=1")
+  let depth = if options.depth > 0 {
+    options.depth
+  } else if options.shallow {
+    1
+  } else {
+    0
+  }
+  if depth > 0 {
+    clone_args.push("--depth=" + depth.to_string())
   }
   if r.needs_sparse() {
-    clone_args.push("--filter=blob:none")
     clone_args.push("--no-checkout")
   }
   match options.branch {
@@ -186,6 +240,16 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
   // Handle sparse checkout
   if r.needs_sparse() {
     let subdir = r.subdir.unwrap_or("")
+    let sparse_dir = if subdir.has_prefix("/") {
+      subdir
+    } else {
+      "/" + subdir
+    }
+    let sparse_dir_with_sep = if sparse_dir.has_suffix("/") {
+      sparse_dir
+    } else {
+      sparse_dir + "/"
+    }
     let sparse_init_code = run_git_command(
       ["-C", local_path, "sparse-checkout", "init", "--cone"],
       cwd=None,
@@ -195,19 +259,11 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
       @sys.exit(1)
     }
     let sparse_set_code = run_git_command(
-      ["-C", local_path, "sparse-checkout", "set", subdir],
+      ["-C", local_path, "sparse-checkout", "set", sparse_dir_with_sep],
       cwd=None,
     )
     if sparse_set_code != 0 {
       eprint_line("bit hq get: sparse-checkout set failed")
-      @sys.exit(1)
-    }
-    let checkout_code = run_git_command(
-      ["-C", local_path, "checkout"],
-      cwd=None,
-    )
-    if checkout_code != 0 {
-      eprint_line("bit hq get: checkout failed")
       @sys.exit(1)
     }
   }

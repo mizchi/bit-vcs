@@ -16,6 +16,16 @@ pub fn hq_get(
   // Check if already exists
   if path_exists(local_path) {
     if options.update {
+      if options.unshallow {
+        let (
+          unshallow_code,
+          _unshallow_stdout,
+          unshallow_stderr,
+        ) = exec("cd \{local_path} && git fetch --unshallow")
+        if unshallow_code != 0 {
+          return HqGetResult::Error("Failed to unshallow: \{unshallow_stderr}")
+        }
+      }
       // Update existing repository
       let cmd = "cd \{local_path} && git pull --ff-only"
       let (code, _stdout, stderr) = exec(cmd)
@@ -42,6 +52,17 @@ pub fn hq_get(
 }
 
 ///|
+fn resolve_hq_clone_depth(options : HqGetOptions) -> Int {
+  if options.depth > 0 {
+    options.depth
+  } else if options.shallow {
+    1
+  } else {
+    0
+  }
+}
+
+///|
 fn clone_normal(
   repo : RepoPath,
   local_path : String,
@@ -49,9 +70,10 @@ fn clone_normal(
   exec : (String) -> (Int, String, String),
 ) -> Result[Unit, String] {
   let url = repo.clone_url(ssh=options.ssh)
+  let depth = resolve_hq_clone_depth(options)
   let args : Array[String] = ["git", "clone"]
-  if options.shallow {
-    args.push("--depth=1")
+  if depth > 0 {
+    args.push("--depth=" + depth.to_string())
   }
   match options.branch {
     Some(branch) => {
@@ -79,13 +101,14 @@ fn clone_sparse(
   exec : (String) -> (Int, String, String),
 ) -> Result[Unit, String] {
   let url = repo.clone_url(ssh=options.ssh)
+  let depth = resolve_hq_clone_depth(options)
   let subdir = repo.subdir.unwrap_or("")
   // Step 1: Clone with filter and no checkout
   let clone_args : Array[String] = [
-    "git", "clone", "--filter=blob:none", "--no-checkout",
+    "git", "clone", "--no-checkout",
   ]
-  if options.shallow {
-    clone_args.push("--depth=1")
+  if depth > 0 {
+    clone_args.push("--depth=" + depth.to_string())
   }
   match options.branch {
     Some(branch) => {
@@ -108,16 +131,21 @@ fn clone_sparse(
     return Err("Sparse checkout init failed: \{stderr2}")
   }
   // Step 3: Set sparse checkout paths
-  let sparse_set_cmd = "cd \{local_path} && git sparse-checkout set \{subdir}"
+  let sparse_dir = if subdir.has_prefix("/") {
+    subdir
+  } else {
+    "/" + subdir
+  }
+  let sparse_dir_with_sep = if sparse_dir.has_suffix("/") {
+    sparse_dir
+  } else {
+    sparse_dir + "/"
+  }
+  let sparse_set_cmd =
+    "cd \{local_path} && git sparse-checkout set \{sparse_dir_with_sep}"
   let (code3, _stdout3, stderr3) = exec(sparse_set_cmd)
   if code3 != 0 {
     return Err("Sparse checkout set failed: \{stderr3}")
-  }
-  // Step 4: Checkout
-  let checkout_cmd = "cd \{local_path} && git checkout"
-  let (code4, _stdout4, stderr4) = exec(checkout_cmd)
-  if code4 != 0 {
-    return Err("Checkout failed: \{stderr4}")
   }
   Ok(())
 }
@@ -130,13 +158,38 @@ pub fn build_clone_command(
   options : HqGetOptions,
 ) -> String {
   let url = repo.clone_url(ssh=options.ssh)
+  let depth = resolve_hq_clone_depth(options)
   if repo.needs_sparse() {
     let subdir = repo.subdir.unwrap_or("")
-    "git clone --filter=blob:none --no-checkout \{url} \{local_path} && cd \{local_path} && git sparse-checkout init --cone && git sparse-checkout set \{subdir} && git checkout"
+    let sparse_dir = if subdir.has_prefix("/") {
+      subdir
+    } else {
+      "/" + subdir
+    }
+    let sparse_dir_with_sep = if sparse_dir.has_suffix("/") {
+      sparse_dir
+    } else {
+      sparse_dir + "/"
+    }
+    let sparse_args : Array[String] = ["git", "clone", "--no-checkout"]
+    if depth > 0 {
+      sparse_args.push("--depth=" + depth.to_string())
+    }
+    match options.branch {
+      Some(branch) => {
+        sparse_args.push("--branch")
+        sparse_args.push(branch)
+      }
+      None => ()
+    }
+    sparse_args.push(url)
+    sparse_args.push(local_path)
+    let clone_cmd = sparse_args.iter().map(s => s).join(" ")
+    "\{clone_cmd} && cd \{local_path} && git sparse-checkout init --cone && git sparse-checkout set \{sparse_dir_with_sep}"
   } else {
     let args : Array[String] = ["git", "clone"]
-    if options.shallow {
-      args.push("--depth=1")
+    if depth > 0 {
+      args.push("--depth=" + depth.to_string())
     }
     match options.branch {
       Some(branch) => {

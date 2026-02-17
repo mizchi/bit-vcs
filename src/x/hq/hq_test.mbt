@@ -15,6 +15,30 @@ test "RepoPath::parse: user/repo:subdir shorthand" {
 }
 
 ///|
+test "RepoPath::parse: user/repo/path subdir" {
+  let result = parse_repo_url("mizchi/monorepo/packages/core")
+  let expected =
+    #|Some({host: None, user: "mizchi", repo: "monorepo", subdir: Some("packages/core")})
+  inspect(result, content=expected)
+}
+
+///|
+test "RepoPath::parse: github.com/user/repo/path subdir" {
+  let result = parse_repo_url("github.com/mizchi/monorepo/packages/core")
+  let expected =
+    #|Some({host: None, user: "mizchi", repo: "monorepo", subdir: Some("packages/core")})
+  inspect(result, content=expected)
+}
+
+///|
+test "RepoPath::parse: gitlab.com/user/repo/path subdir" {
+  let result = parse_repo_url("gitlab.com/user/monorepo/packages/core")
+  let expected =
+    #|Some({host: Some("gitlab.com"), user: "user", repo: "monorepo", subdir: Some("packages/core")})
+  inspect(result, content=expected)
+}
+
+///|
 test "RepoPath::parse: github.com/user/repo (normalized)" {
   let result = parse_repo_url("github.com/mizchi/git")
   let expected =
@@ -194,11 +218,30 @@ test "build_clone_command: shallow" {
 }
 
 ///|
+test "build_clone_command: explicit depth" {
+  let repo = RepoPath::new("mizchi", "git")
+  let options = HqGetOptions::new(depth=3)
+  let cmd = build_clone_command(repo, "/home/user/bhq/mizchi/git", options)
+  let expected =
+    "git clone --depth=3 https://github.com/mizchi/git.git /home/user/bhq/mizchi/git"
+  inspect(cmd, content=expected)
+}
+
+///|
 test "build_clone_command: sparse checkout" {
   let repo = RepoPath::new("mizchi", "monorepo", subdir=Some("packages/core"))
   let options = HqGetOptions::default()
   let cmd = build_clone_command(repo, "/home/user/bhq/mizchi/monorepo", options)
-  let expected = "git clone --filter=blob:none --no-checkout https://github.com/mizchi/monorepo.git /home/user/bhq/mizchi/monorepo && cd /home/user/bhq/mizchi/monorepo && git sparse-checkout init --cone && git sparse-checkout set packages/core && git checkout"
+  let expected = "git clone --no-checkout https://github.com/mizchi/monorepo.git /home/user/bhq/mizchi/monorepo && cd /home/user/bhq/mizchi/monorepo && git sparse-checkout init --cone && git sparse-checkout set /packages/core/"
+  inspect(cmd, content=expected)
+}
+
+///|
+test "build_clone_command: sparse checkout with depth" {
+  let repo = RepoPath::new("mizchi", "monorepo", subdir=Some("packages/core"))
+  let options = HqGetOptions::new(depth=2)
+  let cmd = build_clone_command(repo, "/home/user/bhq/mizchi/monorepo", options)
+  let expected = "git clone --no-checkout --depth=2 https://github.com/mizchi/monorepo.git /home/user/bhq/mizchi/monorepo && cd /home/user/bhq/mizchi/monorepo && git sparse-checkout init --cone && git sparse-checkout set /packages/core/"
   inspect(cmd, content=expected)
 }
 
@@ -220,6 +263,27 @@ test "hq_get: clone new repository" {
 }
 
 ///|
+test "hq_get: clone new repository with explicit depth" {
+  let repo = RepoPath::new("mizchi", "git")
+  let config = HqConfig::new("/tmp/bhq")
+  let options = HqGetOptions::new(depth=2)
+  let commands : Array[String] = []
+  fn exec(cmd : String) -> (Int, String, String) {
+    commands.push(cmd)
+    (0, "", "")
+  }
+
+  fn path_exists(_path : String) -> Bool {
+    false
+  }
+
+  let result = hq_get(repo, config, options, exec, path_exists)
+  inspect(result, content="Cloned(\"/tmp/bhq/mizchi/git\")")
+  assert_eq(commands.length(), 1)
+  assert_eq(commands[0], "git clone --depth=2 https://github.com/mizchi/git.git /tmp/bhq/mizchi/git")
+}
+
+///|
 test "hq_get: skip existing without update" {
   let repo = RepoPath::new("mizchi", "git")
   let config = HqConfig::new("/tmp/bhq")
@@ -234,6 +298,31 @@ test "hq_get: skip existing without update" {
 
   let result = hq_get(repo, config, options, exec, path_exists)
   inspect(result, content="Skipped(\"/tmp/bhq/mizchi/git\")")
+}
+
+///|
+test "hq_get: unshallow existing repository before update" {
+  let repo = RepoPath::new("mizchi", "git")
+  let config = HqConfig::new("/tmp/bhq")
+  let options = HqGetOptions::new(update=true, unshallow=true)
+  let commands : Array[String] = []
+  fn exec(cmd : String) -> (Int, String, String) {
+    commands.push(cmd)
+    (0, "", "")
+  }
+
+  fn path_exists(_path : String) -> Bool {
+    true
+  }
+
+  let result = hq_get(repo, config, options, exec, path_exists)
+  inspect(result, content="Updated(\"/tmp/bhq/mizchi/git\")")
+  assert_eq(commands.length(), 2)
+  assert_eq(
+    commands[0],
+    "cd /tmp/bhq/mizchi/git && git fetch --unshallow",
+  )
+  assert_eq(commands[1], "cd /tmp/bhq/mizchi/git && git pull --ff-only")
 }
 
 ///|

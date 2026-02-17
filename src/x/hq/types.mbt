@@ -79,25 +79,31 @@ pub struct HqGetOptions {
   update : Bool
   /// Use shallow clone (--depth=1)
   shallow : Bool
+  /// Explicit clone depth. 0 means use default behavior.
+  depth : Int
   /// Use SSH protocol
   ssh : Bool
   /// Specific branch to clone
   branch : String?
+  /// Unshallow existing repository before update
+  unshallow : Bool
 }
 
 ///|
 pub fn HqGetOptions::default() -> HqGetOptions {
-  { update: false, shallow: false, ssh: false, branch: None }
+  { update: false, shallow: false, depth: 0, ssh: false, branch: None, unshallow: false }
 }
 
 ///|
 pub fn HqGetOptions::new(
   update? : Bool = false,
   shallow? : Bool = false,
+  depth? : Int = 0,
   ssh? : Bool = false,
   branch? : String? = None,
+  unshallow? : Bool = false,
 ) -> HqGetOptions {
-  { update, shallow, ssh, branch }
+  { update, shallow, depth, ssh, branch, unshallow }
 }
 
 ///|

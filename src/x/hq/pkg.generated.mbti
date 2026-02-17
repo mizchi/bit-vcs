@@ -38,11 +38,13 @@ pub fn HqConfig::new(String, ghq_compat? : Bool) -> Self
 pub struct HqGetOptions {
   update : Bool
   shallow : Bool
+  depth : Int
   ssh : Bool
   branch : String?
+  unshallow : Bool
 }
 pub fn HqGetOptions::default() -> Self
-pub fn HqGetOptions::new(update? : Bool, shallow? : Bool, ssh? : Bool, branch? : String?) -> Self
+pub fn HqGetOptions::new(update? : Bool, shallow? : Bool, depth? : Int, ssh? : Bool, branch? : String?, unshallow? : Bool) -> Self
 
 pub(all) enum HqGetResult {
   Cloned(String)
@@ -71,4 +73,3 @@ pub impl Show for RepoPath
 // Type aliases
 
 // Traits
-
