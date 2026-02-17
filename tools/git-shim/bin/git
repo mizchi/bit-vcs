@@ -47,6 +47,8 @@ force_pack_intercept="${GIT_SHIM_FORCE_PACK_INTERCEPT:-${SHIM_FORCE_PACK_INTERCE
 force_transport_intercept="${GIT_SHIM_FORCE_TRANSPORT_INTERCEPT:-${SHIM_FORCE_TRANSPORT_INTERCEPT:-}}"
 random_mode="${GIT_SHIM_RANDOM_MODE:-${SHIM_RANDOM_MODE:-}}"
 random_ratio_raw="${GIT_SHIM_RANDOM_RATIO:-${SHIM_RANDOM_RATIO:-}}"
+random_seed="${GIT_SHIM_RANDOM_SEED:-${SHIM_RANDOM_SEED:-}}"
+random_salt="${GIT_SHIM_RANDOM_SALT:-${SHIM_RANDOM_SALT:-}}"
 fallback_real_git="${GIT_SHIM_REAL_GIT_FALLBACK:-${SHIM_REAL_GIT_FALLBACK:-}}"
 
 has_command_support() {
@@ -112,6 +114,25 @@ is_uint() {
       return 0
       ;;
   esac
+}
+
+random_roll_from_input() {
+  material="${1:-}"
+  if [ -z "$random_seed" ]; then
+    return 1
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$material" | sha256sum 2>/dev/null | awk '{print $1}' | cut -c1-16)"
+    case "$digest" in
+      '' | *[!0-9A-Fa-f]*)
+        ;;
+      *)
+        roll=$((16#$digest % 100))
+        return 0
+        ;;
+    esac
+  fi
+  return 1
 }
 
 # Fast-path global --exec-path (query only; preserve override when subcommand exists)
@@ -303,6 +324,7 @@ if [ "$intercept" -eq 1 ] && [ "$strict_mode" != "1" ] && [ "$random_mode" = "1"
 
   choose_intercept=0
   roll=0
+  random_roll_source="fallback"
   if [ "$ratio" -ge 100 ]; then
     choose_intercept=1
     roll=0
@@ -310,9 +332,14 @@ if [ "$intercept" -eq 1 ] && [ "$strict_mode" != "1" ] && [ "$random_mode" = "1"
     choose_intercept=0
     roll=99
   else
-    roll="$(od -An -N2 -tu2 /dev/urandom 2>/dev/null | tr -d '[:space:]' || true)"
-    if ! is_uint "$roll"; then
-      roll="$(date +%s 2>/dev/null || echo 0)"
+    if ! random_roll_from_input "${random_seed}|${random_salt}|${subcmd}|$*"; then
+      roll="$(od -An -N2 -tu2 /dev/urandom 2>/dev/null | tr -d '[:space:]' || true)"
+      if ! is_uint "$roll"; then
+        roll="$(date +%s 2>/dev/null || echo 0)"
+      fi
+      random_roll_source="urandom"
+    else
+      random_roll_source="seeded"
     fi
     roll=$((roll % 100))
     if [ "$roll" -lt "$ratio" ]; then
@@ -321,9 +348,9 @@ if [ "$intercept" -eq 1 ] && [ "$strict_mode" != "1" ] && [ "$random_mode" = "1"
   fi
 
   if [ "$choose_intercept" -eq 1 ]; then
-    log "random bit $subcmd ratio=$ratio roll=$roll"
+    log "random bit $subcmd ratio=$ratio roll=$roll seed=$random_seed salt=$random_salt source=$random_roll_source"
   else
-    log "random real-git $subcmd ratio=$ratio roll=$roll"
+    log "random real-git $subcmd ratio=$ratio roll=$roll seed=$random_seed salt=$random_salt source=$random_roll_source"
     intercept=0
   fi
 fi

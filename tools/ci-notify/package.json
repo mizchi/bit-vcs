@@ -1,0 +1,16 @@
+{
+  "name": "ci-notify",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "notify": "tsx src/notify.ts"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "dependencies": {
+    "tsx": "^4.15.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

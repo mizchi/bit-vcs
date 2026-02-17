@@ -213,6 +213,38 @@ git-t-allowlist-shim-random: build
 compat-table:
     @bash tools/generate-compat-table.sh
 
+# Run randomized compatibility shard (PoC). Use env vars:
+#   COMPAT_RANDOM_SHARD, COMPAT_RANDOM_SHARDS, COMPAT_RANDOM_SEED,
+#   COMPAT_RANDOM_RATIO, COMPAT_RANDOM_OUTPUT_DIR
+compat-random-run:
+    bash tools/run-git-compat-random.sh
+
+# Aggregate compatibility random run records (default: compat-random-results)
+compat-random-aggregate results_dir="compat-random-results":
+    bash tools/aggregate-git-compat-random.sh {{results_dir}}
+
+# Trigger Git Compat Randomized workflow via workflow_dispatch
+compat-random-dispatch shards="1" ratio="50" target_shard="0" seed="":
+    @if ! command -v gh >/dev/null 2>&1; then \
+      echo "gh CLI is required: https://cli.github.com/" >&2; \
+      exit 1; \
+    fi
+    @gh workflow run .github/workflows/git-compat-random.yml -f shards={{shards}} -f ratio={{ratio}} -f target_shard={{target_shard}} -f seed={{seed}}
+
+# Run TypeScript notifier to create issue from compat-random summary
+compat-random-notify summary="compat-random-summary.md" matrix="sharded results":
+    pnpm --dir tools/ci-notify install
+    pnpm --dir tools/ci-notify run notify -- \
+      --summary {{summary}} \
+      --repo "$GITHUB_REPOSITORY" \
+      --run-id "${GITHUB_RUN_ID:-local}" \
+      --run-attempt "${GITHUB_RUN_ATTEMPT:-1}" \
+      --run-url "${GITHUB_SERVER_URL:-https://github.com}/$GITHUB_REPOSITORY/actions/runs/${GITHUB_RUN_ID:-local}" \
+      --workflow "Git Compat Randomized" \
+      --matrix "{{matrix}}" \
+      --issue-title "Git Compat Randomized failed" \
+      --labels "ci,automated-report"
+
 # Run a single test file in strict shim mode (e.g., just git-t-one t3200-branch.sh)
 git-t-one test_file: build
     @tools/apply-git-test-patches.sh

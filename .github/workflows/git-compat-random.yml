@@ -1,0 +1,135 @@
+name: Git Compat Randomized
+
+permissions:
+  contents: read
+  issues: write
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: "Total shard count"
+        required: false
+        default: "5"
+      ratio:
+        description: "Random ratio (0-100)"
+        required: false
+        default: "50"
+      target_shard:
+        description: "Run only this shard (0 = all shards)"
+        required: false
+        default: "0"
+      seed:
+        description: "Optional fixed seed"
+        required: false
+        default: ""
+
+jobs:
+  run-compat-random:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext libcurl4-openssl-dev libexpat1-dev
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Install MoonBit CLI
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Build git from source
+        run: |
+          cd third_party/git
+          make -j$(nproc)
+
+      - name: Moon update
+        run: moon update
+
+      - name: Run randomized compat shard
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.target_shard == '0' && matrix.shard <= github.event.inputs.shards || github.event.inputs.target_shard != '0' && matrix.shard == github.event.inputs.target_shard }}
+        env:
+          COMPAT_RANDOM_RATIO: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ratio || '50' }}
+          COMPAT_RANDOM_SHARD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target_shard != '0' && github.event.inputs.target_shard || matrix.shard }}
+          COMPAT_RANDOM_SHARDS: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.target_shard != '0' && github.event.inputs.target_shard || github.event.inputs.shards) || '5' }}
+          COMPAT_RANDOM_SEED: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.seed || '' }}
+          COMPAT_RANDOM_RUN_ID: "gh-run-${{ github.run_id }}"
+        run: |
+          bash tools/run-git-compat-random.sh
+
+      - name: Upload compat results
+        if: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.target_shard == '0' && matrix.shard <= github.event.inputs.shards || github.event.inputs.target_shard != '0' && matrix.shard == github.event.inputs.target_shard) && (success() || failure()) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-random-run-${{ github.run_id }}-shard-${{ matrix.shard }}
+          path: compat-random-results
+
+  aggregate-compat-random:
+    name: Aggregate random compat results
+    runs-on: ubuntu-latest
+    needs: run-compat-random
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all compat artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "compat-random-run-${{ github.run_id }}-*"
+          path: compat-random-results
+          merge-multiple: true
+
+      - name: Aggregate
+        run: |
+          bash tools/aggregate-git-compat-random.sh compat-random-results | tee compat-random-summary.md
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install notifier dependencies
+        run: pnpm --dir tools/ci-notify install
+
+      - name: Create issue on failures
+        if: always()
+        run: |
+          pnpm --dir tools/ci-notify run notify -- \
+            --summary compat-random-summary.md \
+            --repo "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --workflow "Git Compat Randomized" \
+            --matrix "sharded results" \
+            --issue-title "Git Compat Randomized failed" \
+            --labels "ci,automated-report" \
+            --require-token
+
+      - name: Upload summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-random-summary-${{ github.run_id }}
+          path: compat-random-summary.md
