@@ -42,6 +42,13 @@ Representative files:
     - matching branch refs
     - matching `rev-parse <branch>^{tree}`
     - both repos clean (`status --porcelain` empty)
+- `t/t0013-random-pack.sh` was added and executed with seeds `1001` and `1002` with `40` operations each.
+  - Covered operations set: `init`, `commit-new`, `commit-mod`, `commit-rm`, `branch`, `switch`, `merge`, `pack-objects`, `repack`, `gc`, `index-pack`, `status`.
+  - Verification checks:
+    - `git fsck --strict` (both repos)
+    - matching branch refs
+    - matching `rev-parse <branch>^{tree}`
+    - both repos clean (`status --porcelain` empty)
 
 ## Explicitly Unsupported In Standalone Mode
 
