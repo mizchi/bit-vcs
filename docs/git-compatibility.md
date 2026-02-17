@@ -35,6 +35,13 @@ Representative files:
     - matching branch refs
     - matching `rev-parse <branch>^{tree}`
     - both repos clean (`status --porcelain` empty)
+- `t/t0012-random-maintenance.sh` was added and executed with seeds `101`, `202`, and `303` with `35` operations each.
+  - Covered operations set: `init`, `commit-new`, `commit-mod`, `commit-rm`, `branch`, `switch`, `merge`, `status`, `gc`, `repack`.
+  - Verification checks:
+    - `git fsck --strict` (both repos)
+    - matching branch refs
+    - matching `rev-parse <branch>^{tree}`
+    - both repos clean (`status --porcelain` empty)
 
 ## Explicitly Unsupported In Standalone Mode
 
