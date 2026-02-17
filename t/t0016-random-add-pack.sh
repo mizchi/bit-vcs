@@ -366,4 +366,12 @@ test_expect_success 'random add-pack ops seed=802' '
     run_case 802 55 4
 '
 
+test_expect_success 'random add-pack ops seed=803' '
+    run_case 803 55 4
+'
+
+test_expect_success 'random add-pack ops seed=804' '
+    run_case 804 55 4
+'
+
 test_done

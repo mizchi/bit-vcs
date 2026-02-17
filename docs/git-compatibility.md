@@ -64,7 +64,7 @@ Representative files:
     - matching `rev-parse <branch>^{tree}`
     - both repos clean (`status --porcelain` empty)
     - if git-side multi-pack-index exists, bit-side multi-pack-index exists
-- `t/t0016-random-add-pack.sh` was added and executed with seeds `801` and `802` with `55` operations each.
+- `t/t0016-random-add-pack.sh` was added and executed with seeds `801`, `802`, `803`, and `804` with `55` operations each.
   - Covered operations set: `init`, `commit-new`, `commit-mod`, `commit-rm`, `branch`, `switch`, `add`, `add .`, `add -A`, `add --refresh`, `status`, `pack-objects`, `index-pack`, `gc`, `repack`.
   - Verification checks:
     - `git fsck --strict` (both repos)
