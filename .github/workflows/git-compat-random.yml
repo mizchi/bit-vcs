@@ -39,33 +39,59 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve shard execution target
+        id: shard_guard
+        run: |
+          should_run=true
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            target_shard="${{ github.event.inputs.target_shard }}"
+            shards="${{ github.event.inputs.shards }}"
+
+            if [ "$target_shard" != "0" ]; then
+              if [ "${{ matrix.shard }}" != "$target_shard" ]; then
+                should_run=false
+              fi
+            elif [ -n "$shards" ] && [ "${{ matrix.shard }}" -gt "$shards" ]; then
+              should_run=false
+            fi
+          fi
+
+          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+
       - name: Checkout git upstream submodule
+        if: ${{ steps.shard_guard.outputs.should_run == 'true' }}
         run: |
           git submodule update --init third_party/git
 
       - name: Install dependencies
+        if: ${{ steps.shard_guard.outputs.should_run == 'true' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y gettext libcurl4-openssl-dev libexpat1-dev
 
       - name: Install just
+        if: ${{ steps.shard_guard.outputs.should_run == 'true' }}
         uses: extractions/setup-just@v2
 
       - name: Install MoonBit CLI
+        if: ${{ steps.shard_guard.outputs.should_run == 'true' }}
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
 
       - name: Build git from source
+        if: ${{ steps.shard_guard.outputs.should_run == 'true' }}
         run: |
           cd third_party/git
           make -j$(nproc)
 
       - name: Moon update
+        if: ${{ steps.shard_guard.outputs.should_run == 'true' }}
         run: moon update
 
       - name: Run randomized compat shard
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.target_shard == '0' && matrix.shard <= github.event.inputs.shards || github.event.inputs.target_shard != '0' && matrix.shard == github.event.inputs.target_shard }}
+        if: ${{ steps.shard_guard.outputs.should_run == 'true' }}
         env:
           COMPAT_RANDOM_RATIO: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ratio || '50' }}
           COMPAT_RANDOM_SHARD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target_shard != '0' && github.event.inputs.target_shard || matrix.shard }}
@@ -76,7 +102,8 @@ jobs:
           bash tools/run-git-compat-random.sh
 
       - name: Upload compat results
-        if: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.target_shard == '0' && matrix.shard <= github.event.inputs.shards || github.event.inputs.target_shard != '0' && matrix.shard == github.event.inputs.target_shard) && (success() || failure()) }}
+        if: >-
+          ${{ steps.shard_guard.outputs.should_run == 'true' && (success() || failure()) }}
         uses: actions/upload-artifact@v4
         with:
           name: compat-random-run-${{ github.run_id }}-shard-${{ matrix.shard }}
