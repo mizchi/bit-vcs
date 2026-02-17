@@ -89,6 +89,9 @@ function parseArgs(argv: string[]) {
       parsed.help = true;
       continue;
     }
+    if (arg === "--") {
+      continue;
+    }
     if (arg === "--dry-run" || arg === "--dedupe" || arg === "--no-dedupe" || arg === "--require-token") {
       if (arg === "--dry-run") parsed.dryRun = true;
       if (arg === "--require-token") parsed.requireToken = true;
@@ -102,13 +105,24 @@ function parseArgs(argv: string[]) {
       if (value === undefined || value.startsWith("--")) {
         throw new Error(`option ${arg} needs a value`);
       }
-      parsed[key] = value;
+      parsed[toCamelKey(key)] = value;
       i += 1;
       continue;
     }
     throw new Error(`unknown arg: ${arg}`);
   }
   return parsed;
+}
+
+function toCamelKey(raw: string): string {
+  return raw
+    .split("-")
+    .filter((part) => part.length > 0)
+    .map((part, index) => {
+      if (index === 0) return part;
+      return `${part[0]?.toUpperCase()}${part.slice(1)}`;
+    })
+    .join("");
 }
 
 function buildConfig(args: Record<string, string | boolean>) {
