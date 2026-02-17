@@ -399,4 +399,12 @@ test_expect_success 'random reset-rm-mv ops seed=904' '
     run_case 904 45 3
 '
 
+test_expect_success 'random reset-rm-mv ops seed=905 long' '
+    run_case 905 70 4
+'
+
+test_expect_success 'random reset-rm-mv ops seed=906 long' '
+    run_case 906 70 4
+'
+
 test_done

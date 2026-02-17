@@ -71,7 +71,7 @@ Representative files:
     - matching branch refs
     - matching `rev-parse <branch>^{tree}`
     - both repos clean (`status --porcelain` empty)
-- `t/t0020-random-reset-mv.sh` was added and executed with seeds `901`, `902`, `903`, and `904` with `45` operations each.
+- `t/t0020-random-reset-mv.sh` was added and executed with seeds `901`, `902`, `903`, and `904` with `45` operations each, and extended with seeds `905`, `906` with `70` operations each.
   - Covered operations set: `init`, `commit-new`, `commit-mod`, `commit-rm`, `branch`, `switch`, `mv`, `rm`, `rm --cached`, `reset --soft`, `reset --mixed`, `reset --hard`, `status`, `pack-objects`, `index-pack`, `repack`, `gc`.
   - Verification checks:
     - `git fsck --strict` (both repos)
