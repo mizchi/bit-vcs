@@ -24,6 +24,13 @@ repo-moongit/
 third_party/*
 !third_party/mizchi_x/
 !third_party/mizchi_x/**
+badobjects
+t/fallback-git
+t/primary-git
+t/shim.log
+t/t0022-shim-random.sh
+t/tmptrace/
+t/trace
 tmp/
 goodbye.ts
 version.ts

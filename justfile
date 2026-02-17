@@ -46,6 +46,7 @@ info:
 # Clean build artifacts
 clean:
     moon clean
+    @bash tools/clean-git-test-artifacts.sh
 
 # Build native binary
 build:
