@@ -1,4 +1,5 @@
 import {
+  "mizchi/bit/bootstrap" @bootstrap,
   "mizchi/bit" @git,
   "mizchi/bit/pack" @pack,
   "mizchi/bit/protocol" @protocol,

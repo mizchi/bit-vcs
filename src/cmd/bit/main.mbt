@@ -513,6 +513,7 @@ async fn main_async() -> Unit {
 
 ///|
 async fn run_main_for_args(args : Array[String]) -> Unit {
+  @bootstrap.init_stdin_guard()
   if args.length() < 2 {
     show_help()
     return ()

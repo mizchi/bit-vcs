@@ -1,0 +1,6 @@
+import {
+}
+
+options(
+  "native-stub": [ "stdio_guard_stub.c" ],
+)
