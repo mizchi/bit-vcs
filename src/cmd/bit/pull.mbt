@@ -205,9 +205,23 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
           start="refs/heads/".length(),
           end=head_target.length(),
         )
-        ignore(@bitlib.checkout(fs, fs, root, branch))
+        ignore(
+          run_checkout_with_sensitive_hooks(
+            fs,
+            fs,
+            root,
+            branch,
+          ),
+        )
       } else {
-        ignore(@bitlib.checkout(fs, fs, root, tid.to_hex()))
+        ignore(
+          run_checkout_with_sensitive_hooks(
+            fs,
+            fs,
+            root,
+            tid.to_hex(),
+          ),
+        )
       }
     }
     print_line("Fast-forward")
@@ -224,7 +238,15 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
   let author = get_author_string()
   let timestamp = get_commit_timestamp()
   let msg = "Merge " + target_ref
-  let result = @bitlib.merge(fs, fs, root, tid, msg, author, timestamp)
+  let result = run_merge_with_sensitive_hooks(
+    fs,
+    fs,
+    root,
+    tid,
+    msg,
+    author,
+    timestamp,
+  )
   match result.status {
     @bitlib.MergeStatus::AlreadyUpToDate => print_line("Already up to date.")
     @bitlib.MergeStatus::FastForward =>

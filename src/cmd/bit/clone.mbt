@@ -23,6 +23,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
   let mut no_checkout = false
   let mut no_local = false
   let mut reject_shallow = false
+  let mut skip_hooks = false
   let mut remote_name = "origin"
   let mut ref_spec : String? = None
   let mut ref_format = clone_default_ref_format()
@@ -85,6 +86,11 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
     }
     if arg == "--reject-shallow" {
       reject_shallow = true
+      i += 1
+      continue
+    }
+    if arg == "--skip-hooks" {
+      skip_hooks = true
       i += 1
       continue
     }
@@ -459,7 +465,12 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
           not(no_checkout) {
           let local_branch_ref = "refs/heads/" + refname
           if @bitlib.resolve_ref(fs, clone_git_dir, local_branch_ref) is Some(_) {
-            let checked_id = @bitlib.checkout(fs, fs, clone_root, refname)
+            let checked_id = run_checkout_with_sensitive_hooks(
+              fs,
+              fs,
+              clone_root,
+              refname,
+            )
             warn_case_insensitive_collisions_from_commit(
               fs, clone_git_dir, checked_id,
             )
@@ -472,7 +483,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
                 fs, clone_git_dir, src_path, refname,
               ) {
               Some(target_id) => {
-                let checked_id = @bitlib.checkout(
+                let checked_id = run_checkout_with_sensitive_hooks(
                   fs,
                   fs,
                   clone_root,
@@ -592,7 +603,12 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
                       ()
                     }
                   }
-                  let checked_id = @bitlib.checkout(fs, fs, clone_root, name)
+                  let checked_id = run_checkout_with_sensitive_hooks(
+                    fs,
+                    fs,
+                    clone_root,
+                    name,
+                  )
                   warn_case_insensitive_collisions_from_commit(
                     fs, clone_git_dir, checked_id,
                   )
@@ -601,7 +617,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
                   )
                 }
                 None => {
-                  let checked_id = @bitlib.checkout(
+                  let checked_id = run_checkout_with_sensitive_hooks(
                     fs,
                     fs,
                     clone_root,
@@ -645,6 +661,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
     _ => []
   }
   emit_clone_bundle_trace_events(fs, bundle_uris)
+  run_postclone_hook(fs, fs, clone_root, clone_git_dir, skip_hooks)
 }
 
 ///|
@@ -1018,6 +1035,30 @@ fn emit_clone_bundle_trace_events(
 }
 
 ///|
+async fn run_postclone_hook(
+  wfs : &@bitcore.FileSystem,
+  rfs : &@bitcore.RepoFileSystem,
+  root : String,
+  git_dir : String,
+  skip_hooks : Bool,
+) -> Unit raise Error {
+  if skip_hooks {
+    return ()
+  }
+  hooks_ensure_sensitive_hook_approval(wfs, rfs, root, "postclone")
+  let hook_path = git_dir + "/hooks/postclone"
+  if not(rfs.is_file(hook_path)) {
+    return ()
+  }
+  let code = @process.run(hook_path, [], inherit_env=true, cwd=root) catch {
+    _ => 1
+  }
+  if code != 0 {
+    raise @bitcore.GitError::InvalidObject("postclone hook failed")
+  }
+}
+
+///|
 fn append_clone_trace_line(fs : OsFs, path : String, line : String) -> Unit {
   let existing = decode_bytes(fs.read_file(path) catch { _ => b"" })
   fs.write_string(path, existing + line) catch {
@@ -1193,8 +1234,11 @@ async fn checkout_with_promisor_retry_clone(
   let mut promisor_db : @bitlib.PromisorDb? = None
   let mut attempts = 0
   while attempts < 16 {
-    let result : Result[@bitcore.ObjectId, Error] = try? @bitlib.checkout(
-      fs, fs, root, spec,
+    let result : Result[@bitcore.ObjectId, Error] = try? run_checkout_with_sensitive_hooks(
+      fs,
+      fs,
+      root,
+      spec,
     )
     match result {
       Ok(id) => return id

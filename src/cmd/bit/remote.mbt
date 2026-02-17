@@ -1867,7 +1867,7 @@ fn read_global_branch_autosetuprebase(
 }
 
 ///|
-fn clone_local_repo(
+async fn clone_local_repo(
   fs : OsFs,
   src_path : String,
   dest_path : String,
@@ -2093,7 +2093,7 @@ fn clone_local_repo(
         } else {
           default_branch
         }
-        let _ = @bitlib.checkout(
+        let _ = run_checkout_with_sensitive_hooks(
           fs,
           fs,
           dest_path,

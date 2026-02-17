@@ -169,7 +169,15 @@ async fn handle_merge(args : Array[String]) -> Unit raise Error {
   // Handle --squash
   if squash {
     // Squash merge: apply changes but don't commit
-    let result = @bitlib.merge(fs, fs, root, tid, msg, author, timestamp)
+    let result = run_merge_with_sensitive_hooks(
+      fs,
+      fs,
+      root,
+      tid,
+      msg,
+      author,
+      timestamp,
+    )
     match result.status {
       @bitlib.MergeStatus::AlreadyUpToDate => print_line("Already up to date.")
       @bitlib.MergeStatus::FastForward | @bitlib.MergeStatus::Merged => {
@@ -256,13 +264,29 @@ async fn handle_merge(args : Array[String]) -> Unit raise Error {
       wfs.write_string(head_path, commit_id.to_hex() + "\n")
     }
     // Checkout the new tree
-    ignore(@bitlib.checkout(wfs, rfs, root, commit_id.to_hex(), detach=false))
+    ignore(
+      run_checkout_with_sensitive_hooks(
+        wfs,
+        rfs,
+        root,
+        commit_id.to_hex(),
+        detach=false,
+      ),
+    )
     let short = String::unsafe_substring(commit_id.to_hex(), start=0, end=7)
     print_line("Merge made by the 'ort' strategy (--no-ff). [\{short}]")
     return
   }
   // Regular merge
-  let result = @bitlib.merge(fs, fs, root, tid, msg, author, timestamp)
+  let result = run_merge_with_sensitive_hooks(
+    fs,
+    fs,
+    root,
+    tid,
+    msg,
+    author,
+    timestamp,
+  )
   match result.status {
     @bitlib.MergeStatus::AlreadyUpToDate => print_line("Already up to date.")
     @bitlib.MergeStatus::FastForward =>

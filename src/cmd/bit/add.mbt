@@ -9,6 +9,40 @@ async fn show_add_command_help() -> Unit {
 }
 
 ///|
+fn add_abs_path(path : String) -> String {
+  if path.has_prefix("/") {
+    return path
+  }
+  let cwd = match @env.current_dir() {
+    Some(dir) => dir
+    None => "."
+  }
+  normalize_path(cwd + "/" + path)
+}
+
+///|
+async fn run_add_hook(
+  fs : OsFs,
+  root : String,
+  git_dir : String,
+  hook_name : String,
+) -> Int {
+  let hook_git_dir = add_abs_path(git_dir)
+  let hook_path = hook_git_dir + "/hooks/" + hook_name
+  if not(fs.is_file(hook_path)) {
+    return 0
+  }
+  @process.run(
+    hook_path,
+    [],
+    inherit_env=true,
+    cwd=add_abs_path(root),
+  ) catch {
+    _ => 1
+  }
+}
+
+///|
 fn add_storage_runtime_delegate_args(
   args : Array[String],
 ) -> @runtime.StorageAddArgs? {
@@ -112,8 +146,17 @@ async fn handle_add(args : Array[String]) -> Unit raise Error {
       all_paths.push(p)
     }
     if all_paths.length() > 0 {
+      let pre_code = run_add_hook(fs, root, git_dir, "pre-add")
+      if pre_code != 0 {
+        raise @bitcore.GitError::InvalidObject("pre-add hook failed")
+      }
       @bitlib.add_paths_async(fs, fs, root, all_paths)
       stage_submodule_gitlinks(fs, root, all_paths)
+
+      let post_code = run_add_hook(fs, root, git_dir, "post-add")
+      if post_code != 0 {
+        raise @bitcore.GitError::InvalidObject("post-add hook failed")
+      }
     }
     return
   }
@@ -129,6 +172,10 @@ async fn handle_add(args : Array[String]) -> Unit raise Error {
   }
   let stage_paths = expand_add_stage_paths(fs, root, paths, force)
   if stage_paths.length() > 0 {
+    let pre_code = run_add_hook(fs, root, git_dir, "pre-add")
+    if pre_code != 0 {
+      raise @bitcore.GitError::InvalidObject("pre-add hook failed")
+    }
     @bitlib.add_paths_async(fs, fs, root, stage_paths)
     stage_submodule_gitlinks(fs, root, stage_paths)
   }
@@ -144,6 +191,12 @@ async fn handle_add(args : Array[String]) -> Unit raise Error {
     if first is Some(spec) {
       eprint_line("fatal: pathspec '\{spec}' did not match any files")
       @sys.exit(1)
+    }
+  }
+  if stage_paths.length() > 0 {
+    let post_code = run_add_hook(fs, root, git_dir, "post-add")
+    if post_code != 0 {
+      raise @bitcore.GitError::InvalidObject("post-add hook failed")
     }
   }
 }

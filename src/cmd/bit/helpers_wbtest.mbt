@@ -62,9 +62,35 @@ test "helpers: find_repo_root detects .bit repository marker" {
 }
 
 ///|
-test "helpers: resolve_git_dir prefers .bit when present" {
+test "helpers: resolve_git_dir prefers .git when .git is present" {
   let fs = OsFs::new()
   let root = "/tmp/bit-test-resolve-git-dir-bit-" +
+    get_current_timestamp().to_string()
+  fs.mkdir_p(root + "/.bit")
+  fs.mkdir_p(root + "/.git")
+  let prev_git_dir = @sys.get_env_var("GIT_DIR")
+  @sys.unset_env_var("GIT_DIR")
+  let resolved = resolve_git_dir(fs, root)
+  assert_eq(resolved, root + "/.git")
+  match prev_git_dir {
+    Some(value) => @sys.set_env_var("GIT_DIR", value)
+    None => @sys.unset_env_var("GIT_DIR")
+  }
+  fs.remove_dir(root + "/.bit") catch {
+    _ => ()
+  }
+  fs.remove_dir(root + "/.git") catch {
+    _ => ()
+  }
+  fs.remove_dir(root) catch {
+    _ => ()
+  }
+}
+
+///|
+test "helpers: resolve_git_dir falls back to .bit when .git is absent" {
+  let fs = OsFs::new()
+  let root = "/tmp/bit-test-resolve-git-dir-bit-only-" +
     get_current_timestamp().to_string()
   fs.mkdir_p(root + "/.bit")
   let prev_git_dir = @sys.get_env_var("GIT_DIR")

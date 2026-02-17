@@ -236,6 +236,8 @@ test "storage runtime: hash-object -w and write-tree work on TestFs" {
   let fs = @bit.TestFs::new()
   let root = "/repo-storage-runtime-objects"
   let prev_quiet = setup_storage_runtime_quiet_for_wbtest()
+  let prev_shim_pwd = @sys.get_env_var("GIT_SHIM_PWD")
+  @sys.set_env_var("GIT_SHIM_PWD", root)
   run_storage_command(fs, fs, root, storage_runtime_wbtest_init_command()) catch {
     err => fail("init failed: \{err}")
   }
@@ -271,6 +273,7 @@ test "storage runtime: hash-object -w and write-tree work on TestFs" {
   restore_env_var_for_storage_runtime_wbtest(
     "BIT_STORAGE_RUNTIME_QUIET", prev_quiet,
   )
+  restore_env_var_for_storage_runtime_wbtest("GIT_SHIM_PWD", prev_shim_pwd)
 }
 
 ///|

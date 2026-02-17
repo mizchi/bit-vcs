@@ -266,7 +266,15 @@ async fn bisect_next(
   wfs.write_string(bisect_expected_path, mid_hex + "\n")
   // Checkout the commit (detached HEAD)
   let root = git_dir + "/.."
-  ignore(@bitlib.checkout(wfs, rfs, root, mid_hex, detach=true))
+  ignore(
+    run_checkout_with_sensitive_hooks(
+      wfs,
+      rfs,
+      root,
+      mid_hex,
+      detach=true,
+    ),
+  )
   print_line(
     "Bisecting: \{remaining} revisions left to test after this (roughly \{steps} steps)",
   )
@@ -401,13 +409,29 @@ async fn bisect_reset(
     // Try to checkout branch
     if rfs.is_file(git_dir + "/refs/heads/" + checkout_ref) {
       // Checkout the branch (not detached)
-      ignore(@bitlib.checkout(wfs, rfs, root, checkout_ref, detach=false))
+      ignore(
+        run_checkout_with_sensitive_hooks(
+          wfs,
+          rfs,
+          root,
+          checkout_ref,
+          detach=false,
+        ),
+      )
     } else {
       // Try to checkout as a commit (detached)
       let target = @bitrepo.rev_parse(rfs, git_dir, checkout_ref)
       match target {
         Some(_) =>
-          ignore(@bitlib.checkout(wfs, rfs, root, checkout_ref, detach=true))
+          ignore(
+            run_checkout_with_sensitive_hooks(
+              wfs,
+              rfs,
+              root,
+              checkout_ref,
+              detach=true,
+            ),
+          )
         None => ()
       }
     }

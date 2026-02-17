@@ -241,7 +241,7 @@ fn generate_bash_completion() -> String {
     #|            fi
     #|            ;;
     #|        clone)
-    #|            COMPREPLY=( $(compgen -W "--bare --mirror --depth --single-branch --no-single-branch --branch -b --recursive --recurse-submodules --shallow-submodules --no-tags --filter --sparse --quiet -q --verbose -v" -- "$cur") )
+    #|            COMPREPLY=( $(compgen -W "--bare --mirror --depth --single-branch --no-single-branch --branch -b --recursive --recurse-submodules --shallow-submodules --no-tags --filter --sparse --quiet -q --verbose -v --skip-hooks" -- "$cur") )
     #|            ;;
     #|        init)
     #|            COMPREPLY=( $(compgen -W "--bare --template --separate-git-dir --initial-branch -b --shared --quiet -q" -- "$cur") )

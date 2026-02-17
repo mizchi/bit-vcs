@@ -6,6 +6,9 @@ async fn print_x_hooks_usage() -> Unit {
   let usage =
     #|Usage: bit/x/hooks <subcommand> [<args>]
     #|
+    #|Experimental: Hooks are designed for carefully controlled local workflows.
+    #|Avoid overusing them as automation primitives.
+    #|
     #|bit/x/hooks list [<prefix>]
     #|  List hooks under .git/hooks (enabled) and .bit/hooks (available).
     #|  Optional <prefix> filters hook names.
@@ -25,9 +28,13 @@ async fn print_x_hooks_usage() -> Unit {
     #|Examples:
     #|  bit/x/hooks list
     #|  bit/x/hooks set pre-add /tmp/pre-add
+    #|  bit/x/hooks set postclone /tmp/postclone
     #|  bit/x/hooks approve pre-add
+    #|  bit/x/hooks approve postclone
     #|  bit/x/hooks unapprove pre-add
+    #|  bit/x/hooks unapprove postclone
     #|  bit/x/hooks remove pre-add
+    #|  bit/x/hooks remove postclone
   print_line(usage)
 }
 
@@ -164,6 +171,215 @@ fn list_hooks_with_status(
 }
 
 ///|
+fn hooks_sensitive_names() -> Array[String] {
+  ["post-checkout", "post-merge", "postclone", "postinstall"]
+}
+
+fn hooks_always_prompt_names() -> Array[String] {
+  ["postclone", "postinstall"]
+}
+
+fn is_always_prompt_hook(name : String) -> Bool {
+  for candidate in hooks_always_prompt_names() {
+    if name == candidate {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn is_sensitive_hook(name : String) -> Bool {
+  for candidate in hooks_sensitive_names() {
+    if name == candidate {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn hooks_approved_checksum_path(root : String, hook_name : String) -> String {
+  join_repo_marker(root, ".bit/hooks/.approved/" + hook_name + ".sha1")
+}
+
+///|
+fn hooks_active_hook_path(
+  rfs : &@bitcore.RepoFileSystem,
+  root : String,
+  hook_name : String,
+) -> String {
+  let git_dir = resolve_git_dir(rfs, root)
+  git_dir + "/hooks/" + hook_name
+}
+
+///|
+fn hooks_file_checksum(
+  rfs : &@bitcore.RepoFileSystem,
+  path : String,
+) -> String? {
+  if not(rfs.is_file(path)) {
+    return None
+  }
+  let content = rfs.read_file(path) catch { _ => return None }
+  Some(@bitcore.sha1(content).to_hex())
+}
+
+///|
+fn hooks_read_approved_checksum(
+  rfs : &@bitcore.RepoFileSystem,
+  root : String,
+  hook_name : String,
+) -> String? {
+  let path = hooks_approved_checksum_path(root, hook_name)
+  if not(rfs.is_file(path)) {
+    return None
+  }
+  let raw = decode_bytes(rfs.read_file(path) catch { _ => return None })
+  let trimmed = trim_string(raw)
+  if trimmed.length() == 0 {
+    return None
+  }
+  Some(trimmed)
+}
+
+///|
+fn hooks_write_approved_checksum(
+  wfs : &@bitcore.FileSystem,
+  rfs : &@bitcore.RepoFileSystem,
+  root : String,
+  hook_name : String,
+  checksum : String,
+) -> Unit {
+  let dir = join_repo_marker(root, ".bit/hooks/.approved")
+  if not(rfs.is_dir(dir)) {
+    wfs.mkdir_p(dir) catch {
+      _ => ()
+    }
+  }
+  wfs.write_string(hooks_approved_checksum_path(root, hook_name), checksum + "\n") catch {
+    _ => ()
+  }
+}
+
+///|
+fn hooks_active_checksum(
+  rfs : &@bitcore.RepoFileSystem,
+  root : String,
+  hook_name : String,
+) -> String? {
+  hooks_file_checksum(rfs, hooks_active_hook_path(rfs, root, hook_name))
+}
+
+///|
+fn hooks_is_current_checksum_approved(
+  rfs : &@bitcore.RepoFileSystem,
+  root : String,
+  hook_name : String,
+) -> Bool {
+  if is_always_prompt_hook(hook_name) {
+    return false
+  }
+  if not(is_sensitive_hook(hook_name)) {
+    return true
+  }
+  match hooks_active_checksum(rfs, root, hook_name) {
+    None => true
+    Some(current) => match hooks_read_approved_checksum(rfs, root, hook_name) {
+      Some(approved) => approved == current
+      None => false
+    }
+  }
+}
+
+///|
+async fn hooks_prompt_approve_checksum(
+  wfs : &@bitcore.FileSystem,
+  rfs : &@bitcore.RepoFileSystem,
+  root : String,
+  hook_name : String,
+  current_checksum : String,
+) -> Unit {
+  let hook_path = hooks_active_hook_path(rfs, root, hook_name)
+  let approved = match hooks_read_approved_checksum(rfs, root, hook_name) {
+    Some(v) => v
+    None => "<not approved yet>"
+  }
+  if is_always_prompt_hook(hook_name) {
+    eprint_line("warning: this hook always requires explicit execution approval: '" + hook_name + "'")
+    eprint_line(
+      "warning: this hook is experimental, so avoid overusing it as an automation",
+    )
+  } else {
+    eprint_line(
+      "warning: sensitive hook changed since last approval: '" + hook_name + "'",
+    )
+  }
+  eprint_line("  path: " + hook_path)
+  eprint_line("  approved checksum: " + approved)
+  eprint_line("  current checksum:  " + current_checksum)
+  eprint_line(
+    "Approve and continue now? [y/N] (or run `bit/x/hooks unapprove " +
+    hook_name + "` to disable this hook)",
+  )
+  let bytes : Array[Byte] = []
+  let mut finished = false
+  while not(finished) {
+    match @stdio.stdin.read_some(max_len=64) {
+      None => finished = true
+      Some(chunk) => {
+        for b in chunk {
+          if b == 10 {
+            finished = true
+            break
+          }
+          if b == 13 {
+            continue
+          }
+          if bytes.length() <= 64 {
+            bytes.push(b)
+          }
+          if bytes.length() >= 64 {
+            finished = true
+            break
+          }
+        }
+      }
+    }
+  }
+  let answer = trim_string(decode_bytes(bytes_from_array(bytes))).to_lower()
+  if answer != "y" && answer != "yes" {
+    eprint_line("fatal: rejected unapproved sensitive hook")
+    @sys.exit(1)
+  }
+  hooks_write_approved_checksum(wfs, rfs, root, hook_name, current_checksum)
+}
+
+///|
+async fn hooks_ensure_sensitive_hook_approval(
+  wfs : &@bitcore.FileSystem,
+  fs : &@bitcore.RepoFileSystem,
+  root : String,
+  hook_name : String,
+) -> Unit {
+  if not(is_sensitive_hook(hook_name)) {
+    return
+  }
+  if not(hooks_is_current_checksum_approved(fs, root, hook_name)) {
+    match hooks_active_checksum(fs, root, hook_name) {
+      Some(current) => hooks_prompt_approve_checksum(
+        wfs,
+        fs,
+        root,
+        hook_name,
+        current,
+      )
+      None => ()
+    }
+  }
+}
+
+///|
 async fn handle_x_hooks_list(
   root : String,
   git_dir : String,
@@ -190,7 +406,11 @@ async fn handle_x_hooks_list(
 }
 
 ///|
-async fn handle_x_hooks_set(fs : OsFs, root : String, args : Array[String]) -> Unit {
+async fn handle_x_hooks_set(
+  fs : OsFs,
+  root : String,
+  args : Array[String],
+) -> Unit raise Error {
   if args.length() == 1 && (args[0] == "-h" || args[0] == "--help") {
     print_x_hooks_usage()
     return
@@ -230,7 +450,7 @@ async fn handle_x_hooks_approve(
   root : String,
   git_dir : String,
   args : Array[String],
-) -> Unit {
+) -> Unit raise Error {
   if args.length() == 1 && (args[0] == "-h" || args[0] == "--help") {
     print_x_hooks_usage()
     return
@@ -259,11 +479,20 @@ async fn handle_x_hooks_approve(
   @asyncfs.chmod(target[:], 0o755) catch {
     _ => ()
   }
+  if is_sensitive_hook(name) {
+    match hooks_active_checksum(fs, root, name) {
+      Some(checksum) => hooks_write_approved_checksum(fs, fs, root, name, checksum)
+      None => ()
+    }
+  }
 }
 
 ///|
-async fn handle_x_hooks_unapprove(git_dir : String, args : Array[String]) -> Unit {
-  let fs = OsFs::new()
+async fn handle_x_hooks_unapprove(
+  fs : OsFs,
+  git_dir : String,
+  args : Array[String],
+) -> Unit raise Error {
   if args.length() == 1 && (args[0] == "-h" || args[0] == "--help") {
     print_x_hooks_usage()
     return
@@ -291,7 +520,11 @@ async fn handle_x_hooks_unapprove(git_dir : String, args : Array[String]) -> Uni
 }
 
 ///|
-async fn handle_x_hooks_remove(fs : OsFs, root : String, args : Array[String]) -> Unit {
+async fn handle_x_hooks_remove(
+  fs : OsFs,
+  root : String,
+  args : Array[String],
+) -> Unit raise Error {
   if args.length() == 1 && (args[0] == "-h" || args[0] == "--help") {
     print_x_hooks_usage()
     return
@@ -338,7 +571,7 @@ async fn handle_x_hooks(args : Array[String]) -> Unit raise Error {
     "list" => handle_x_hooks_list(root, git_dir, rest)
     "set" => handle_x_hooks_set(fs, root, rest)
     "approve" => handle_x_hooks_approve(fs, root, git_dir, rest)
-    "unapprove" => handle_x_hooks_unapprove(git_dir, rest)
+    "unapprove" => handle_x_hooks_unapprove(fs, git_dir, rest)
     "remove" => handle_x_hooks_remove(fs, root, rest)
     "-h" | "--help" | "help" => print_x_hooks_usage()
     _ => {

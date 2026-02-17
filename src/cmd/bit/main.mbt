@@ -62,7 +62,7 @@ async fn show_help() -> Unit {
     #|
     #|setup
     #|   completion    Generate shell completion scripts (bash/zsh)
-    #|   x/hooks       Manage hooks used by bit commands
+    #|   x/hooks       Manage hooks used by bit commands (experimental; do not overuse hooks as automation)
     #|
     #|low-level / plumbing
     #|   bundle          Create, verify, list-heads, and unbundle Git bundles
@@ -313,7 +313,11 @@ fn show_command_help_specs() -> Array[(String, String, String)] {
     (
       "completion", "bit completion <bash|zsh>", "Generate shell completion scripts.\n\nInstall:\n  bash: eval \"$(bit completion bash)\"\n  zsh:  eval \"$(bit completion zsh)\"",
     ),
-    ("x/hooks", "bit/x/hooks <subcommand> [<args>]", "Manage hooks used by bit commands."),
+    (
+      "x/hooks",
+      "bit/x/hooks <subcommand> [<args>]",
+      "Manage hooks used by bit commands. Experimental: avoid overusing hooks as automation.",
+    ),
     (
       "shell", "bit shell [--login] [<path>]", "Start an interactive bit shell with command forwarding.",
     ),

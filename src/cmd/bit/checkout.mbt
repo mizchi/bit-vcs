@@ -142,7 +142,7 @@ async fn checkout_with_promisor_retry(
   }
   let mut attempts = 0
   while attempts < 16 {
-    let result : Result[@bitcore.ObjectId, Error] = try? @bitlib.checkout(
+    let result : Result[@bitcore.ObjectId, Error] = try? run_checkout_with_sensitive_hooks(
       fs,
       fs,
       root,

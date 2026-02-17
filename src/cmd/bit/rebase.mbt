@@ -170,7 +170,15 @@ async fn interactive_rebase_start(
   // Also save done file (empty initially)
   wfs.write_string(rebase_dir + "/done", "")
   // Checkout onto
-  ignore(@bitlib.checkout(wfs, rfs, root, onto.to_hex(), detach=true))
+  ignore(
+    run_checkout_with_sensitive_hooks(
+      wfs,
+      rfs,
+      root,
+      onto.to_hex(),
+      detach=true,
+    ),
+  )
   let edited = edit_rebase_todo(todo_path)
   if edited {
     interactive_rebase_continue(wfs, rfs, root, git_dir)
@@ -611,7 +619,15 @@ async fn cherry_pick_commit(
   // Update HEAD
   wfs.write_string(git_dir + "/HEAD", new_commit_id.to_hex() + "\n")
   // Checkout the tree
-  ignore(@bitlib.checkout(wfs, rfs, root, new_commit_id.to_hex(), detach=true))
+  ignore(
+    run_checkout_with_sensitive_hooks(
+      wfs,
+      rfs,
+      root,
+      new_commit_id.to_hex(),
+      detach=true,
+    ),
+  )
   let short = String::unsafe_substring(new_commit_id.to_hex(), start=0, end=7)
   print_line("[\{short}] \{get_first_line(message)}")
   { has_conflict: false }
@@ -662,7 +678,15 @@ async fn squash_commit(
   @bitlib.write_object_bytes(wfs, git_dir, new_commit_id, commit_data)
   // Update HEAD
   wfs.write_string(git_dir + "/HEAD", new_commit_id.to_hex() + "\n")
-  ignore(@bitlib.checkout(wfs, rfs, root, new_commit_id.to_hex(), detach=true))
+  ignore(
+    run_checkout_with_sensitive_hooks(
+      wfs,
+      rfs,
+      root,
+      new_commit_id.to_hex(),
+      detach=true,
+    ),
+  )
   let short = String::unsafe_substring(new_commit_id.to_hex(), start=0, end=7)
   if fixup {
     print_line("[\{short}] fixup")
@@ -672,7 +696,7 @@ async fn squash_commit(
 }
 
 ///|
-fn interactive_rebase_abort(
+async fn interactive_rebase_abort(
   wfs : &@bitcore.FileSystem,
   rfs : &@bitcore.RepoFileSystem,
   root : String,
@@ -684,7 +708,15 @@ fn interactive_rebase_abort(
   // Restore original HEAD
   if rfs.is_file(orig_head_path) {
     let orig_hex = rfs.read_file(orig_head_path) |> decode_bytes |> trim_string
-    ignore(@bitlib.checkout(wfs, rfs, root, orig_hex, detach=true))
+      ignore(
+        run_checkout_with_sensitive_hooks(
+          wfs,
+          rfs,
+          root,
+          orig_hex,
+          detach=true,
+        ),
+      )
     // Restore branch if was on one
     if rfs.is_file(head_name_path) {
       let branch = rfs.read_file(head_name_path) |> decode_bytes |> trim_string

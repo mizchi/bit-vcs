@@ -400,11 +400,11 @@ fn join_repo_marker(root : String, marker : String) -> String {
 
 ///|
 fn detect_repo_marker_path(fs : &@bitcore.RepoFileSystem, root : String) -> String? {
-  let bit_path = join_repo_marker(root, ".bit")
-  if fs.is_dir(bit_path) || fs.is_file(bit_path) {
-    return Some(bit_path)
+  let git_path = join_repo_marker(root, ".git")
+  if fs.is_dir(git_path) || fs.is_file(git_path) {
+    return Some(git_path)
   }
-  let bit_path = join_repo_marker(root, ".git")
+  let bit_path = join_repo_marker(root, ".bit")
   if fs.is_dir(bit_path) || fs.is_file(bit_path) {
     return Some(bit_path)
   }
@@ -453,18 +453,6 @@ fn find_repo_root(start : String) -> String? {
         }
       }
     }
-    let bit_path = join_repo_marker(current, ".bit")
-    let is_bit_dir = @fs.is_dir(bit_path) catch { _ => false }
-    let is_bit_file = if is_bit_dir {
-      false
-    } else {
-      @fs.is_file(bit_path) catch {
-        _ => false
-      }
-    }
-    if is_bit_dir || is_bit_file {
-      return Some(current)
-    }
     let bit_path = join_repo_marker(current, ".git")
     let is_git_dir = @fs.is_dir(bit_path) catch { _ => false }
     let is_git_file = if is_git_dir {
@@ -475,6 +463,18 @@ fn find_repo_root(start : String) -> String? {
       }
     }
     if is_git_dir || is_git_file {
+      return Some(current)
+    }
+    let bit_path = join_repo_marker(current, ".bit")
+    let is_bit_dir = @fs.is_dir(bit_path) catch { _ => false }
+    let is_bit_file = if is_bit_dir {
+      false
+    } else {
+      @fs.is_file(bit_path) catch {
+        _ => false
+      }
+    }
+    if is_bit_dir || is_bit_file {
       return Some(current)
     }
     let parent = parent_dir(current)
@@ -765,4 +765,40 @@ fn is_valid_timezone_token(token : String) -> Bool {
     }
   }
   true
+}
+
+///|
+async fn run_checkout_with_sensitive_hooks(
+  fs : &@bitcore.FileSystem,
+  rfs : &@bitcore.RepoFileSystem,
+  root : String,
+  spec : String,
+  detach? : Bool = false,
+  update_worktree? : Bool = true,
+  update_index? : Bool = true,
+) -> @bitcore.ObjectId raise Error {
+  hooks_ensure_sensitive_hook_approval(fs, rfs, root, "post-checkout")
+  @bitlib.checkout(
+    fs,
+    rfs,
+    root,
+    spec,
+    detach=detach,
+    update_worktree=update_worktree,
+    update_index=update_index,
+  )
+}
+
+///|
+async fn run_merge_with_sensitive_hooks(
+  fs : &@bitcore.FileSystem,
+  rfs : &@bitcore.RepoFileSystem,
+  root : String,
+  target : @bitcore.ObjectId,
+  message : String,
+  author : String,
+  timestamp : Int64,
+) -> @bitlib.MergeResult raise Error {
+  hooks_ensure_sensitive_hook_approval(fs, rfs, root, "post-merge")
+  @bitlib.merge(fs, rfs, root, target, message, author, timestamp)
 }

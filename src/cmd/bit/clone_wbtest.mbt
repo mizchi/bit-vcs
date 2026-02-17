@@ -114,3 +114,58 @@ test "clone: configure_reftable_ref_storage writes reftable metadata" {
   assert_true(config.contains("refStorage = reftable"))
   cleanup_clone_wbtest_tree(fs, root)
 }
+
+async test "clone: run_postclone_hook is no-op when hook is absent" {
+  let fs = OsFs::new()
+  let root = "/tmp/bit-test-postclone-noop-" + get_current_timestamp().to_string()
+  cleanup_clone_wbtest_tree(fs, root)
+  let git_dir = root + "/.git"
+  fs.mkdir_p(git_dir + "/hooks")
+  run_postclone_hook(fs, fs, root, git_dir, false) catch {
+    err => fail("unexpected error: \{err}")
+  }
+  cleanup_clone_wbtest_tree(fs, root)
+}
+
+async test "clone: run_postclone_hook remains skipped without hook file even with approval cache" {
+  let fs = OsFs::new()
+  let root =
+    "/tmp/bit-test-postclone-skip-with-cache-" + get_current_timestamp().to_string()
+  let git_dir = root + "/.git"
+  cleanup_clone_wbtest_tree(fs, root)
+  fs.mkdir_p(git_dir + "/hooks")
+  fs.write_string(
+    git_dir + "/hooks/postclone",
+    "#!/bin/sh\necho executed\n",
+  )
+  let checksum = hooks_active_checksum(fs, root, "postclone").unwrap_or("")
+  hooks_write_approved_checksum(fs, fs, root, "postclone", checksum)
+  fs.remove_file(git_dir + "/hooks/postclone") catch {
+    _ => ()
+  }
+  run_postclone_hook(fs, fs, root, git_dir, false) catch {
+    err => fail("unexpected error: \{err}")
+  }
+  assert_false(fs.is_file(root + "/postclone-marker"))
+  cleanup_clone_wbtest_tree(fs, root)
+}
+
+async test "clone: run_postclone_hook skips execution when skip-hooks is enabled" {
+  let fs = OsFs::new()
+  let root =
+    "/tmp/bit-test-postclone-skip-hook-" + get_current_timestamp().to_string()
+  let git_dir = root + "/.git"
+  cleanup_clone_wbtest_tree(fs, root)
+  fs.mkdir_p(git_dir + "/hooks")
+  fs.write_string(
+    git_dir + "/hooks/postclone",
+    "#!/bin/sh\necho should_not_run > \"" + root + "/postclone-marker\"\n",
+  )
+  let checksum = hooks_active_checksum(fs, root, "postclone").unwrap_or("")
+  hooks_write_approved_checksum(fs, fs, root, "postclone", checksum)
+  run_postclone_hook(fs, fs, root, git_dir, true) catch {
+    err => fail("unexpected error: \{err}")
+  }
+  assert_false(fs.is_file(root + "/postclone-marker"))
+  cleanup_clone_wbtest_tree(fs, root)
+}
