@@ -1190,12 +1190,16 @@ fn rebase_apply_next(
   let next_idx = state.done.length()
   if next_idx >= state.todo.length() {
     // All done, finalize rebase
-    clear_rebase_state(fs, rfs, git_dir)
     // Restore branch ref if applicable
     let head = resolve_head_commit(rfs, git_dir)
     guard head is Some(final_id) else {
       raise @git.GitError::InvalidObject("No HEAD after rebase")
     }
+    let final_tree_map = rebase_tree_map(db, rfs, final_id)
+    rebase_write_worktree(fs, db, rfs, root, final_tree_map)
+    let final_entries = rebase_map_to_index(db, rfs, final_tree_map)
+    write_index_entries(fs, git_dir, final_entries)
+    clear_rebase_state(fs, rfs, git_dir)
     if state.head_name.length() > 0 {
       let head_path = join_path(git_dir, "HEAD")
       fs.write_string(head_path, "ref: " + state.head_name + "\n")
