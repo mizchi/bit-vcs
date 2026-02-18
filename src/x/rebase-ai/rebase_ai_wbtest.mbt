@@ -152,6 +152,7 @@ async test "rebase-ai: resolve_conflict_paths applies model output and stages fi
     ["conflicted.txt"],
     options,
     provider_ref,
+    "",
   )
   assert_eq(resolved.failed.length(), 0)
   assert_eq(resolved.resolved.length(), 1)
@@ -230,6 +231,7 @@ async test "rebase-ai: agent-loop mode resolves conflict with repo-scoped read/w
     ["conflicted.txt"],
     options,
     provider_ref,
+    "",
   )
   assert_eq(resolved.failed.length(), 0)
   assert_eq(resolved.resolved.length(), 1)

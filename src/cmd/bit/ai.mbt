@@ -7,11 +7,6 @@ async fn show_ai_command_help() -> Unit {
 }
 
 ///|
-fn trim_text(s : String) -> String {
-  s.trim(chars=" \n\r\t").to_string()
-}
-
-///|
 fn read_file_text(
   fs : &@bitcore.RepoFileSystem,
   root : String,
@@ -31,7 +26,7 @@ fn collect_ai_context(
   root : String,
   user_instructions : Array[String],
 ) -> String {
-  let mut blocks : Array[String] = []
+  let blocks : Array[String] = []
   match read_file_text(fs, root, "CLAUDE.md") {
     Some(content) => blocks.push("CLAUDE.md\n\n" + content)
     None => ()
@@ -103,7 +98,7 @@ fn build_diff_units_for_ai(diffs : Array[@bitdiff.DiffFile]) -> String {
 
 ///|
 fn split_diff_units(diffs : Array[@bitdiff.DiffFile]) -> Array[AiDiffUnit] {
-  let mut grouped : Map[String, Array[@bitdiff.DiffFile]] = {}
+  let grouped : Map[String, Array[@bitdiff.DiffFile]] = {}
   for item in diffs {
     let unit = diff_unit_name(item.path)
     match grouped.get(unit) {
@@ -111,7 +106,7 @@ fn split_diff_units(diffs : Array[@bitdiff.DiffFile]) -> Array[AiDiffUnit] {
       None => grouped[unit] = [item]
     }
   }
-  let mut units : Array[AiDiffUnit] = []
+  let units : Array[AiDiffUnit] = []
   for pair in grouped.to_array() {
     let (name, files) = pair
     files.sort_by((a, b) => String::compare(a.path, b.path))
@@ -138,7 +133,7 @@ fn build_single_diff_unit_for_ai(unit : AiDiffUnit) -> String {
 fn extract_commit_message_for_ai(data : Bytes) -> String {
   let content = @utf8.decode_lossy(data[:])
   let mut in_message = false
-  let mut message_lines : Array[String] = []
+  let message_lines : Array[String] = []
   for line_view in content.split("\n") {
     let line = line_view.to_string()
     if in_message {
@@ -158,7 +153,6 @@ struct AiCommitCommandOptions {
   max_auto_rounds : Int
   use_agent_loop : Bool
   agent_max_steps : Int
-  split : Bool
 }
 
 ///|
@@ -178,8 +172,8 @@ fn parse_ai_commit_options(
   let mut use_agent_loop = false
   let mut agent_max_steps = 16
   let mut split = false
-  let mut commit_args : Array[String] = []
-  let mut user_instructions : Array[String] = []
+  let commit_args : Array[String] = []
+  let user_instructions : Array[String] = []
   let mut i = 0
   let mut should_generate_message = true
   let mut all_modified = false
@@ -376,7 +370,7 @@ fn parse_ai_commit_options(
     }
   }
   (
-    { model, max_auto_rounds, use_agent_loop, agent_max_steps, split },
+    { model, max_auto_rounds, use_agent_loop, agent_max_steps },
     commit_args,
     should_generate_message,
     all_modified,
@@ -393,8 +387,8 @@ fn parse_ai_merge_options(
   let mut max_auto_rounds = 32
   let mut use_agent_loop = false
   let mut agent_max_steps = 16
-  let mut merge_args : Array[String] = []
-  let mut user_instructions : Array[String] = []
+  let merge_args : Array[String] = []
+  let user_instructions : Array[String] = []
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -482,8 +476,8 @@ fn parse_ai_cherry_pick_options(
   let mut max_auto_rounds = 32
   let mut use_agent_loop = false
   let mut agent_max_steps = 16
-  let mut cherry_pick_args : Array[String] = []
-  let mut user_instructions : Array[String] = []
+  let cherry_pick_args : Array[String] = []
+  let user_instructions : Array[String] = []
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -571,8 +565,8 @@ fn parse_ai_revert_options(
   let mut max_auto_rounds = 32
   let mut use_agent_loop = false
   let mut agent_max_steps = 16
-  let mut revert_args : Array[String] = []
-  let mut user_instructions : Array[String] = []
+  let revert_args : Array[String] = []
+  let user_instructions : Array[String] = []
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -674,7 +668,10 @@ async fn handle_ai_commit(args : Array[String]) -> Unit raise Error {
   let rfs : &@bitcore.RepoFileSystem = fs
   let diff_index = @bitdiff.diff_index(rfs, root)
   let diff_files = if all_modified {
-    merge_index_and_worktree_diffs(diff_index, @bitdiff.diff_worktree(rfs, root))
+    merge_index_and_worktree_diffs(
+      diff_index,
+      @bitdiff.diff_worktree(rfs, root),
+    )
   } else {
     diff_index
   }
@@ -697,9 +694,9 @@ async fn handle_ai_commit(args : Array[String]) -> Unit raise Error {
       root,
       build_diff_units_for_ai(diff_files),
       context,
-      ai_options~,
+      options=ai_options,
     )
-    let mut generated_commit_args : Array[String] = []
+    let generated_commit_args : Array[String] = []
     for arg in commit_args {
       generated_commit_args.push(arg)
     }
@@ -708,7 +705,7 @@ async fn handle_ai_commit(args : Array[String]) -> Unit raise Error {
     handle_commit(generated_commit_args)
     return
   }
-  let mut split_commit_args : Array[String] = []
+  let split_commit_args : Array[String] = []
   for arg in commit_args {
     match arg {
       "-a" | "--all" => ()
@@ -717,8 +714,8 @@ async fn handle_ai_commit(args : Array[String]) -> Unit raise Error {
   }
   for unit in units {
     ignore(@bitlib.reset(fs, rfs, root, "HEAD", @bitlib.ResetMode::Mixed))
-    let mut path_map : Map[String, Bool] = {}
-    let mut unit_paths : Array[String] = []
+    let path_map : Map[String, Bool] = {}
+    let unit_paths : Array[String] = []
     for file in unit.diffs {
       if not(path_map.contains(file.path)) {
         path_map[file.path] = true
@@ -734,9 +731,9 @@ async fn handle_ai_commit(args : Array[String]) -> Unit raise Error {
       root,
       build_single_diff_unit_for_ai(unit),
       context,
-      ai_options~,
+      options=ai_options,
     )
-    let mut generated_commit_args : Array[String] = []
+    let generated_commit_args : Array[String] = []
     for arg in split_commit_args {
       generated_commit_args.push(arg)
     }
@@ -746,6 +743,7 @@ async fn handle_ai_commit(args : Array[String]) -> Unit raise Error {
   }
 }
 
+///|
 fn merge_args_has(args : Array[String], target : String) -> Bool {
   for arg in args {
     if arg == target {
@@ -755,6 +753,7 @@ fn merge_args_has(args : Array[String], target : String) -> Bool {
   false
 }
 
+///|
 async fn handle_ai_merge(args : Array[String]) -> Unit raise Error {
   if args.length() == 0 {
     show_ai_merge_help()
@@ -784,20 +783,17 @@ async fn handle_ai_merge(args : Array[String]) -> Unit raise Error {
     agent_max_steps=parsed.agent_max_steps,
     provider=None,
   )
-  if merge_args_has(merge_args, "--continue") || merge_args_has(merge_args, "--abort") {
+  if merge_args_has(merge_args, "--continue") ||
+    merge_args_has(merge_args, "--abort") {
     let conflict_paths = @rebase_ai.find_conflict_marker_paths(rfs, root)
     if conflict_paths.length() > 0 {
       let resolved = @rebase_ai.ai_resolve_conflict_paths(
-        fs,
-        rfs,
-        root,
-        conflict_paths,
-        ai_options~,
-        context,
+        fs, rfs, root, conflict_paths, ai_options, context,
       )
       if resolved.failed.length() > 0 {
+        let failed_paths = resolved.failed.join(", ")
         raise @bitcore.GitError::InvalidObject(
-          "bit ai merge: failed to resolve conflicts: \{resolved.failed.join(\", \")}",
+          "bit ai merge: failed to resolve conflicts: \{failed_paths}",
         )
       }
     }
@@ -808,16 +804,12 @@ async fn handle_ai_merge(args : Array[String]) -> Unit raise Error {
     let conflict_paths = @rebase_ai.find_conflict_marker_paths(rfs, root)
     if conflict_paths.length() > 0 {
       let resolved = @rebase_ai.ai_resolve_conflict_paths(
-        fs,
-        rfs,
-        root,
-        conflict_paths,
-        ai_options~,
-        context,
+        fs, rfs, root, conflict_paths, ai_options, context,
       )
       if resolved.failed.length() > 0 {
+        let failed_paths = resolved.failed.join(", ")
         raise @bitcore.GitError::InvalidObject(
-          "bit ai merge: failed to resolve conflicts: \{resolved.failed.join(\", \")}",
+          "bit ai merge: failed to resolve conflicts: \{failed_paths}",
         )
       }
       if resolved.resolved.length() > 0 {
@@ -829,8 +821,9 @@ async fn handle_ai_merge(args : Array[String]) -> Unit raise Error {
   }
 }
 
+///|
 async fn resolve_cherry_pick_conflict_and_commit(
-  fs : &@bit.FileSystem,
+  fs : &@bitcore.FileSystem,
   rfs : &@bitcore.RepoFileSystem,
   root : String,
   commit_id : String,
@@ -852,20 +845,17 @@ async fn resolve_cherry_pick_conflict_and_commit(
     provider=None,
   )
   let resolved = @rebase_ai.ai_resolve_conflict_paths(
-    fs,
-    rfs,
-    root,
-    conflict_paths,
-    ai_options~,
-    context,
+    fs, rfs, root, conflict_paths, ai_options, context,
   )
   if resolved.failed.length() > 0 {
+    let failed_paths = resolved.failed.join(", ")
     raise @bitcore.GitError::InvalidObject(
-      "bit ai cherry-pick: failed to resolve conflicts: \{resolved.failed.join(\", \")}",
+      "bit ai cherry-pick: failed to resolve conflicts: \{failed_paths}",
     )
   }
   let commit_id_obj = @bitcore.ObjectId::from_hex(commit_id) catch {
-    _ => raise @bitcore.GitError::InvalidObject("invalid commit id: \{commit_id}")
+    _ =>
+      raise @bitcore.GitError::InvalidObject("invalid commit id: \{commit_id}")
   }
   let db = @bitlib.ObjectDb::load(rfs, root + "/.git")
   let commit_obj = db.get(rfs, commit_id_obj)
@@ -885,9 +875,14 @@ async fn resolve_cherry_pick_conflict_and_commit(
     get_commit_timestamp(),
   )
   let short_id = String::unsafe_substring(new_id.to_hex(), start=0, end=7)
-  print_line("bit ai cherry-pick: auto-resolved conflicts and committed \{short_id}")
+  print_line(
+    "bit ai cherry-pick: auto-resolved conflicts and committed \{short_id}",
+  ) catch {
+    _ => ()
+  }
 }
 
+///|
 async fn handle_ai_cherry_pick(args : Array[String]) -> Unit raise Error {
   if args.length() == 0 {
     show_ai_cherry_pick_help()
@@ -900,7 +895,9 @@ async fn handle_ai_cherry_pick(args : Array[String]) -> Unit raise Error {
     }
     _ => ()
   }
-  let (parsed, cherry_pick_args, user_instructions) = parse_ai_cherry_pick_options(args)
+  let (parsed, cherry_pick_args, user_instructions) = parse_ai_cherry_pick_options(
+    args,
+  )
   if cherry_pick_args.length() == 0 {
     raise @bitcore.GitError::InvalidObject(
       "bit ai cherry-pick: commit target is required",
@@ -969,19 +966,21 @@ async fn handle_ai_cherry_pick(args : Array[String]) -> Unit raise Error {
           print_line("[\{short}] Cherry-picked from \{commit_ref.unwrap()}")
         }
         None => print_line("Cherry-pick successful")
-      },
-    @bitlib.CherryPickStatus::Conflict => resolve_cherry_pick_conflict_and_commit(
-      fs,
-      rfs,
-      root,
-      commit_oid.unwrap().to_hex(),
-      "Cherry-picked from \{commit_ref.unwrap()}",
-      parsed,
-      context,
-    )
+      }
+    @bitlib.CherryPickStatus::Conflict =>
+      resolve_cherry_pick_conflict_and_commit(
+        fs,
+        rfs,
+        root,
+        commit_oid.unwrap().to_hex(),
+        "Cherry-picked from \{commit_ref.unwrap()}",
+        parsed,
+        context,
+      )
   }
 }
 
+///|
 async fn handle_ai_revert(args : Array[String]) -> Unit raise Error {
   if args.length() == 0 {
     show_ai_revert_help()
@@ -1015,16 +1014,12 @@ async fn handle_ai_revert(args : Array[String]) -> Unit raise Error {
         provider=None,
       )
       let resolved = @rebase_ai.ai_resolve_conflict_paths(
-        fs,
-        rfs,
-        root,
-        conflict_paths,
-        ai_options~,
-        context,
+        fs, rfs, root, conflict_paths, ai_options, context,
       )
       if resolved.failed.length() > 0 {
+        let failed_paths = resolved.failed.join(", ")
         raise @bitcore.GitError::InvalidObject(
-          "bit ai revert: failed to resolve conflicts: \{resolved.failed.join(\", \")}",
+          "bit ai revert: failed to resolve conflicts: \{failed_paths}",
         )
       }
     }
@@ -1032,40 +1027,27 @@ async fn handle_ai_revert(args : Array[String]) -> Unit raise Error {
   handle_revert(revert_args)
 }
 
+///|
 async fn show_ai_merge_help() -> Unit {
   show_simple_command_help(
     "bit ai merge [<args>]",
-    summary=
-      "AI merge with conflict resolution.\n"
-      + "Accepted AI options: --model, --max-ai-rounds, --agent-loop, --agent-max-steps.\n"
-      + "Remaining arguments are passed to `bit merge`.\n"
-      + "Custom instructions can be appended after `--`.\n"
-      + "When merge conflicts are detected, the AI tries to resolve and then\n"
-      + "continues with `bit ai merge --continue`.",
+    summary="AI merge with conflict resolution.\nAccepted AI options: --model, --max-ai-rounds, --agent-loop, --agent-max-steps.\nRemaining arguments are passed to `bit merge`.\nCustom instructions can be appended after `--`.\nWhen merge conflicts are detected, the AI tries to resolve and then\ncontinues with `bit ai merge --continue`.",
   )
 }
 
+///|
 async fn show_ai_revert_help() -> Unit {
   show_simple_command_help(
     "bit ai revert [<args>]",
-    summary=
-      "AI revert with conflict-resolution on continue.\n"
-      + "Accepted AI options: --model, --max-ai-rounds, --agent-loop, --agent-max-steps.\n"
-      + "Remaining arguments are passed to `bit revert`.\n"
-      + "Custom instructions can be appended after `--`.\n"
-      + "When conflicts exist on `--continue`, the AI tries to resolve markers and continue.",
+    summary="AI revert with conflict-resolution on continue.\nAccepted AI options: --model, --max-ai-rounds, --agent-loop, --agent-max-steps.\nRemaining arguments are passed to `bit revert`.\nCustom instructions can be appended after `--`.\nWhen conflicts exist on `--continue`, the AI tries to resolve markers and continue.",
   )
 }
 
+///|
 async fn show_ai_cherry_pick_help() -> Unit {
   show_simple_command_help(
     "bit ai cherry-pick [<args>]",
-    summary=
-      "AI cherry-pick with conflict-resolution.\n"
-      + "Accepted AI options: --model, --max-ai-rounds, --agent-loop, --agent-max-steps.\n"
-      + "Remaining arguments are passed to `bit cherry-pick`.\n"
-      + "Custom instructions can be appended after `--`.\n"
-      + "When conflicts are detected, AI tries to resolve and commits the result.",
+    summary="AI cherry-pick with conflict-resolution.\nAccepted AI options: --model, --max-ai-rounds, --agent-loop, --agent-max-steps.\nRemaining arguments are passed to `bit cherry-pick`.\nCustom instructions can be appended after `--`.\nWhen conflicts are detected, AI tries to resolve and commits the result.",
   )
 }
 
@@ -1073,14 +1055,7 @@ async fn show_ai_cherry_pick_help() -> Unit {
 async fn show_ai_commit_help() -> Unit {
   show_simple_command_help(
     "bit ai commit [<args>]",
-    summary=
-      "AI commit message workflow.\n"
-      + "Accepted AI options: --model, --max-ai-rounds, --agent-loop, --agent-max-steps.\n"
-      + "Use --split to generate commit messages per logical unit and commit each one.\n"
-      + "When no explicit commit-message option is provided, Bit auto-generates a\n"
-      + "Conventional Commit message and passes it to `bit commit`.\n"
-      + "Use commit options like -m, --no-edit, --file, --reuse-message, etc.\n"
-      + "to use existing messages instead.",
+    summary="AI commit message workflow.\nAccepted AI options: --model, --max-ai-rounds, --agent-loop, --agent-max-steps.\nUse --split to generate commit messages per logical unit and commit each one.\nWhen no explicit commit-message option is provided, Bit auto-generates a\nConventional Commit message and passes it to `bit commit`.\nUse commit options like -m, --no-edit, --file, --reuse-message, etc.\nto use existing messages instead.",
   )
 }
 
