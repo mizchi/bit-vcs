@@ -1570,7 +1570,9 @@ fn replace_tree_recursive_push(
     if entry.name == target_name {
       if is_last {
         // Replace with new subtree
-        new_entries.push(@bitcore.TreeEntry::new(entry.mode, entry.name, new_leaf))
+        new_entries.push(
+          @bitcore.TreeEntry::new(entry.mode, entry.name, new_leaf),
+        )
       } else {
         // Recurse
         let new_child = replace_tree_recursive_push(
@@ -1584,7 +1586,9 @@ fn replace_tree_recursive_push(
         ) catch {
           err => raise err
         }
-        new_entries.push(@bitcore.TreeEntry::new(entry.mode, entry.name, new_child))
+        new_entries.push(
+          @bitcore.TreeEntry::new(entry.mode, entry.name, new_child),
+        )
       }
     } else {
       new_entries.push(entry)

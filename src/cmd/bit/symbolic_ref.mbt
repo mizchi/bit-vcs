@@ -16,7 +16,9 @@ async fn handle_symbolic_ref(args : Array[String]) -> Unit raise Error {
     }
   }
   if positional.length() == 0 {
-    raise @bitcore.GitError::InvalidObject("usage: git symbolic-ref <name> [<ref>]")
+    raise @bitcore.GitError::InvalidObject(
+      "usage: git symbolic-ref <name> [<ref>]",
+    )
   }
   let name = symbolic_ref_normalize_refname(positional[0])
   let ref_path = if name == "HEAD" {
@@ -51,7 +53,9 @@ async fn handle_symbolic_ref(args : Array[String]) -> Unit raise Error {
         print_line(target)
       }
     } else {
-      raise @bitcore.GitError::InvalidObject("ref \{name} is not a symbolic ref")
+      raise @bitcore.GitError::InvalidObject(
+        "ref \{name} is not a symbolic ref",
+      )
     }
   } else {
     // Write mode
@@ -61,7 +65,9 @@ async fn handle_symbolic_ref(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
-fn symbolic_ref_normalize_refname(name : String) -> String raise @bitcore.GitError {
+fn symbolic_ref_normalize_refname(
+  name : String,
+) -> String raise @bitcore.GitError {
   let normalized = @bitlib.normalize_repo_path(name) catch {
     _ => raise @bitcore.GitError::InvalidObject("invalid refname: " + name)
   }
@@ -83,17 +89,13 @@ test "symbolic-ref: normalize allows refs and HEAD" {
 
 ///|
 test "symbolic-ref: normalize rejects bare ref name" {
-  let _ = symbolic_ref_normalize_refname("main") catch {
-    _ => return ()
-  }
+  let _ = symbolic_ref_normalize_refname("main") catch { _ => return () }
   assert_true(false)
 }
 
 ///|
 test "symbolic-ref: normalize rejects path traversal" {
-  let _ = symbolic_ref_normalize_refname("../config") catch {
-    _ => return ()
-  }
+  let _ = symbolic_ref_normalize_refname("../config") catch { _ => return () }
   assert_true(false)
 }
 

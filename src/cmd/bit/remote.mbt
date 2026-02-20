@@ -891,12 +891,14 @@ fn remote_set_url(
             }
             changed_urls = filtered
           }
-          None => raise @bitcore.GitError::InvalidObject("No such remote '\{name}'")
+          None =>
+            raise @bitcore.GitError::InvalidObject("No such remote '\{name}'")
         }
       } else if add {
         match new_url {
           Some(nu) => changed_urls.push(nu)
-          None => raise @bitcore.GitError::InvalidObject("No such remote '\{name}'")
+          None =>
+            raise @bitcore.GitError::InvalidObject("No such remote '\{name}'")
         }
       } else {
         match new_url {
@@ -914,7 +916,9 @@ fn remote_set_url(
                   }
                 }
                 if not(replaced) {
-                  raise @bitcore.GitError::InvalidObject("No such remote '\{name}'")
+                  raise @bitcore.GitError::InvalidObject(
+                    "No such remote '\{name}'",
+                  )
                 }
                 changed_urls = updated_list
               }
@@ -925,7 +929,8 @@ fn remote_set_url(
                   changed_urls[0] = nu
                 }
             }
-          None => raise @bitcore.GitError::InvalidObject("No such remote '\{name}'")
+          None =>
+            raise @bitcore.GitError::InvalidObject("No such remote '\{name}'")
         }
       }
       let final_lines : Array[String] = []
@@ -1606,7 +1611,8 @@ fn write_symref_file(
     "HEAD"
   } else {
     let normalized = @bitlib.normalize_repo_path(target) catch {
-      _ => raise @bitcore.GitError::InvalidObject("invalid ref target: " + target)
+      _ =>
+        raise @bitcore.GitError::InvalidObject("invalid ref target: " + target)
     }
     if normalized == "HEAD" || normalized.has_prefix("refs/") {
       normalized
@@ -1919,53 +1925,38 @@ async fn clone_local_repo(
     }
   }
   let dest_git_dir = if bare {
-    @bitlib.init_repo_with_options_with_repo_fs(
-      fs,
-      fs,
-      dest_path,
-      {
-        default_branch,
-        bare: true,
-        separate_git_dir: None,
-        template_dir: None,
-        ref_format,
-        object_format: source_object_format,
-      },
-    )
+    @bitlib.init_repo_with_options_with_repo_fs(fs, fs, dest_path, {
+      default_branch,
+      bare: true,
+      separate_git_dir: None,
+      template_dir: None,
+      ref_format,
+      object_format: source_object_format,
+    })
     dest_path
   } else {
     match separate_git_dir {
       Some(path) => {
         fs.mkdir_p(dest_path)
-        @bitlib.init_repo_with_options_with_repo_fs(
-          fs,
-          fs,
-          dest_path,
-          {
-            default_branch,
-            bare: false,
-            separate_git_dir: Some(path),
-            template_dir: None,
-            ref_format,
-            object_format: source_object_format,
-          },
-        )
+        @bitlib.init_repo_with_options_with_repo_fs(fs, fs, dest_path, {
+          default_branch,
+          bare: false,
+          separate_git_dir: Some(path),
+          template_dir: None,
+          ref_format,
+          object_format: source_object_format,
+        })
         path
       }
       None => {
-        @bitlib.init_repo_with_options_with_repo_fs(
-          fs,
-          fs,
-          dest_path,
-          {
-            default_branch,
-            bare: false,
-            separate_git_dir: None,
-            template_dir: None,
-            ref_format,
-            object_format: source_object_format,
-          },
-        )
+        @bitlib.init_repo_with_options_with_repo_fs(fs, fs, dest_path, {
+          default_branch,
+          bare: false,
+          separate_git_dir: None,
+          template_dir: None,
+          ref_format,
+          object_format: source_object_format,
+        })
         dest_path + "/.git"
       }
     }
@@ -2122,7 +2113,9 @@ fn read_clone_source_head_fallback(
     )
     let head_line = trim_string(head_content)
     if head_line.length() > 0 && not(head_line.has_prefix("ref: ")) {
-      let head_id : @bitcore.ObjectId? = Some(@bitcore.ObjectId::from_hex(head_line)) catch {
+      let head_id : @bitcore.ObjectId? = Some(
+        @bitcore.ObjectId::from_hex(head_line),
+      ) catch {
         _ => None
       }
       if head_id is Some(id) {
@@ -2622,7 +2615,9 @@ async fn fetch_local_repo(
         match @bitlib.resolve_ref(fs, git_dir, normalized_dst) {
           Some(existing) =>
             if existing != head_id && not(spec_force) {
-              raise @bitcore.GitError::InvalidObject("would clobber existing tag")
+              raise @bitcore.GitError::InvalidObject(
+                "would clobber existing tag",
+              )
             }
           None => ()
         }
@@ -2948,9 +2943,7 @@ async fn fetch_from_remote(
         "refs/remotes/" + remote_name + "/HEAD"
       }
       let mut prev_id : @bitcore.ObjectId? = None
-      prev_id = @bitlib.resolve_ref(fs, git_dir, remote_ref) catch {
-        _ => None
-      }
+      prev_id = @bitlib.resolve_ref(fs, git_dir, remote_ref) catch { _ => None }
       if prev_id is Some(pid) && pid == commit_id {
         return ()
       }
@@ -2959,12 +2952,7 @@ async fn fetch_from_remote(
         UploadPackTransport::Http =>
           @bitnative.fetch_pack_http(remote_url, [commit_id], true, filter~)
         UploadPackTransport::Process =>
-          @bitnative.fetch_pack_process(
-            remote_url,
-            [commit_id],
-            true,
-            filter~,
-          )
+          @bitnative.fetch_pack_process(remote_url, [commit_id], true, filter~)
       }
       if pack.length() > 0 {
         let objects = @pack.parse_packfile(pack)

@@ -1982,7 +1982,9 @@ fn midx_read_pack_index(
     let entry_offset = entries_offset + i * 24
     let offset = midx_read_u32(data, entry_offset)
     let id_offset = entry_offset + 4
-    let id = @bitcore.ObjectId::new(FixedArray::makei(20, j => data[id_offset + j]))
+    let id = @bitcore.ObjectId::new(
+      FixedArray::makei(20, j => data[id_offset + j]),
+    )
     entries.push({ id, pack_idx, pack_mtime, offset_hi: 0, offset })
   }
   entries

@@ -50,7 +50,9 @@ async fn handle_checkout(args : Array[String]) -> Unit raise Error {
       Some(ref_name) => {
         let commit_id = @bitrepo.rev_parse(fs, git_dir, ref_name)
         guard commit_id is Some(_) else {
-          raise @bitcore.GitError::InvalidObject("unknown revision: \{ref_name}")
+          raise @bitcore.GitError::InvalidObject(
+            "unknown revision: \{ref_name}",
+          )
         }
         // Checkout the start point first (detached)
         let _ = checkout_with_promisor_retry(fs, root, ref_name, detach=true)
@@ -179,7 +181,9 @@ async fn checkout_with_promisor_retry(
         }
     }
   }
-  raise @bitcore.GitError::InvalidObject("checkout lazy-fetch retry limit exceeded")
+  raise @bitcore.GitError::InvalidObject(
+    "checkout lazy-fetch retry limit exceeded",
+  )
 }
 
 ///|

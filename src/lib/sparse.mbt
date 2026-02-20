@@ -275,24 +275,24 @@ fn sparse_path_matches(path : String, pattern : String) -> Bool {
     }
     return false
   }
-    if normalized_pattern.has_prefix("*") {
-      // Wildcard at start
-      let suffix = String::unsafe_substring(
-        normalized_pattern,
-        start=1,
-        end=normalized_pattern.length(),
-      )
-      return path.has_suffix(suffix)
-    }
-    if normalized_pattern.has_suffix("*") {
-      // Wildcard at end
-      let prefix = String::unsafe_substring(
+  if normalized_pattern.has_prefix("*") {
+    // Wildcard at start
+    let suffix = String::unsafe_substring(
+      normalized_pattern,
+      start=1,
+      end=normalized_pattern.length(),
+    )
+    return path.has_suffix(suffix)
+  }
+  if normalized_pattern.has_suffix("*") {
+    // Wildcard at end
+    let prefix = String::unsafe_substring(
       normalized_pattern,
       start=0,
       end=normalized_pattern.length() - 1,
     )
-      return path.has_prefix(prefix)
-    }
+    return path.has_prefix(prefix)
+  }
   if normalized_pattern.contains("**") {
     // Double star matches any path
     let parts = normalized_pattern.split("**")

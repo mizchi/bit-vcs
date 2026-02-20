@@ -321,6 +321,9 @@ fn show_command_help_specs() -> Array[(String, String, String)] {
       "x/hooks", "bit/x/hooks <subcommand> [<args>]", "Manage hooks used by bit commands. Experimental: avoid overusing hooks as automation.",
     ),
     (
+      "x/doc", "bit/x/doc <subcommand> [<args>]", "Experimental wiki-like docs and memo storage inside .bit/docs.",
+    ),
+    (
       "shell", "bit shell [--login] [<path>]", "Start an interactive bit shell with command forwarding.",
     ),
     ("version", "git version", "Show version information."),
@@ -944,6 +947,7 @@ async fn dispatch_known_command(
     "cherry" => handle_cherry(rest)
     "completion" => handle_completion(rest)
     "x/hooks" => handle_x_hooks(rest)
+    "x/doc" => handle_x_doc(rest)
     "scalar" => handle_scalar(rest)
     "shell" => handle_shell(rest)
     "version" => print_line("git version 2.47.0 (bit)")

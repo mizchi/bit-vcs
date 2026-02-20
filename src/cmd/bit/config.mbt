@@ -79,10 +79,14 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
     raise @bitcore.GitError::InvalidObject("option '-f' requires a value")
   }
   if expect_default_value {
-    raise @bitcore.GitError::InvalidObject("option '--default' requires a value")
+    raise @bitcore.GitError::InvalidObject(
+      "option '--default' requires a value",
+    )
   }
   if global_mode && system_mode {
-    raise @bitcore.GitError::InvalidObject("only one config scope can be specified")
+    raise @bitcore.GitError::InvalidObject(
+      "only one config scope can be specified",
+    )
   }
   if local_mode && (global_mode || system_mode) {
     raise @bitcore.GitError::InvalidObject(

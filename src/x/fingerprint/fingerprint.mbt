@@ -8,7 +8,8 @@ pub(all) enum FingerprintMode {
 pub fn parse_fingerprint_mode(raw : String) -> FingerprintMode? {
   match raw {
     "fast" => Some(FingerprintMode::Fast)
-    "git" | "git-compat" | "bit-compat" | "bit_compat" => Some(FingerprintMode::GitCompat)
+    "git" | "git-compat" | "bit-compat" | "bit_compat" =>
+      Some(FingerprintMode::GitCompat)
     _ => None
   }
 }

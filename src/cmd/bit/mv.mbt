@@ -13,7 +13,9 @@ async fn handle_mv(args : Array[String]) -> Unit raise Error {
     }
   }
   if paths.length() < 2 {
-    raise @bitcore.GitError::InvalidObject("usage: git mv <source> <destination>")
+    raise @bitcore.GitError::InvalidObject(
+      "usage: git mv <source> <destination>",
+    )
   }
   let source = paths[0]
   let dest = paths[1]

@@ -221,7 +221,9 @@ async fn handle_update_index(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
-fn parse_update_index_info_line(line : String) -> (Int, @bitcore.ObjectId, String)? {
+fn parse_update_index_info_line(
+  line : String,
+) -> (Int, @bitcore.ObjectId, String)? {
   match line.find("\t") {
     None => None
     Some(tab_idx) => {
@@ -231,8 +233,9 @@ fn parse_update_index_info_line(line : String) -> (Int, @bitcore.ObjectId, Strin
         start=tab_idx + 1,
         end=line.length(),
       )
-      let normalized_path =
-        normalize_update_index_path(path) catch { _ => return None }
+      let normalized_path = normalize_update_index_path(path) catch {
+        _ => return None
+      }
       let fields = split_update_index_fields(info)
       if fields.length() == 0 {
         return None
@@ -305,8 +308,9 @@ fn parse_update_index_cacheinfo(
   match parse_octal_mode(mode_str) {
     None => None
     Some(mode) => {
-      let normalized_path =
-        normalize_update_index_path(path) catch { _ => return None }
+      let normalized_path = normalize_update_index_path(path) catch {
+        _ => return None
+      }
       if mode == 0 {
         None
       } else {

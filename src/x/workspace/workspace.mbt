@@ -1065,7 +1065,9 @@ fn workspace_collect_nested_repo_paths(
       ignore_entries.push(relative_path)
       continue
     }
-    workspace_collect_nested_repo_paths(fs, node_root, relative_path, ignore_entries)
+    workspace_collect_nested_repo_paths(
+      fs, node_root, relative_path, ignore_entries,
+    )
   }
 }
 
@@ -2315,10 +2317,8 @@ async fn handle_workspace_flow(
   )
   if star_path is Some(path) {
     if star_path_from_default && path == workspace_default_star_file() {
-      star_path = match workspace_resolve_default_star_file(
-        fs,
-        workspace_root,
-      ) {
+      star_path = match
+        workspace_resolve_default_star_file(fs, workspace_root) {
         Some(resolved) => Some(resolved)
         None => Some(path)
       }

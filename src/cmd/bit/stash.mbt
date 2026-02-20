@@ -83,7 +83,9 @@ async fn handle_stash(args : Array[String]) -> Unit raise Error {
       print_line("Cleared all stash entries")
     }
     _ =>
-      raise @bitcore.GitError::InvalidObject("Unknown stash subcommand: \{subcmd}")
+      raise @bitcore.GitError::InvalidObject(
+        "Unknown stash subcommand: \{subcmd}",
+      )
   }
 }
 

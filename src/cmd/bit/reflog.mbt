@@ -238,6 +238,7 @@ fn parse_reflog_show_args(args : Array[String]) -> ReflogShowArgs {
   }
 }
 
+///|
 fn normalize_reflog_refname(refname : String) -> String raise @bitcore.GitError {
   if refname == "HEAD" {
     return refname

@@ -267,13 +267,7 @@ async fn bisect_next(
   // Checkout the commit (detached HEAD)
   let root = git_dir + "/.."
   ignore(
-    run_checkout_with_sensitive_hooks(
-      wfs,
-      rfs,
-      root,
-      mid_hex,
-      detach=true,
-    ),
+    run_checkout_with_sensitive_hooks(wfs, rfs, root, mid_hex, detach=true),
   )
   print_line(
     "Bisecting: \{remaining} revisions left to test after this (roughly \{steps} steps)",

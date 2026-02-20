@@ -526,7 +526,9 @@ async fn handle_cat_file(args : Array[String]) -> Unit raise Error {
                   if base_obj is Some(obj) {
                     match obj.obj_type {
                       @bitcore.ObjectType::Commit => {
-                        resolved_oid = Some(@bitcore.parse_commit(obj.data).tree)
+                        resolved_oid = Some(
+                          @bitcore.parse_commit(obj.data).tree,
+                        )
                         object_mode = Some("040000")
                       }
                       @bitcore.ObjectType::Tree => {

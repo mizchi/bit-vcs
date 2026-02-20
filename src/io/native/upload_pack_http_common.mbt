@@ -112,7 +112,11 @@ fn parse_symrefs_from_capabilities(caps : Array[String]) -> Map[String, String] 
         None => ()
         Some(idx) => {
           let source = String::unsafe_substring(raw, start=0, end=idx)
-          let target = String::unsafe_substring(raw, start=idx + 1, end=raw.length())
+          let target = String::unsafe_substring(
+            raw,
+            start=idx + 1,
+            end=raw.length(),
+          )
           symrefs[source] = target
         }
       }

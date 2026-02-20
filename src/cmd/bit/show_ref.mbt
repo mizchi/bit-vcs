@@ -102,7 +102,9 @@ fn show_ref_exists_without_resolution(
   let normalized = if refname == "HEAD" {
     "HEAD"
   } else {
-    let normalized = @bitlib.normalize_repo_path(refname) catch { _ => return false }
+    let normalized = @bitlib.normalize_repo_path(refname) catch {
+      _ => return false
+    }
     if not(normalized.has_prefix("refs/")) {
       return false
     }

@@ -265,7 +265,10 @@ fn generate_rebase_todo(
 }
 
 ///|
-fn get_current_branch(rfs : &@bitcore.RepoFileSystem, git_dir : String) -> String {
+fn get_current_branch(
+  rfs : &@bitcore.RepoFileSystem,
+  git_dir : String,
+) -> String {
   let head_path = git_dir + "/HEAD"
   if rfs.is_file(head_path) {
     let content = trim_string(
@@ -708,15 +711,9 @@ async fn interactive_rebase_abort(
   // Restore original HEAD
   if rfs.is_file(orig_head_path) {
     let orig_hex = rfs.read_file(orig_head_path) |> decode_bytes |> trim_string
-      ignore(
-        run_checkout_with_sensitive_hooks(
-          wfs,
-          rfs,
-          root,
-          orig_hex,
-          detach=true,
-        ),
-      )
+    ignore(
+      run_checkout_with_sensitive_hooks(wfs, rfs, root, orig_hex, detach=true),
+    )
     // Restore branch if was on one
     if rfs.is_file(head_name_path) {
       let branch = rfs.read_file(head_name_path) |> decode_bytes |> trim_string

@@ -205,23 +205,9 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
           start="refs/heads/".length(),
           end=head_target.length(),
         )
-        ignore(
-          run_checkout_with_sensitive_hooks(
-            fs,
-            fs,
-            root,
-            branch,
-          ),
-        )
+        ignore(run_checkout_with_sensitive_hooks(fs, fs, root, branch))
       } else {
-        ignore(
-          run_checkout_with_sensitive_hooks(
-            fs,
-            fs,
-            root,
-            tid.to_hex(),
-          ),
-        )
+        ignore(run_checkout_with_sensitive_hooks(fs, fs, root, tid.to_hex()))
       }
     }
     print_line("Fast-forward")
@@ -239,13 +225,7 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
   let timestamp = get_commit_timestamp()
   let msg = "Merge " + target_ref
   let result = run_merge_with_sensitive_hooks(
-    fs,
-    fs,
-    root,
-    tid,
-    msg,
-    author,
-    timestamp,
+    fs, fs, root, tid, msg, author, timestamp,
   )
   match result.status {
     @bitlib.MergeStatus::AlreadyUpToDate => print_line("Already up to date.")
@@ -837,7 +817,9 @@ fn resolve_push_target_plan(
       }
     }
     guard raw_src.length() > 0 else {
-      raise @bitcore.GitError::InvalidObject("Perhaps you should specify a branch.")
+      raise @bitcore.GitError::InvalidObject(
+        "Perhaps you should specify a branch.",
+      )
     }
     let source_ref = normalize_push_ref_token(raw_src, current_branch, false)
     let dest_ref = if raw_dst.length() == 0 {
@@ -1021,7 +1003,9 @@ fn ensure_matching_refspec_has_candidates(
   }
   for spec in parsed_specs {
     if spec.src.length() == 0 && spec.dst.length() == 0 {
-      raise @bitcore.GitError::InvalidObject("Perhaps you should specify a branch.")
+      raise @bitcore.GitError::InvalidObject(
+        "Perhaps you should specify a branch.",
+      )
     }
   }
 }

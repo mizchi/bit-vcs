@@ -466,10 +466,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
           let local_branch_ref = "refs/heads/" + refname
           if @bitlib.resolve_ref(fs, clone_git_dir, local_branch_ref) is Some(_) {
             let checked_id = run_checkout_with_sensitive_hooks(
-              fs,
-              fs,
-              clone_root,
-              refname,
+              fs, fs, clone_root, refname,
             )
             warn_case_insensitive_collisions_from_commit(
               fs, clone_git_dir, checked_id,
@@ -498,7 +495,9 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
                 )
               }
               None =>
-                raise @bitcore.GitError::InvalidObject("Unknown ref: " + refname)
+                raise @bitcore.GitError::InvalidObject(
+                  "Unknown ref: " + refname,
+                )
             }
           }
         }
@@ -604,10 +603,7 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
                     }
                   }
                   let checked_id = run_checkout_with_sensitive_hooks(
-                    fs,
-                    fs,
-                    clone_root,
-                    name,
+                    fs, fs, clone_root, name,
                   )
                   warn_case_insensitive_collisions_from_commit(
                     fs, clone_git_dir, checked_id,
@@ -1086,7 +1082,9 @@ fn clone_has_missing_parent_history(
     let obj = db.get(fs, id)
     match obj {
       Some(o) if o.obj_type == @bitcore.ObjectType::Commit => {
-        let info_opt = (@bitcore.parse_commit(o.data) |> Some) catch { _ => None }
+        let info_opt = (@bitcore.parse_commit(o.data) |> Some) catch {
+          _ => None
+        }
         match info_opt {
           Some(info) =>
             for parent in info.parents {
@@ -1176,7 +1174,9 @@ fn absolutize_clone_path(base : String, path : String) -> String {
 ///|
 fn ensure_clone_path_available(fs : OsFs, path : String) -> Unit raise Error {
   if fs.is_file(path) {
-    raise @bitcore.GitError::InvalidObject("path exists and is not dir: " + path)
+    raise @bitcore.GitError::InvalidObject(
+      "path exists and is not dir: " + path,
+    )
   }
   if fs.is_dir(path) && not(is_empty_dir(fs, path)) {
     raise @bitcore.GitError::InvalidObject(
@@ -1235,10 +1235,7 @@ async fn checkout_with_promisor_retry_clone(
   let mut attempts = 0
   while attempts < 16 {
     let result : Result[@bitcore.ObjectId, Error] = try? run_checkout_with_sensitive_hooks(
-      fs,
-      fs,
-      root,
-      spec,
+      fs, fs, root, spec,
     )
     match result {
       Ok(id) => return id
@@ -1266,11 +1263,15 @@ async fn checkout_with_promisor_retry_clone(
         }
     }
   }
-  raise @bitcore.GitError::InvalidObject("checkout lazy-fetch retry limit exceeded")
+  raise @bitcore.GitError::InvalidObject(
+    "checkout lazy-fetch retry limit exceeded",
+  )
 }
 
 ///|
-fn parse_checkout_missing_object_id_for_clone(err : Error) -> @bitcore.ObjectId? {
+fn parse_checkout_missing_object_id_for_clone(
+  err : Error,
+) -> @bitcore.ObjectId? {
   let prefixes = [
     "Missing blob object: ", "Missing tree object: ", "Object not found: ",
   ]

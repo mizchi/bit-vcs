@@ -399,7 +399,10 @@ fn join_repo_marker(root : String, marker : String) -> String {
 }
 
 ///|
-fn detect_repo_marker_path(fs : &@bitcore.RepoFileSystem, root : String) -> String? {
+fn detect_repo_marker_path(
+  fs : &@bitcore.RepoFileSystem,
+  root : String,
+) -> String? {
   let git_path = join_repo_marker(root, ".git")
   if fs.is_dir(git_path) || fs.is_file(git_path) {
     return Some(git_path)
@@ -412,7 +415,10 @@ fn detect_repo_marker_path(fs : &@bitcore.RepoFileSystem, root : String) -> Stri
 }
 
 ///|
-fn default_repo_marker_path(fs : &@bitcore.RepoFileSystem, root : String) -> String {
+fn default_repo_marker_path(
+  fs : &@bitcore.RepoFileSystem,
+  root : String,
+) -> String {
   match detect_repo_marker_path(fs, root) {
     Some(path) => path
     None => join_repo_marker(root, ".git")
@@ -599,7 +605,10 @@ fn is_reftable_repo(fs : &@bitcore.RepoFileSystem, git_dir : String) -> Bool {
 }
 
 ///|
-fn repo_object_format(fs : &@bitcore.RepoFileSystem, git_dir : String) -> String {
+fn repo_object_format(
+  fs : &@bitcore.RepoFileSystem,
+  git_dir : String,
+) -> String {
   match
     @bitlib.read_config_value(
       fs,
@@ -783,9 +792,9 @@ async fn run_checkout_with_sensitive_hooks(
     rfs,
     root,
     spec,
-    detach=detach,
-    update_worktree=update_worktree,
-    update_index=update_index,
+    detach~,
+    update_worktree~,
+    update_index~,
   )
 }
 

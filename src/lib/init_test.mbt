@@ -44,6 +44,7 @@ test "init: sha256 object format writes objectFormat extension" {
   assert_true(config.contains("objectFormat = sha256"))
 }
 
+///|
 test "init: reinit to move existing .git directory to separate gitdir" {
   let fs = @bit.TestFs::new()
   init_repo_with_options(fs, "/repo", {
@@ -54,19 +55,14 @@ test "init: reinit to move existing .git directory to separate gitdir" {
     ref_format: "files",
     object_format: "sha1",
   })
-  init_repo_with_options_with_repo_fs(
-    fs,
-    fs,
-    "/repo",
-    {
-      default_branch: "main",
-      bare: false,
-      separate_git_dir: Some("/separate"),
-      template_dir: None,
-      ref_format: "files",
-      object_format: "sha1",
-    },
-  )
+  init_repo_with_options_with_repo_fs(fs, fs, "/repo", {
+    default_branch: "main",
+    bare: false,
+    separate_git_dir: Some("/separate"),
+    template_dir: None,
+    ref_format: "files",
+    object_format: "sha1",
+  })
   assert_true(fs.is_file("/repo/.git"))
   assert_eq(fs.read_string("/repo/.git"), "gitdir: /separate\n")
   assert_true(fs.is_dir("/separate"))
@@ -74,34 +70,25 @@ test "init: reinit to move existing .git directory to separate gitdir" {
   assert_false(fs.is_dir("/repo/.git/refs"))
 }
 
+///|
 test "init: reinit to move existing separate gitdir path from .git file" {
   let fs = @bit.TestFs::new()
-  init_repo_with_options_with_repo_fs(
-    fs,
-    fs,
-    "/repo",
-    {
-      default_branch: "main",
-      bare: false,
-      separate_git_dir: Some("/real-git-dir"),
-      template_dir: None,
-      ref_format: "files",
-      object_format: "sha1",
-    },
-  )
-  init_repo_with_options_with_repo_fs(
-    fs,
-    fs,
-    "/repo",
-    {
-      default_branch: "main",
-      bare: false,
-      separate_git_dir: Some("/surreal-git-dir"),
-      template_dir: None,
-      ref_format: "files",
-      object_format: "sha1",
-    },
-  )
+  init_repo_with_options_with_repo_fs(fs, fs, "/repo", {
+    default_branch: "main",
+    bare: false,
+    separate_git_dir: Some("/real-git-dir"),
+    template_dir: None,
+    ref_format: "files",
+    object_format: "sha1",
+  })
+  init_repo_with_options_with_repo_fs(fs, fs, "/repo", {
+    default_branch: "main",
+    bare: false,
+    separate_git_dir: Some("/surreal-git-dir"),
+    template_dir: None,
+    ref_format: "files",
+    object_format: "sha1",
+  })
   assert_true(fs.is_file("/repo/.git"))
   assert_eq(fs.read_string("/repo/.git"), "gitdir: /surreal-git-dir\n")
   assert_true(fs.is_dir("/surreal-git-dir"))

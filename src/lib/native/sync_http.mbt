@@ -25,11 +25,7 @@ pub async fn clone_http(
   match default_ref {
     None => return None
     Some((refname, commit_id)) => {
-      let pack = @bitnative.fetch_pack_http(
-        remote_url,
-        [commit_id],
-        prefer_v2,
-      )
+      let pack = @bitnative.fetch_pack_http(remote_url, [commit_id], prefer_v2)
       let objects = @pack.parse_packfile(pack)
       @pack.write_packfile_with_index(fs, git_dir, pack, objects)
       // 4. Update refs
@@ -254,10 +250,7 @@ fn sync_remote_refname(refname : String) -> String raise @bit.GitError {
 
 ///|
 test "sync_remote_refname normalizes and maps refs/heads" {
-  assert_eq(
-    sync_remote_refname("refs/heads/main"),
-    "refs/remotes/origin/main",
-  )
+  assert_eq(sync_remote_refname("refs/heads/main"), "refs/remotes/origin/main")
   assert_eq(sync_remote_refname("HEAD"), "refs/remotes/origin/HEAD")
   assert_eq(
     sync_remote_refname("refs/tags/v1.0.0"),
@@ -267,9 +260,7 @@ test "sync_remote_refname normalizes and maps refs/heads" {
 
 ///|
 test "sync_remote_refname rejects invalid refname" {
-  let _ = sync_remote_refname("main") catch {
-    _ => return ()
-  }
+  let _ = sync_remote_refname("main") catch { _ => return () }
   assert_true(false)
 }
 

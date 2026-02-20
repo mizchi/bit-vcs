@@ -96,7 +96,8 @@ async fn subdir_clone(
   )
   // Step 1: Create target directory
   fs.mkdir_p(target) catch {
-    _ => raise @bitcore.GitError::IoError("Failed to create directory: " + target)
+    _ =>
+      raise @bitcore.GitError::IoError("Failed to create directory: " + target)
   }
   // Step 2: Clone with blob:none filter to a temp location
   print_line("  Fetching repository metadata...")
@@ -166,13 +167,15 @@ async fn subdir_clone(
         )
         let ref_path = temp_git_dir + "/" + ref_name
         let ref_content = fs.read_file(ref_path) catch {
-          _ => raise @bitcore.GitError::IoError("Failed to read ref: " + ref_name)
+          _ =>
+            raise @bitcore.GitError::IoError("Failed to read ref: " + ref_name)
         }
         let ref_text = @utf8.decode_lossy(ref_content[:])
           .trim(chars=" \n\r\t")
           .to_string()
         @bitcore.ObjectId::from_hex(ref_text) catch {
-          _ => raise @bitcore.GitError::InvalidObject("Invalid commit ID in ref")
+          _ =>
+            raise @bitcore.GitError::InvalidObject("Invalid commit ID in ref")
         }
       } else {
         @bitcore.ObjectId::from_hex(head_text) catch {
@@ -203,7 +206,9 @@ async fn subdir_clone(
     if not(target_existed) {
       @bitlib.subdir_remove_dir(fs, fs, target)
     }
-    raise @bitcore.GitError::InvalidObject("Subdirectory not found: " + subdir_path)
+    raise @bitcore.GitError::InvalidObject(
+      "Subdirectory not found: " + subdir_path,
+    )
   }
   // Fetch blobs for the subdirectory
   print_line("  Fetching files...")

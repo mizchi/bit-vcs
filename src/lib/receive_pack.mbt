@@ -54,7 +54,8 @@ pub fn build_receive_pack_advertisement(
 ///|
 fn normalize_receive_refname(refname : String) -> String raise @bit.GitError {
   let normalized = normalize_repo_path(refname) catch {
-    _ => raise @bit.GitError::ProtocolError("Invalid receive-pack ref: " + refname)
+    _ =>
+      raise @bit.GitError::ProtocolError("Invalid receive-pack ref: " + refname)
   }
   if not(normalized.has_prefix("refs/")) {
     raise @bit.GitError::ProtocolError("Invalid receive-pack ref: " + refname)

@@ -15,8 +15,7 @@ test "hooks: is_valid_hook_name validates simple names" {
 ///|
 test "hooks: list_hooks sorts and filters installed hooks" {
   let fs = OsFs::new()
-  let root =
-    "/tmp/bit-test-hooks-list-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-hooks-list-" + get_current_timestamp().to_string()
   let git_dir = root + "/.git"
   fs.mkdir_p(git_dir + "/hooks")
   fs.write_string(git_dir + "/hooks/pre-add", "#!/bin/sh\n")
@@ -50,8 +49,8 @@ test "hooks: list_hooks sorts and filters installed hooks" {
 ///|
 test "hooks: list_hooks_with_status merges .git/hooks and .bit/hooks" {
   let fs = OsFs::new()
-  let root =
-    "/tmp/bit-test-hooks-list-status-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-hooks-list-status-" +
+    get_current_timestamp().to_string()
   let git_dir = root + "/.git"
   fs.mkdir_p(git_dir + "/hooks")
   fs.mkdir_p(root + "/.bit/hooks")
@@ -60,13 +59,10 @@ test "hooks: list_hooks_with_status merges .git/hooks and .bit/hooks" {
   fs.write_string(git_dir + "/hooks/pre-add", "#!/bin/sh\n")
   let status = list_hooks_with_status(fs, root, git_dir, None)
   assert_eq(status, [
-    "pre-add (available, enabled)",
-    "post-applypatch (enabled)",
+    "pre-add (available, enabled)", "post-applypatch (enabled)",
   ])
   let filtered = list_hooks_with_status(fs, root, git_dir, Some("pre"))
-  assert_eq(filtered, [
-    "pre-add (available, enabled)",
-  ])
+  assert_eq(filtered, ["pre-add (available, enabled)"])
 
   fs.remove_file(root + "/.bit/hooks/pre-add") catch {
     _ => ()
@@ -123,10 +119,11 @@ async test "hooks: set registers available hook and approve/unapprove operate in
   }
 }
 
+///|
 test "hooks: hooks_is_current_checksum_approved monitors sensitive hook modifications" {
   let fs = OsFs::new()
-  let root =
-    "/tmp/bit-test-hooks-sensitive-check-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-hooks-sensitive-check-" +
+    get_current_timestamp().to_string()
   let git_dir = root + "/.git"
   fs.mkdir_p(git_dir + "/hooks")
   fs.mkdir_p(root + "/.bit")
@@ -158,10 +155,11 @@ test "hooks: hooks_is_current_checksum_approved monitors sensitive hook modifica
   }
 }
 
+///|
 async test "hooks: approving sensitive hook writes approved checksum metadata" {
   let fs = OsFs::new()
-  let root =
-    "/tmp/bit-test-hooks-sensitive-approve-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-hooks-sensitive-approve-" +
+    get_current_timestamp().to_string()
   let git_dir = root + "/.git"
   fs.mkdir_p(root)
   fs.mkdir_p(git_dir)
@@ -169,7 +167,9 @@ async test "hooks: approving sensitive hook writes approved checksum metadata" {
   fs.write_string(source, "#!/bin/sh\necho approved\n")
   handle_x_hooks_set(fs, root, ["post-merge", source])
   handle_x_hooks_approve(fs, root, git_dir, ["post-merge"])
-  let approved = hooks_read_approved_checksum(fs, root, "post-merge").unwrap_or("")
+  let approved = hooks_read_approved_checksum(fs, root, "post-merge").unwrap_or(
+    "",
+  )
   let rfs : &@bitcore.RepoFileSystem = fs
   let active = hooks_active_checksum(rfs, root, "post-merge").unwrap_or("")
   assert_eq(approved, active)
@@ -194,10 +194,11 @@ async test "hooks: approving sensitive hook writes approved checksum metadata" {
   }
 }
 
+///|
 test "hooks: always requiring user approval works for postclone" {
   let fs = OsFs::new()
-  let root =
-    "/tmp/bit-test-hooks-postclone-approve-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-hooks-postclone-approve-" +
+    get_current_timestamp().to_string()
   let git_dir = root + "/.git"
   fs.mkdir_p(git_dir + "/hooks")
   fs.mkdir_p(root + "/.bit")
@@ -221,21 +222,23 @@ test "hooks: always requiring user approval works for postclone" {
   }
 }
 
+///|
 test "hooks: postclone is considered sensitive and always prompt" {
   assert_true(is_sensitive_hook("postclone"))
   assert_true(is_always_prompt_hook("postclone"))
 }
 
+///|
 test "hooks: postinstall is considered sensitive and always prompt" {
   assert_true(is_sensitive_hook("postinstall"))
   assert_true(is_always_prompt_hook("postinstall"))
 }
 
+///|
 async test "hooks: approving postinstall still requires approval on every run" {
   let fs = OsFs::new()
-  let root =
-    "/tmp/bit-test-hooks-postinstall-approve-no-persist-" +
-      get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-hooks-postinstall-approve-no-persist-" +
+    get_current_timestamp().to_string()
   let git_dir = root + "/.git"
   fs.mkdir_p(root)
   fs.mkdir_p(git_dir)
@@ -248,7 +251,10 @@ async test "hooks: approving postinstall still requires approval on every run" {
   assert_false(hooks_is_current_checksum_approved(rfs, root, "postinstall"))
   match hooks_read_approved_checksum(fs, root, "postinstall") {
     Some(_) => ()
-    None => fail("expected approval checksum to be recorded for enabled sensitive hook")
+    None =>
+      fail(
+        "expected approval checksum to be recorded for enabled sensitive hook",
+      )
   }
 
   handle_x_hooks_unapprove(fs, git_dir, ["postinstall"])
@@ -267,10 +273,11 @@ async test "hooks: approving postinstall still requires approval on every run" {
   }
 }
 
+///|
 test "hooks: postinstall never becomes auto-approved by checksum" {
   let fs = OsFs::new()
-  let root =
-    "/tmp/bit-test-hooks-postinstall-approve-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-hooks-postinstall-approve-" +
+    get_current_timestamp().to_string()
   let git_dir = root + "/.git"
   fs.mkdir_p(git_dir + "/hooks")
   fs.mkdir_p(root + "/.bit")

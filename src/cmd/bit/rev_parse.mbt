@@ -165,7 +165,9 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
             Some(value) => print_line(value)
             None =>
               if not(revs_only) {
-                raise @bitcore.GitError::InvalidObject("unknown revision: " + arg)
+                raise @bitcore.GitError::InvalidObject(
+                  "unknown revision: " + arg,
+                )
               }
           }
         } else if symbolic_full_name {
@@ -174,7 +176,9 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
             Some(value) => print_line(value)
             None =>
               if not(revs_only) {
-                raise @bitcore.GitError::InvalidObject("unknown revision: " + arg)
+                raise @bitcore.GitError::InvalidObject(
+                  "unknown revision: " + arg,
+                )
               }
           }
         } else {
@@ -202,7 +206,9 @@ async fn handle_rev_parse(args : Array[String]) -> Unit raise Error {
             }
             None =>
               if not(revs_only) {
-                raise @bitcore.GitError::InvalidObject("unknown revision: " + arg)
+                raise @bitcore.GitError::InvalidObject(
+                  "unknown revision: " + arg,
+                )
               }
           }
         }
@@ -593,7 +599,9 @@ fn rev_parse_parse_tag_target_with_compat(
 ) -> @bitcore.ObjectId? {
   let target_name = rev_parse_extract_tag_target_name(tag_text)
   guard target_name is Some(raw_name) else { return None }
-  let direct_id : @bitcore.ObjectId? = Some(@bitcore.ObjectId::from_hex(raw_name)) catch {
+  let direct_id : @bitcore.ObjectId? = Some(
+    @bitcore.ObjectId::from_hex(raw_name),
+  ) catch {
     _ => None
   }
   if direct_id is Some(id) && (db.get(fs, id) catch { _ => None }) is Some(_) {

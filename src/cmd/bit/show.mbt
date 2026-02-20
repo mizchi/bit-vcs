@@ -248,7 +248,9 @@ async fn handle_show(args : Array[String]) -> Unit raise Error {
     return ()
   }
   if o.obj_type != @bitcore.ObjectType::Commit {
-    raise @bitcore.GitError::InvalidObject("Not a commit: \{commit_id.to_hex()}")
+    raise @bitcore.GitError::InvalidObject(
+      "Not a commit: \{commit_id.to_hex()}",
+    )
   }
   // Parse commit for tree/parents
   let commit_info = @bitcore.parse_commit(o.data)

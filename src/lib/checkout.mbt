@@ -42,7 +42,7 @@ pub fn restore_paths(
             if dir.length() > 0 && dir != root {
               fs.mkdir_p(dir)
             }
-    fs.write_file(abs_path, o.data)
+            fs.write_file(abs_path, o.data)
           }
         }
       }
@@ -50,6 +50,7 @@ pub fn restore_paths(
   }
 }
 
+///|
 fn normalize_checkout_path(path : String) -> String raise @bit.GitError {
   if path.has_prefix("/") {
     raise @bit.GitError::InvalidObject("path must not be absolute")

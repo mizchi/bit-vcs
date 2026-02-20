@@ -222,8 +222,7 @@ test "build_clone_command: explicit depth" {
   let repo = RepoPath::new("mizchi", "git")
   let options = HqGetOptions::new(depth=3)
   let cmd = build_clone_command(repo, "/home/user/bhq/mizchi/git", options)
-  let expected =
-    "git clone --depth=3 https://github.com/mizchi/git.git /home/user/bhq/mizchi/git"
+  let expected = "git clone --depth=3 https://github.com/mizchi/git.git /home/user/bhq/mizchi/git"
   inspect(cmd, content=expected)
 }
 
@@ -280,7 +279,10 @@ test "hq_get: clone new repository with explicit depth" {
   let result = hq_get(repo, config, options, exec, path_exists)
   inspect(result, content="Cloned(\"/tmp/bhq/mizchi/git\")")
   assert_eq(commands.length(), 1)
-  assert_eq(commands[0], "git clone --depth=2 https://github.com/mizchi/git.git /tmp/bhq/mizchi/git")
+  assert_eq(
+    commands[0],
+    "git clone --depth=2 https://github.com/mizchi/git.git /tmp/bhq/mizchi/git",
+  )
 }
 
 ///|
@@ -318,10 +320,7 @@ test "hq_get: unshallow existing repository before update" {
   let result = hq_get(repo, config, options, exec, path_exists)
   inspect(result, content="Updated(\"/tmp/bhq/mizchi/git\")")
   assert_eq(commands.length(), 2)
-  assert_eq(
-    commands[0],
-    "cd /tmp/bhq/mizchi/git && git fetch --unshallow",
-  )
+  assert_eq(commands[0], "cd /tmp/bhq/mizchi/git && git fetch --unshallow")
   assert_eq(commands[1], "cd /tmp/bhq/mizchi/git && git pull --ff-only")
 }
 

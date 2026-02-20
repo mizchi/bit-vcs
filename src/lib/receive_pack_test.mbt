@@ -104,9 +104,7 @@ test "receive-pack: reject invalid refname" {
     "../refs/heads/main",
     @protocol.pktline_flush(),
   )
-  let _ = parse_receive_pack_request(req) catch {
-    _ => return ()
-  }
+  let _ = parse_receive_pack_request(req) catch { _ => return () }
   assert_true(false)
 }
 
@@ -121,8 +119,6 @@ test "receive-pack: reject path traversal from /tmp repo" {
     "../" + "tmp/bit-receive-pack-poc/.git/HEAD",
     @protocol.pktline_flush(),
   )
-  let _ = parse_receive_pack_request(bad_req) catch {
-    _ => return ()
-  }
+  let _ = parse_receive_pack_request(bad_req) catch { _ => return () }
   assert_true(false)
 }

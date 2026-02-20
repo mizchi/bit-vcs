@@ -162,7 +162,7 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
       None => @bitlib.resolve_ref(rfs, git_dir, "HEAD")
     }
     let previous_location = current_checkout_location(rfs, git_dir)
-      match target_id {
+    match target_id {
       Some(id) => {
         @bitlib.create_branch_at(fs, rfs, root, branch_name, id)
         switch_apply_tracking_config(
@@ -196,7 +196,7 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
   } else {
     raise @bitcore.GitError::InvalidObject("No branch specified")
   }
-    let target_ref = normalize_switch_branch_ref(target)
+  let target_ref = normalize_switch_branch_ref(target)
   let local_branch_exists = @bitlib.resolve_ref(rfs, git_dir, target_ref)
     is Some(_)
   if local_branch_exists {
@@ -210,11 +210,11 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
         }
         None => ()
       }
-      }
-      let previous_location = current_checkout_location(rfs, git_dir)
-      ignore(checkout_with_promisor_retry(fs, root, target))
-      save_previous_checkout_location(fs, git_dir, previous_location)
-      println("Switched to branch '\{target}'")
+    }
+    let previous_location = current_checkout_location(rfs, git_dir)
+    ignore(checkout_with_promisor_retry(fs, root, target))
+    save_previous_checkout_location(fs, git_dir, previous_location)
+    println("Switched to branch '\{target}'")
     return
   }
   let guess = switch_effective_guess(rfs, git_dir, guess_mode)
@@ -237,6 +237,7 @@ async fn handle_switch(args : Array[String]) -> Unit raise Error {
   raise @bitcore.GitError::InvalidObject("Invalid ref: \{target}")
 }
 
+///|
 fn normalize_switch_branch_ref(name : String) -> String raise @bitcore.GitError {
   let normalized = @bitlib.normalize_repo_path(name) catch {
     _ => raise @bitcore.GitError::InvalidObject("invalid branch name: " + name)

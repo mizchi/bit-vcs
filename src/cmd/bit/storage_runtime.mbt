@@ -43,13 +43,18 @@ fn storage_runtime_is_short_count_flag(arg : String) -> Bool {
 }
 
 ///|
-fn storage_runtime_parse_object_type(s : String) -> @bitcore.ObjectType raise Error {
+fn storage_runtime_parse_object_type(
+  s : String,
+) -> @bitcore.ObjectType raise Error {
   match s {
     "blob" => @bitcore.ObjectType::Blob
     "tree" => @bitcore.ObjectType::Tree
     "commit" => @bitcore.ObjectType::Commit
     "tag" => @bitcore.ObjectType::Tag
-    _ => raise @bitcore.GitError::InvalidObject("invalid object type \"" + s + "\"")
+    _ =>
+      raise @bitcore.GitError::InvalidObject(
+        "invalid object type \"" + s + "\"",
+      )
   }
 }
 
@@ -410,7 +415,9 @@ fn storage_runtime_parse_command(
         storage_runtime_parse_update_ref_args(args),
       )
     _ =>
-      raise @bitcore.GitError::InvalidObject("unsupported storage command: " + cmd)
+      raise @bitcore.GitError::InvalidObject(
+        "unsupported storage command: " + cmd,
+      )
   }
 }
 

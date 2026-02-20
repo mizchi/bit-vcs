@@ -91,7 +91,14 @@ pub struct HqGetOptions {
 
 ///|
 pub fn HqGetOptions::default() -> HqGetOptions {
-  { update: false, shallow: false, depth: 0, ssh: false, branch: None, unshallow: false }
+  {
+    update: false,
+    shallow: false,
+    depth: 0,
+    ssh: false,
+    branch: None,
+    unshallow: false,
+  }
 }
 
 ///|

@@ -901,7 +901,10 @@ fn resolve_pack_path(
 }
 
 ///|
-fn read_pack_objects(fs : OsFs, pack_path : String) -> Array[@bitcore.PackObject] {
+fn read_pack_objects(
+  fs : OsFs,
+  pack_path : String,
+) -> Array[@bitcore.PackObject] {
   let data = fs.read_file(pack_path) catch { _ => return [] }
   @pack.parse_packfile(data) catch {
     _ => []
@@ -914,7 +917,9 @@ fn object_hex(obj : @bitcore.PackObject) -> String {
 }
 
 ///|
-fn dedup_objects(objects : Array[@bitcore.PackObject]) -> Array[@bitcore.PackObject] {
+fn dedup_objects(
+  objects : Array[@bitcore.PackObject],
+) -> Array[@bitcore.PackObject] {
   let seen : Map[String, Bool] = {}
   let out : Array[@bitcore.PackObject] = []
   for obj in objects {
@@ -991,7 +996,8 @@ async fn report_collect_error(err : @bitcore.GitError) -> Unit {
       @stdio.stderr.write("fatal: " + msg + "\n")
     @bitcore.GitError::ProtocolError(msg) =>
       @stdio.stderr.write("fatal: " + msg + "\n")
-    @bitcore.GitError::IoError(msg) => @stdio.stderr.write("fatal: " + msg + "\n")
+    @bitcore.GitError::IoError(msg) =>
+      @stdio.stderr.write("fatal: " + msg + "\n")
   }
   @sys.exit(1)
 }

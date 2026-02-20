@@ -46,7 +46,10 @@ async fn run_workspace_repo_command_inner(
     "push" => handle_push(rest)
     "init" => handle_init(rest)
     "hub" => handle_hub(rest)
-    _ => raise @bitcore.GitError::InvalidObject("unsupported repo command '\{cmd}'")
+    _ =>
+      raise @bitcore.GitError::InvalidObject(
+        "unsupported repo command '\{cmd}'",
+      )
   }
 }
 

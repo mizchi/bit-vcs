@@ -1,0 +1,32 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/bit/x/doc"
+
+import {
+  "mizchi/bit/object",
+  "mizchi/bit/types",
+}
+
+// Values
+pub fn append_page(&@types.FileSystem, &@types.RepoFileSystem, String, String, String, Int64) -> Result[String, DocError] raise @object.GitError
+
+pub fn list_pages(&@types.RepoFileSystem, String, String?) -> Array[String]
+
+pub fn put_page(&@types.FileSystem, String, String, String) -> Result[String, DocError] raise @object.GitError
+
+pub fn read_page(&@types.RepoFileSystem, String, String) -> Result[String, DocError] raise @object.GitError
+
+pub fn remove_page(&@types.FileSystem, &@types.RepoFileSystem, String, String) -> Result[String, DocError] raise @object.GitError
+
+// Errors
+
+// Types and methods
+pub enum DocError {
+  InvalidPageName(String)
+  PageNotFound(String)
+  EmptyBody
+}
+
+// Type aliases
+
+// Traits
+

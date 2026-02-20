@@ -161,12 +161,7 @@ pub async fn status(
   let staged_modified : Array[String] = []
   let staged_deleted : Array[String] = []
   collect_staged_changes_from_head(
-    fs,
-    actual_git_dir,
-    index_map,
-    skip_worktree_paths,
-    staged_modified,
-    staged_deleted,
+    fs, actual_git_dir, index_map, skip_worktree_paths, staged_modified, staged_deleted,
   )
   t0 = profile_lap(profile, "status read_head_entries", t0)
   for item in index_map.to_array() {

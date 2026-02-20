@@ -233,10 +233,14 @@ fn scalar_require_worktree_repo(
 ) -> String raise Error {
   let repo = scalar_resolve_register_repo_path(fs, enlistment)
   if repo == ".git" || repo.has_suffix("/.git") {
-    raise @bitcore.GitError::InvalidObject("Scalar enlistments require a worktree")
+    raise @bitcore.GitError::InvalidObject(
+      "Scalar enlistments require a worktree",
+    )
   }
   if is_bare_repo_dir(repo) {
-    raise @bitcore.GitError::InvalidObject("Scalar enlistments require a worktree")
+    raise @bitcore.GitError::InvalidObject(
+      "Scalar enlistments require a worktree",
+    )
   }
   if fs.is_dir(repo + "/.git") || fs.is_file(repo + "/.git") {
     return repo

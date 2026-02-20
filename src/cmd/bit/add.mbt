@@ -32,12 +32,7 @@ async fn run_add_hook(
   if not(fs.is_file(hook_path)) {
     return 0
   }
-  @process.run(
-    hook_path,
-    [],
-    inherit_env=true,
-    cwd=add_abs_path(root),
-  ) catch {
+  @process.run(hook_path, [], inherit_env=true, cwd=add_abs_path(root)) catch {
     _ => 1
   }
 }

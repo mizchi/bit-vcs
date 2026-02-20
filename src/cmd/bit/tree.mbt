@@ -55,7 +55,10 @@ fn make_temp_dir(fs : OsFs, prefix : String) -> String raise @bitcore.GitError {
     candidate = base + "-" + "\{i}"
   }
   fs.mkdir_p(candidate) catch {
-    _ => raise @bitcore.GitError::IoError("Failed to create temp dir: " + candidate)
+    _ =>
+      raise @bitcore.GitError::IoError(
+        "Failed to create temp dir: " + candidate,
+      )
   }
   candidate
 }

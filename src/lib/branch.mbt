@@ -433,9 +433,7 @@ pub fn resolve_ref(
   git_dir : String,
   refname : String,
 ) -> @bit.ObjectId? raise @bit.GitError {
-  let normalized = normalize_repo_path(refname) catch {
-    _ => return None
-  }
+  let normalized = normalize_repo_path(refname) catch { _ => return None }
   resolve_ref_inner(fs, git_dir, normalized, 0)
 }
 
@@ -465,9 +463,7 @@ fn resolve_ref_inner(
   refname : String,
   depth : Int,
 ) -> @bit.ObjectId? raise @bit.GitError {
-  let refname = normalize_repo_path(refname) catch {
-    _ => return None
-  }
+  let refname = normalize_repo_path(refname) catch { _ => return None }
   if depth > 8 {
     return None
   }

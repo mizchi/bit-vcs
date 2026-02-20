@@ -262,9 +262,11 @@ fn reset_collect_tree_files_from_target(
         @bitcore.ObjectType::Tree => @bitlib.collect_tree_files(db, fs, target)
         @bitcore.ObjectType::Commit =>
           @bitlib.collect_tree_files_from_commit(db, fs, target)
-        _ => raise @bitcore.GitError::InvalidObject("Invalid reset target object")
+        _ =>
+          raise @bitcore.GitError::InvalidObject("Invalid reset target object")
       }
-    None => raise @bitcore.GitError::InvalidObject("Missing reset target object")
+    None =>
+      raise @bitcore.GitError::InvalidObject("Missing reset target object")
   }
 }
 

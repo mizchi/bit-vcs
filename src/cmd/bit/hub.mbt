@@ -729,7 +729,9 @@ fn parse_hub_search_options(
         continue
       }
       _ if arg.has_prefix("-") =>
-        raise @bitcore.GitError::InvalidObject("Unknown hub search option: \{arg}")
+        raise @bitcore.GitError::InvalidObject(
+          "Unknown hub search option: \{arg}",
+        )
       _ => {
         query_parts.push(arg)
         i += 1
@@ -1245,7 +1247,9 @@ async fn handle_hub_pr_import(args : Array[String]) -> Unit raise Error {
       "--limit" if i + 1 < args.length() => {
         limit = @strconv.parse_int(args[i + 1]) catch {
           _ =>
-            raise @bitcore.GitError::InvalidObject("Invalid limit: \{args[i + 1]}")
+            raise @bitcore.GitError::InvalidObject(
+              "Invalid limit: \{args[i + 1]}",
+            )
         }
         i += 2
         continue
@@ -2634,7 +2638,9 @@ fn parse_hub_list_options(
         if parse_work_item_kind(value) is Some(k) {
           kind = Some(k)
         } else {
-          raise @bitcore.GitError::InvalidObject("Unknown work item kind: \{value}")
+          raise @bitcore.GitError::InvalidObject(
+            "Unknown work item kind: \{value}",
+          )
         }
         i += 2
         continue
@@ -2648,7 +2654,9 @@ fn parse_hub_list_options(
         if parse_work_item_kind(value) is Some(k) {
           kind = Some(k)
         } else {
-          raise @bitcore.GitError::InvalidObject("Unknown work item kind: \{value}")
+          raise @bitcore.GitError::InvalidObject(
+            "Unknown work item kind: \{value}",
+          )
         }
         i += 1
         continue
@@ -2797,7 +2805,9 @@ async fn handle_hub_issue_import(args : Array[String]) -> Unit raise Error {
       "--limit" if i + 1 < args.length() => {
         limit = @strconv.parse_int(args[i + 1]) catch {
           _ =>
-            raise @bitcore.GitError::InvalidObject("Invalid limit: \{args[i + 1]}")
+            raise @bitcore.GitError::InvalidObject(
+              "Invalid limit: \{args[i + 1]}",
+            )
         }
         i += 2
         continue
@@ -3735,7 +3745,9 @@ fn parse_hub_sync_runtime_options(
         continue
       }
       _ if arg.has_prefix("-") =>
-        raise @bitcore.GitError::InvalidObject("Unknown hub sync option: \{arg}")
+        raise @bitcore.GitError::InvalidObject(
+          "Unknown hub sync option: \{arg}",
+        )
       _ => {
         remote_url = Some(arg)
         i += 1
@@ -3985,7 +3997,9 @@ fn parse_hub_dump_options(
         continue
       }
       _ if arg.has_prefix("-") =>
-        raise @bitcore.GitError::InvalidObject("Unknown hub dump option: \{arg}")
+        raise @bitcore.GitError::InvalidObject(
+          "Unknown hub dump option: \{arg}",
+        )
       _ => {
         if used_positional_prefix {
           raise @bitcore.GitError::InvalidObject(
@@ -4115,7 +4129,9 @@ fn resolve_github_repo(
     None => {
       let remote_url = get_effective_remote_url(fs, git_dir)
       guard remote_url is Some(url) else {
-        raise @bitcore.GitError::InvalidObject("No remote configured; use --repo")
+        raise @bitcore.GitError::InvalidObject(
+          "No remote configured; use --repo",
+        )
       }
       match @hq.parse_repo_url(url) {
         Some(parsed) => {
@@ -4128,7 +4144,9 @@ fn resolve_github_repo(
           parsed.full_name()
         }
         None =>
-          raise @bitcore.GitError::InvalidObject("Cannot parse remote URL: \{url}")
+          raise @bitcore.GitError::InvalidObject(
+            "Cannot parse remote URL: \{url}",
+          )
       }
     }
   }
@@ -4278,7 +4296,9 @@ fn json_get_string_array(
 }
 
 ///|
-fn parse_gh_prs(text : String) -> Array[@hub.PullRequest] raise @bitcore.GitError {
+fn parse_gh_prs(
+  text : String,
+) -> Array[@hub.PullRequest] raise @bitcore.GitError {
   let items = parse_json_array(text)
   let out : Array[@hub.PullRequest] = []
   for item in items {
@@ -4297,7 +4317,9 @@ fn parse_gh_prs(text : String) -> Array[@hub.PullRequest] raise @bitcore.GitErro
         let source_hex = json_get_string(obj, "source_commit", "")
         let target_hex = json_get_string(obj, "target_commit", "")
         if source_branch.length() == 0 || target_branch.length() == 0 {
-          raise @bitcore.GitError::InvalidObject("Missing branch name for PR \{id}")
+          raise @bitcore.GitError::InvalidObject(
+            "Missing branch name for PR \{id}",
+          )
         }
         let source_commit = @bitcore.ObjectId::from_hex(source_hex) catch {
           _ =>

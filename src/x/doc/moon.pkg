@@ -1,0 +1,15 @@
+import {
+  "mizchi/bit" @bit,
+  "moonbitlang/x/encoding" @encoding,
+  "moonbitlang/x/path" @path,
+}
+
+import {
+  "mizchi/bit/osfs" @osfs,
+} for "test"
+
+warnings = "-29"
+
+options(
+  targets: { "doc_test.mbt": [ "native" ] },
+)

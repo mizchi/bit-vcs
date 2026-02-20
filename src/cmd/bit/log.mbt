@@ -115,7 +115,10 @@ fn format_reflog_entry(fmt : String?, gd : String, message : String) -> String {
 }
 
 ///|
-fn get_head_commit_message(fs : &@bitcore.RepoFileSystem, root : String) -> String? {
+fn get_head_commit_message(
+  fs : &@bitcore.RepoFileSystem,
+  root : String,
+) -> String? {
   let git_dir = resolve_git_dir(fs, root)
   let head = @bitlib.resolve_head_commit(fs, git_dir) catch { _ => return None }
   guard head is Some(commit_id) else { return None }

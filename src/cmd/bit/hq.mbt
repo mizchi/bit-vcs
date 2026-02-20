@@ -109,34 +109,34 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
       }
       "-p" | "--ssh" => ssh = true
       "-b" | "--branch" =>
-      if i + 1 < args.length() {
+        if i + 1 < args.length() {
+          i += 1
+          branch = Some(args[i])
+        }
+      "--depth" if i + 1 < args.length() => {
+        depth = @strconv.parse_int(args[i + 1]) catch {
+          err => {
+            if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+              raise err
+            }
+            0
+          }
+        }
         i += 1
-        branch = Some(args[i])
       }
-    "--depth" if i + 1 < args.length() => {
-      depth = @strconv.parse_int(args[i + 1]) catch {
-        err => {
-          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
-            raise err
+      _ if arg.has_prefix("--depth=") => {
+        let depth_str = String::unsafe_substring(arg, start=8, end=arg.length())
+        depth = @strconv.parse_int(depth_str) catch {
+          err => {
+            if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+              raise err
+            }
+            0
           }
-          0
         }
       }
-      i += 1
-    }
-    _ if arg.has_prefix("--depth=") => {
-      let depth_str = String::unsafe_substring(arg, start=8, end=arg.length())
-      depth = @strconv.parse_int(depth_str) catch {
-        err => {
-          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
-            raise err
-          }
-          0
-        }
-      }
-    }
-    _ if arg.has_prefix("-") => warn_unimplemented_arg("hq get", arg)
-    _ => if url is None { url = Some(arg) }
+      _ if arg.has_prefix("-") => warn_unimplemented_arg("hq get", arg)
+      _ => if url is None { url = Some(arg) }
     }
     i += 1
   }
@@ -155,7 +155,7 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
   let options = @hq.HqGetOptions::new(
     update~,
     shallow~,
-    depth=depth,
+    depth~,
     ssh~,
     branch~,
     unshallow~,
@@ -240,11 +240,7 @@ async fn handle_hq_get(args : Array[String]) -> Unit raise Error {
   // Handle sparse checkout
   if r.needs_sparse() {
     let subdir = r.subdir.unwrap_or("")
-    let sparse_dir = if subdir.has_prefix("/") {
-      subdir
-    } else {
-      "/" + subdir
-    }
+    let sparse_dir = if subdir.has_prefix("/") { subdir } else { "/" + subdir }
     let sparse_dir_with_sep = if sparse_dir.has_suffix("/") {
       sparse_dir
     } else {

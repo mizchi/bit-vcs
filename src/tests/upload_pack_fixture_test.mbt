@@ -140,6 +140,7 @@ test "upload-pack v2: materialize clone to fs" {
   assert_true(fs.exists("/repo/.git/index"))
 }
 
+///|
 test "upload-pack v0: advertised symref is used as HEAD target" {
   let refs_line : Array[Byte] = []
   append_bytes(refs_line, fixture_commit)
@@ -149,16 +150,13 @@ test "upload-pack v0: advertised symref is used as HEAD target" {
   let branch_line : Array[Byte] = []
   append_bytes(branch_line, fixture_commit)
   append_bytes(branch_line, " refs/heads/main\n")
-  let adv =
-    @protocol.pktline_encode(bytes_to_string(refs_line)) +
+  let adv = @protocol.pktline_encode(bytes_to_string(refs_line)) +
     @protocol.pktline_encode(bytes_to_string(branch_line)) +
     @protocol.pktline_flush()
   let refs = @protocol.parse_refs(adv)
   assert_true(refs.length() == 2)
 
-  let symrefs : Map[String, String] = {
-    "HEAD": "refs/heads/main"
-  }
+  let symrefs : Map[String, String] = { "HEAD": "refs/heads/main" }
   match symrefs.get("HEAD") {
     Some(target) => assert_true(target == "refs/heads/main")
     None => assert_true(false)

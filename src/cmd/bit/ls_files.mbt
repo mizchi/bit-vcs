@@ -623,8 +623,8 @@ fn collect_untracked_dirs_recursive(
   tracked_dirs : Map[String, Bool],
   out : Array[String],
 ) -> Unit raise @bitcore.GitError {
-    let dir = if prefix == "" { root } else { root + "/" + prefix }
-    if prefix != "" {
+  let dir = if prefix == "" { root } else { root + "/" + prefix }
+  if prefix != "" {
     let dot_git_marker = dir + "/.git"
     let bit_marker = dir + "/.bit"
     if fs.is_file(dot_git_marker) ||

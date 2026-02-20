@@ -181,7 +181,9 @@ async fn handle_diff(args : Array[String]) -> Unit raise Error {
           }
         }
         None =>
-          raise @bitcore.GitError::InvalidObject("unsupported diff range: " + spec)
+          raise @bitcore.GitError::InvalidObject(
+            "unsupported diff range: " + spec,
+          )
       }
     }
     None =>

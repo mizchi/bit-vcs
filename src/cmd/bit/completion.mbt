@@ -954,7 +954,7 @@ fn all_subcommands() -> Array[(String, String)] {
   let names = [
     "add", "ai", "am", "apply", "bisect", "blame", "branch", "bundle", "cat", "cat-file",
     "checkout", "cherry", "cherry-pick", "clean", "clone", "hub", "commit", "completion",
-    "x/hooks", "config", "describe", "diff", "diff-files", "fetch", "format-patch",
+    "x/hooks", "x/doc", "config", "describe", "diff", "diff-files", "fetch", "format-patch",
     "fsck", "gc", "grep", "hash-object", "help", "hq", "index-pack", "init", "log",
     "ls-files", "ls-tree", "maintenance", "mcp", "merge", "mktree", "multi-pack-index",
     "mv", "notes", "pack-objects", "pack-refs", "prune", "pull", "push", "range-diff",

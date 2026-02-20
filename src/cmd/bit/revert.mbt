@@ -151,7 +151,9 @@ async fn handle_revert(args : Array[String]) -> Unit raise Error {
     // Load commit
     let obj = db.get(rfs, cid)
     guard obj is Some(o) else {
-      raise @bitcore.GitError::InvalidObject("commit not found: \{cid.to_hex()}")
+      raise @bitcore.GitError::InvalidObject(
+        "commit not found: \{cid.to_hex()}",
+      )
     }
     let commit_info = @bitcore.parse_commit(o.data)
     // Get parent (for merge commits, use mainline)

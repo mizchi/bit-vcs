@@ -15,18 +15,21 @@ test "checkout: restore_paths rejects index paths outside repository" {
   init_repo(fs, "/repo")
   let (blob_id, blob) = @bit.create_blob_string("outside.txt")
   let entries : Array[IndexEntry] = [
-    IndexEntry::new("../outside.txt", blob_id, 33188, blob.length())
+    IndexEntry::new("../outside.txt", blob_id, 33188, blob.length()),
   ]
   write_object_bytes(fs, "/repo/.git", blob_id, blob)
   write_index_entries(fs, "/repo/.git", entries)
   assert_true(restore_paths_is_rejected(fs, "/repo", ["a.txt"]))
 }
 
+///|
 fn restore_paths_is_rejected(
   fs : @bit.TestFs,
   root : String,
   paths : Array[String],
 ) -> Bool {
-  restore_paths(fs, fs, root, paths) catch { _ => return true }
+  restore_paths(fs, fs, root, paths) catch {
+    _ => return true
+  }
   false
 }

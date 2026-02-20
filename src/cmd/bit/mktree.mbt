@@ -79,7 +79,9 @@ fn parse_and_add_tree_entry(
         let mode = parts[0]
         // Object ID is either parts[1] or parts[2] depending on format
         let object_hex = if parts.length() >= 3 { parts[2] } else { parts[1] }
-        let id = @bitcore.ObjectId::from_hex(object_hex) catch { _ => return () }
+        let id = @bitcore.ObjectId::from_hex(object_hex) catch {
+          _ => return ()
+        }
         entries.push(@bitcore.TreeEntry::new(mode, name, id))
       }
     }

@@ -17,11 +17,9 @@ pub fn hq_get(
   if path_exists(local_path) {
     if options.update {
       if options.unshallow {
-        let (
-          unshallow_code,
-          _unshallow_stdout,
-          unshallow_stderr,
-        ) = exec("cd \{local_path} && git fetch --unshallow")
+        let (unshallow_code, _unshallow_stdout, unshallow_stderr) = exec(
+          "cd \{local_path} && git fetch --unshallow",
+        )
         if unshallow_code != 0 {
           return HqGetResult::Error("Failed to unshallow: \{unshallow_stderr}")
         }
@@ -104,9 +102,7 @@ fn clone_sparse(
   let depth = resolve_hq_clone_depth(options)
   let subdir = repo.subdir.unwrap_or("")
   // Step 1: Clone with filter and no checkout
-  let clone_args : Array[String] = [
-    "git", "clone", "--no-checkout",
-  ]
+  let clone_args : Array[String] = ["git", "clone", "--no-checkout"]
   if depth > 0 {
     clone_args.push("--depth=" + depth.to_string())
   }
@@ -131,18 +127,13 @@ fn clone_sparse(
     return Err("Sparse checkout init failed: \{stderr2}")
   }
   // Step 3: Set sparse checkout paths
-  let sparse_dir = if subdir.has_prefix("/") {
-    subdir
-  } else {
-    "/" + subdir
-  }
+  let sparse_dir = if subdir.has_prefix("/") { subdir } else { "/" + subdir }
   let sparse_dir_with_sep = if sparse_dir.has_suffix("/") {
     sparse_dir
   } else {
     sparse_dir + "/"
   }
-  let sparse_set_cmd =
-    "cd \{local_path} && git sparse-checkout set \{sparse_dir_with_sep}"
+  let sparse_set_cmd = "cd \{local_path} && git sparse-checkout set \{sparse_dir_with_sep}"
   let (code3, _stdout3, stderr3) = exec(sparse_set_cmd)
   if code3 != 0 {
     return Err("Sparse checkout set failed: \{stderr3}")
@@ -161,11 +152,7 @@ pub fn build_clone_command(
   let depth = resolve_hq_clone_depth(options)
   if repo.needs_sparse() {
     let subdir = repo.subdir.unwrap_or("")
-    let sparse_dir = if subdir.has_prefix("/") {
-      subdir
-    } else {
-      "/" + subdir
-    }
+    let sparse_dir = if subdir.has_prefix("/") { subdir } else { "/" + subdir }
     let sparse_dir_with_sep = if sparse_dir.has_suffix("/") {
       sparse_dir
     } else {

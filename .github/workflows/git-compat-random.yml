@@ -149,7 +149,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm --dir tools/ci-notify run notify -- \
-            --summary compat-random-summary.md \
+            --summary "${{ github.workspace }}/compat-random-summary.md" \
             --repo "$GITHUB_REPOSITORY" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \

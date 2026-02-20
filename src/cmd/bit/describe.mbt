@@ -102,7 +102,8 @@ fn get_all_tags(
               Some(cid) => tags[entry] = cid
               None => ()
             }
-          } else if o.obj_type == @bitcore.ObjectType::Commit && include_lightweight {
+          } else if o.obj_type == @bitcore.ObjectType::Commit &&
+            include_lightweight {
             // Lightweight tag
             tags[entry] = ref_id
           }

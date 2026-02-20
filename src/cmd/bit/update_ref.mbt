@@ -44,14 +44,13 @@ fn update_ref_storage_runtime_delegate_args(
     return None
   }
   let (should_log, always) = @bitrepo.should_log_ref(
-    fs,
-    git_dir,
-    normalized_refname,
-    is_bare,
+    fs, git_dir, normalized_refname, is_bare,
   ) catch {
     _ => return None
   }
-  if should_log || always || @bitrepo.reflog_exists(fs, git_dir, normalized_refname) {
+  if should_log ||
+    always ||
+    @bitrepo.reflog_exists(fs, git_dir, normalized_refname) {
     return None
   }
   Some(parsed)
@@ -197,10 +196,7 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
           }
           let refname = normalize_update_ref_name(tokens[1])
           let refname = resolve_update_target_ref(
-            fs,
-            actual_git_dir,
-            refname,
-            stdin_no_deref,
+            fs, actual_git_dir, refname, stdin_no_deref,
           )
           let current_id = read_ref_value(fs, actual_git_dir, refname)
           let ok = match tokens.length() {
@@ -211,7 +207,8 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
               }
               match current_id {
                 Some(cur_id) => cur_id.to_hex() == expected_id.to_hex()
-                None => expected_id.to_hex() == @bitcore.ObjectId::zero().to_hex()
+                None =>
+                  expected_id.to_hex() == @bitcore.ObjectId::zero().to_hex()
               }
             }
           }
@@ -229,8 +226,10 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
     return ()
   }
   if delete_mode {
-  if positional.length() < 1 {
-      raise @bitcore.GitError::InvalidObject("usage: git update-ref -d <refname>")
+    if positional.length() < 1 {
+      raise @bitcore.GitError::InvalidObject(
+        "usage: git update-ref -d <refname>",
+      )
     }
     let input_refname = normalize_update_ref_name(positional[0])
     let refname = resolve_update_target_ref(
@@ -348,7 +347,9 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
       match @bitrepo.rev_parse(fs, actual_git_dir, new_value) {
         Some(id) => id
         None =>
-          raise @bitcore.GitError::InvalidObject("unknown revision: " + new_value)
+          raise @bitcore.GitError::InvalidObject(
+            "unknown revision: " + new_value,
+          )
       }
   }
   // Get current value
@@ -426,7 +427,9 @@ async fn handle_update_ref(args : Array[String]) -> Unit raise Error {
 }
 
 ///|
-fn normalize_update_ref_name(refname : String) -> String raise @bitcore.GitError {
+fn normalize_update_ref_name(
+  refname : String,
+) -> String raise @bitcore.GitError {
   let normalized = @bitlib.normalize_repo_path(refname) catch {
     _ => raise @bitcore.GitError::InvalidObject("invalid refname: " + refname)
   }

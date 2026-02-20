@@ -115,9 +115,11 @@ test "clone: configure_reftable_ref_storage writes reftable metadata" {
   cleanup_clone_wbtest_tree(fs, root)
 }
 
+///|
 async test "clone: run_postclone_hook is no-op when hook is absent" {
   let fs = OsFs::new()
-  let root = "/tmp/bit-test-postclone-noop-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-postclone-noop-" +
+    get_current_timestamp().to_string()
   cleanup_clone_wbtest_tree(fs, root)
   let git_dir = root + "/.git"
   fs.mkdir_p(git_dir + "/hooks")
@@ -127,17 +129,15 @@ async test "clone: run_postclone_hook is no-op when hook is absent" {
   cleanup_clone_wbtest_tree(fs, root)
 }
 
+///|
 async test "clone: run_postclone_hook remains skipped without hook file even with approval cache" {
   let fs = OsFs::new()
-  let root =
-    "/tmp/bit-test-postclone-skip-with-cache-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-postclone-skip-with-cache-" +
+    get_current_timestamp().to_string()
   let git_dir = root + "/.git"
   cleanup_clone_wbtest_tree(fs, root)
   fs.mkdir_p(git_dir + "/hooks")
-  fs.write_string(
-    git_dir + "/hooks/postclone",
-    "#!/bin/sh\necho executed\n",
-  )
+  fs.write_string(git_dir + "/hooks/postclone", "#!/bin/sh\necho executed\n")
   let checksum = hooks_active_checksum(fs, root, "postclone").unwrap_or("")
   hooks_write_approved_checksum(fs, fs, root, "postclone", checksum)
   fs.remove_file(git_dir + "/hooks/postclone") catch {
@@ -150,10 +150,11 @@ async test "clone: run_postclone_hook remains skipped without hook file even wit
   cleanup_clone_wbtest_tree(fs, root)
 }
 
+///|
 async test "clone: run_postclone_hook skips execution when skip-hooks is enabled" {
   let fs = OsFs::new()
-  let root =
-    "/tmp/bit-test-postclone-skip-hook-" + get_current_timestamp().to_string()
+  let root = "/tmp/bit-test-postclone-skip-hook-" +
+    get_current_timestamp().to_string()
   let git_dir = root + "/.git"
   cleanup_clone_wbtest_tree(fs, root)
   fs.mkdir_p(git_dir + "/hooks")

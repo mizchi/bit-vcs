@@ -118,7 +118,9 @@ async fn handle_submodule_add(
     i += 1
   }
   if url.length() == 0 {
-    raise @bitcore.GitError::InvalidObject("submodule add requires a repository")
+    raise @bitcore.GitError::InvalidObject(
+      "submodule add requires a repository",
+    )
   }
   if path.length() == 0 {
     path = derive_submodule_path(url)

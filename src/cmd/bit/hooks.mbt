@@ -94,14 +94,16 @@ fn is_valid_hook_name(name : String) -> Bool {
 }
 
 ///|
-fn list_hooks_in_dir(fs : OsFs, dir : String, prefix : String?) -> Array[String] {
+fn list_hooks_in_dir(
+  fs : OsFs,
+  dir : String,
+  prefix : String?,
+) -> Array[String] {
   if not(fs.is_dir(dir)) {
     return []
   }
   let names : Array[String] = []
-  let entries = fs.readdir(dir) catch {
-    _ => []
-  }
+  let entries = fs.readdir(dir) catch { _ => [] }
   for entry in entries {
     if entry == "." || entry == ".." {
       continue
@@ -175,10 +177,12 @@ fn hooks_sensitive_names() -> Array[String] {
   ["post-checkout", "post-merge", "postclone", "postinstall"]
 }
 
+///|
 fn hooks_always_prompt_names() -> Array[String] {
   ["postclone", "postinstall"]
 }
 
+///|
 fn is_always_prompt_hook(name : String) -> Bool {
   for candidate in hooks_always_prompt_names() {
     if name == candidate {
@@ -257,7 +261,10 @@ fn hooks_write_approved_checksum(
       _ => ()
     }
   }
-  wfs.write_string(hooks_approved_checksum_path(root, hook_name), checksum + "\n") catch {
+  wfs.write_string(
+    hooks_approved_checksum_path(root, hook_name),
+    checksum + "\n",
+  ) catch {
     _ => ()
   }
 }
@@ -285,10 +292,11 @@ fn hooks_is_current_checksum_approved(
   }
   match hooks_active_checksum(rfs, root, hook_name) {
     None => true
-    Some(current) => match hooks_read_approved_checksum(rfs, root, hook_name) {
-      Some(approved) => approved == current
-      None => false
-    }
+    Some(current) =>
+      match hooks_read_approved_checksum(rfs, root, hook_name) {
+        Some(approved) => approved == current
+        None => false
+      }
   }
 }
 
@@ -306,7 +314,11 @@ async fn hooks_prompt_approve_checksum(
     None => "<not approved yet>"
   }
   if is_always_prompt_hook(hook_name) {
-    eprint_line("warning: this hook always requires explicit execution approval: '" + hook_name + "'")
+    eprint_line(
+      "warning: this hook always requires explicit execution approval: '" +
+      hook_name +
+      "'",
+    )
     eprint_line(
       "warning: this hook is experimental, so avoid overusing it as an automation",
     )
@@ -320,14 +332,15 @@ async fn hooks_prompt_approve_checksum(
   eprint_line("  current checksum:  " + current_checksum)
   eprint_line(
     "Approve and continue now? [y/N] (or run `bit/x/hooks unapprove " +
-    hook_name + "` to disable this hook)",
+    hook_name +
+    "` to disable this hook)",
   )
   let bytes : Array[Byte] = []
   let mut finished = false
   while not(finished) {
     match @stdio.stdin.read_some(max_len=64) {
       None => finished = true
-      Some(chunk) => {
+      Some(chunk) =>
         for b in chunk {
           if b == 10 {
             finished = true
@@ -344,7 +357,6 @@ async fn hooks_prompt_approve_checksum(
             break
           }
         }
-      }
     }
   }
   let answer = trim_string(decode_bytes(bytes_from_array(bytes))).to_lower()
@@ -367,13 +379,8 @@ async fn hooks_ensure_sensitive_hook_approval(
   }
   if not(hooks_is_current_checksum_approved(fs, root, hook_name)) {
     match hooks_active_checksum(fs, root, hook_name) {
-      Some(current) => hooks_prompt_approve_checksum(
-        wfs,
-        fs,
-        root,
-        hook_name,
-        current,
-      )
+      Some(current) =>
+        hooks_prompt_approve_checksum(wfs, fs, root, hook_name, current)
       None => ()
     }
   }
@@ -416,9 +423,7 @@ async fn handle_x_hooks_set(
     return
   }
   if args.length() != 2 {
-    eprint_line(
-      "usage: bit/x/hooks set <name> <source_file>",
-    )
+    eprint_line("usage: bit/x/hooks set <name> <source_file>")
     @sys.exit(1)
   }
   let name = args[0]
@@ -481,7 +486,8 @@ async fn handle_x_hooks_approve(
   }
   if is_sensitive_hook(name) {
     match hooks_active_checksum(fs, root, name) {
-      Some(checksum) => hooks_write_approved_checksum(fs, fs, root, name, checksum)
+      Some(checksum) =>
+        hooks_write_approved_checksum(fs, fs, root, name, checksum)
       None => ()
     }
   }

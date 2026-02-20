@@ -432,7 +432,7 @@ test "main: opt-in help text is loaded from external files" {
 ///|
 async test "main: dispatch-only commands have help route" {
   let dispatch_only = [
-    "diff-files", "show-branches", "rebase-ai", "scalar", "shell", "version",
+    "diff-files", "show-branches", "rebase-ai", "scalar", "shell", "x/doc", "version",
   ]
   for cmd in dispatch_only {
     let ok = command_handles_builtin_help(cmd) ||

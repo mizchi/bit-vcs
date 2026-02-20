@@ -125,10 +125,7 @@ fn parse_shorthand(input : String) -> RepoPath? {
     }
     None => (input, None)
   }
-  let parts = repo_part
-    .split("/")
-    .filter(s => s.length() > 0)
-    .collect()
+  let parts = repo_part.split("/").filter(s => s.length() > 0).collect()
   if parts.length() < 2 {
     return None
   }
@@ -144,13 +141,12 @@ fn parse_shorthand(input : String) -> RepoPath? {
     let repo = parts[2].to_string()
     let subdir = match explicit_subdir {
       Some(sd) => Some(sd)
-      None => {
+      None =>
         if parts.length() > 3 {
           Some(join_parts(parts, 3, parts.length()))
         } else {
           None
         }
-      }
     }
     // Normalize github.com
     let normalized_host : String? = if host == "github.com" {
@@ -158,22 +154,21 @@ fn parse_shorthand(input : String) -> RepoPath? {
     } else {
       Some(host)
     }
-    Some(RepoPath::new(user, repo, host=normalized_host, subdir=subdir))
+    Some(RepoPath::new(user, repo, host=normalized_host, subdir~))
   } else {
     // user/repo format (github.com implicit)
     let user = parts[0].to_string()
     let repo = parts[1].to_string()
     let subdir = match explicit_subdir {
       Some(sd) => Some(sd)
-      None => {
+      None =>
         if parts.length() > 2 {
           Some(join_parts(parts, 2, parts.length()))
         } else {
           None
         }
-      }
     }
-    Some(RepoPath::new(user, repo, subdir=subdir))
+    Some(RepoPath::new(user, repo, subdir~))
   }
 }
 

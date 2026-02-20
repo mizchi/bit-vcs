@@ -26,7 +26,8 @@ async fn handle_merge(args : Array[String]) -> Unit raise Error {
         i += 2
         continue
       }
-      "-m" => raise @bitcore.GitError::InvalidObject("option '-m' requires a value")
+      "-m" =>
+        raise @bitcore.GitError::InvalidObject("option '-m' requires a value")
       "--message" =>
         raise @bitcore.GitError::InvalidObject(
           "option '--message' requires a value",
@@ -170,13 +171,7 @@ async fn handle_merge(args : Array[String]) -> Unit raise Error {
   if squash {
     // Squash merge: apply changes but don't commit
     let result = run_merge_with_sensitive_hooks(
-      fs,
-      fs,
-      root,
-      tid,
-      msg,
-      author,
-      timestamp,
+      fs, fs, root, tid, msg, author, timestamp,
     )
     match result.status {
       @bitlib.MergeStatus::AlreadyUpToDate => print_line("Already up to date.")
@@ -279,13 +274,7 @@ async fn handle_merge(args : Array[String]) -> Unit raise Error {
   }
   // Regular merge
   let result = run_merge_with_sensitive_hooks(
-    fs,
-    fs,
-    root,
-    tid,
-    msg,
-    author,
-    timestamp,
+    fs, fs, root, tid, msg, author, timestamp,
   )
   match result.status {
     @bitlib.MergeStatus::AlreadyUpToDate => print_line("Already up to date.")

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import path from "node:path";
 
 type CliArgs = {
   summary: string;
@@ -134,7 +135,9 @@ function buildConfig(args: Record<string, string | boolean>) {
   if (!repo) {
     throw new Error("--repo is required");
   }
-  const summary = String(args.summary || "compat-random-summary.md");
+  const summary = resolveSummaryPath(
+    String(args.summary || "compat-random-summary.md")
+  );
   if (!args.summary) {
     console.warn(`[ci-notify] --summary missing, using default ${summary}`);
   }
@@ -176,6 +179,23 @@ function buildConfig(args: Record<string, string | boolean>) {
     requireToken,
     token,
   } as CliArgs;
+}
+
+function resolveSummaryPath(raw: string): string {
+  const normalized = raw || "compat-random-summary.md";
+  const candidates: string[] = [path.resolve(process.cwd(), normalized)];
+  const workspace = process.env.GITHUB_WORKSPACE;
+  if (workspace) {
+    candidates.unshift(path.resolve(workspace, normalized));
+  }
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
 }
 
 function parseSummary(path: string): Summary {

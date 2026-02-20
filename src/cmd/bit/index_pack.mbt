@@ -266,7 +266,9 @@ fn commit_has_missing_email(content : Bytes) -> Bool {
 }
 
 ///|
-fn parse_tag_object_id(data : Bytes) -> @bitcore.ObjectId? raise @bitcore.GitError {
+fn parse_tag_object_id(
+  data : Bytes,
+) -> @bitcore.ObjectId? raise @bitcore.GitError {
   let text = @utf8.decode_lossy(data[:])
   let mut object_hex : String? = None
   for line_view in text.split("\n") {
