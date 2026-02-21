@@ -892,7 +892,7 @@ fn generate_zsh_completion() -> String {
     #|    esac
     #|}
     #|
-    #|_bit "$@"
+    #|compdef _bit bit
   buf.write_string(footer)
   buf.to_string()
 }

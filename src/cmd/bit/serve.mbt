@@ -1,6 +1,6 @@
 ///|
 fn print_hub_serve_usage() -> Unit {
-  println("Usage: bit hub serve [<relay-url>] [--repo <name>] [--allow-push] [--broadcast]")
+  println("Usage: bit hub serve [<relay-url>] [--repo <name>] [--allow-push] [--broadcast] [--auto-fetch] [--room <name>]")
   println("")
   println("Serve the current repository via relay for remote cloning.")
   println("The relay URL should use relay+https:// or relay+http:// prefix.")
@@ -9,6 +9,8 @@ fn print_hub_serve_usage() -> Unit {
   println("  --repo <name>    Repository name to advertise")
   println("  --allow-push     Accept incoming push (receive-pack)")
   println("  --broadcast      Broadcast feature notifications on push")
+  println("  --auto-fetch     Auto-fetch when feature-broadcast is detected in room")
+  println("  --room <name>    Room name for broadcast/auto-fetch (default: serve-{session_id})")
   println("  -h, --help       Show this help")
 }
 
@@ -18,6 +20,8 @@ struct HubServeOptions {
   repo : String?
   allow_push : Bool
   broadcast : Bool
+  auto_fetch : Bool
+  room : String?
 }
 
 ///|
@@ -26,6 +30,8 @@ fn parse_hub_serve_options(args : Array[String]) -> HubServeOptions? {
   let mut repo : String? = None
   let mut allow_push = false
   let mut broadcast = false
+  let mut auto_fetch = false
+  let mut room : String? = None
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -40,6 +46,23 @@ fn parse_hub_serve_options(args : Array[String]) -> HubServeOptions? {
     }
     if arg == "--broadcast" {
       broadcast = true
+      i += 1
+      continue
+    }
+    if arg == "--auto-fetch" {
+      auto_fetch = true
+      i += 1
+      continue
+    }
+    if arg == "--room" && i + 1 < args.length() {
+      room = Some(args[i + 1])
+      i += 2
+      continue
+    }
+    if arg.has_prefix("--room=") {
+      room = Some(
+        String::unsafe_substring(arg, start=7, end=arg.length()),
+      )
       i += 1
       continue
     }
@@ -74,7 +97,7 @@ fn parse_hub_serve_options(args : Array[String]) -> HubServeOptions? {
         }
       }
   }
-  Some({ relay_url: url, repo, allow_push, broadcast })
+  Some({ relay_url: url, repo, allow_push, broadcast, auto_fetch, room })
 }
 
 ///|
@@ -737,9 +760,18 @@ async fn handle_hub_serve(args : Array[String]) -> Unit raise Error {
   if options.broadcast {
     print_line("Broadcast enabled: feature notifications will be sent on push")
   }
+  let effective_room = match options.room {
+    Some(r) => r
+    None => "serve-\{session_id}"
+  }
+  if options.auto_fetch {
+    print_line("Auto-fetch enabled: watching room '\{effective_room}' for feature broadcasts")
+  }
   print_line("Waiting for requests... (Ctrl-C to stop)")
+  let poll_timeout = if options.auto_fetch { 5 } else { 30 }
+  let mut room_cursor = 0
   while true {
-    let requests = serve_poll(base_url, session_id, 30) catch {
+    let requests = serve_poll(base_url, session_id, poll_timeout) catch {
       err => {
         if @async.is_cancellation_error(err) {
           break
@@ -768,8 +800,12 @@ async fn handle_hub_serve(args : Array[String]) -> Unit raise Error {
       if options.broadcast &&
         req.path.has_prefix("/git-receive-pack") &&
         status == 200 {
+        let broadcast_room = match options.room {
+          Some(r) => r
+          None => ""
+        }
         serve_broadcast_push_notification(
-          base_url, session_id, repo_root, req.path,
+          base_url, session_id, repo_root, req.path, room=broadcast_room,
         ) catch {
           err => eprint_line("Broadcast error: \{err}")
         }
@@ -791,6 +827,17 @@ async fn handle_hub_serve(args : Array[String]) -> Unit raise Error {
         }
       }
     }
+    // Auto-fetch: poll room for feature-broadcast messages
+    if options.auto_fetch {
+      room_cursor = serve_auto_fetch_from_room(
+        base_url, effective_room, session_id, repo_root, room_cursor,
+      ) catch {
+        err => {
+          eprint_line("Auto-fetch poll error: \{err}")
+          room_cursor
+        }
+      }
+    }
   }
 }
 
@@ -801,6 +848,7 @@ async fn serve_broadcast_push_notification(
   session_id : String,
   repo_root : String,
   _path : String,
+  room~ : String = "",
 ) -> Unit raise Error {
   // Collect incoming refs that were just updated
   let fs = OsFs::new()
@@ -838,7 +886,7 @@ async fn serve_broadcast_push_notification(
   let payload = Json::object(payload_obj)
   let payload_text = payload.stringify()
   let payload_bytes = @encoding.encode(@encoding.Encoding::UTF8, payload_text)
-  let room = "serve-\{session_id}"
+  let room = if room.length() > 0 { room } else { "serve-\{session_id}" }
   let event_id = session_id + "-push-" +
     @bitcore.sha1(payload_bytes).to_hex()
   let url = "\{base_url}/api/v1/publish?room=\{room}&sender=\{session_id}&topic=notify&id=\{event_id}"
@@ -852,5 +900,199 @@ async fn serve_broadcast_push_notification(
     eprint_line(
       "[\{session_id}] Broadcast warning: HTTP \{response.code}",
     )
+  }
+}
+
+///|
+struct ServeFeatureBroadcast {
+  sender_session_id : String
+  refs : Array[(String, String)] // (refname, commit_hex)
+}
+
+///|
+fn serve_parse_room_poll_response(
+  body : Bytes,
+) -> (Int, Array[ServeFeatureBroadcast])? {
+  let text = serve_decode_bytes(body)
+  let parsed = @json.parse(text) catch { _ => return None }
+  guard parsed is Json::Object(root) else { return None }
+  let next_cursor = match root.get("next_cursor") {
+    Some(Json::Number(n, ..)) => n.to_int()
+    _ => 0
+  }
+  let broadcasts : Array[ServeFeatureBroadcast] = []
+  guard root.get("envelopes") is Some(Json::Array(items)) else {
+    return Some((next_cursor, broadcasts))
+  }
+  for item in items {
+    guard item is Json::Object(envelope_obj) else { continue }
+    let sender = match serve_json_get_string(envelope_obj, "sender") {
+      Some(s) => s
+      None => ""
+    }
+    guard envelope_obj.get("payload") is Some(payload_json) else { continue }
+    // payload may be a JSON string or object
+    let payload_obj : Map[String, Json] = match payload_json {
+      Json::Object(obj) => obj
+      Json::String(s) => {
+        let inner = @json.parse(s) catch { _ => continue }
+        guard inner is Json::Object(obj) else { continue }
+        obj
+      }
+      _ => continue
+    }
+    guard serve_json_get_string(payload_obj, "type") is Some(t) else {
+      continue
+    }
+    if t != "feature-broadcast" {
+      continue
+    }
+    let session_id = match serve_json_get_string(payload_obj, "session_id") {
+      Some(s) => s
+      None => sender
+    }
+    let refs : Array[(String, String)] = []
+    match payload_obj.get("refs") {
+      Some(Json::Array(ref_items)) =>
+        for ref_item in ref_items {
+          guard ref_item is Json::Object(ref_obj) else { continue }
+          let refname = match serve_json_get_string(ref_obj, "ref") {
+            Some(s) => s
+            None => continue
+          }
+          let commit = match serve_json_get_string(ref_obj, "commit") {
+            Some(s) => s
+            None => continue
+          }
+          refs.push((refname, commit))
+        }
+      _ => ()
+    }
+    broadcasts.push({ sender_session_id: session_id, refs })
+  }
+  Some((next_cursor, broadcasts))
+}
+
+///|
+async fn serve_auto_fetch_from_room(
+  base_url : String,
+  room : String,
+  own_session_id : String,
+  repo_root : String,
+  cursor : Int,
+) -> Int raise Error {
+  let url = "\{base_url}/api/v1/poll?room=\{room}&after=\{cursor}&limit=50"
+  let headers : Map[String, String] = {}
+  let (response, body) = @bitnative.native_http_get(url, headers)
+  if response.code != 200 {
+    return cursor
+  }
+  guard serve_parse_room_poll_response(body) is Some((next_cursor, broadcasts)) else {
+    return cursor
+  }
+  for broadcast in broadcasts {
+    if broadcast.sender_session_id == own_session_id {
+      continue
+    }
+    print_line(
+      "[\{own_session_id}] Auto-fetch: detected broadcast from \{broadcast.sender_session_id}",
+    )
+    serve_fetch_from_session(
+      base_url, broadcast.sender_session_id, broadcast.refs, repo_root,
+    ) catch {
+      err =>
+        eprint_line(
+          "Auto-fetch error from \{broadcast.sender_session_id}: \{err}",
+        )
+    }
+  }
+  next_cursor
+}
+
+///|
+async fn serve_fetch_from_session(
+  base_url : String,
+  sender_session_id : String,
+  refs_info : Array[(String, String)],
+  repo_root : String,
+) -> Unit raise Error {
+  let proxied_url = base_url + "/git/" + sender_session_id
+  let (remote_refs, _, _, _) = @bitnative.discover_upload_refs_http(
+    proxied_url, true,
+  )
+  // Build wants from refs_info commit OIDs that exist on the remote
+  let wants : Array[@bitcore.ObjectId] = []
+  let ref_map : Map[String, String] = {} // commit_hex -> refname
+  for item in refs_info {
+    let (refname, commit_hex) = item
+    ref_map[commit_hex] = refname
+    for remote_item in remote_refs {
+      let (remote_oid, _) = remote_item
+      if remote_oid.to_hex() == commit_hex {
+        wants.push(remote_oid)
+        break
+      }
+    }
+  }
+  // If no matching wants, try all commit OIDs from refs_info
+  if wants.length() == 0 {
+    for item in refs_info {
+      let (_, commit_hex) = item
+      wants.push(@bitcore.ObjectId::from_hex(commit_hex))
+    }
+  }
+  if wants.length() == 0 {
+    return
+  }
+  let pack = @bitnative.fetch_pack_http(proxied_url, wants, true)
+  if pack.length() == 0 {
+    return
+  }
+  let objects = @pack.parse_packfile(pack)
+  let fs = OsFs::new()
+  let root = normalize_repo_root(repo_root)
+  let git_dir = root + "/.git"
+  @pack.write_packfile_with_index(fs, git_dir, pack, objects)
+  // Write refs under refs/relay/remote/{session_id}/heads/{branch}
+  for item in refs_info {
+    let (refname, commit_hex) = item
+    // Extract branch name: strip refs/relay/incoming/heads/ or refs/heads/ prefix
+    let branch = if refname.has_prefix("refs/relay/incoming/heads/") {
+      String::unsafe_substring(refname, start=25, end=refname.length())
+    } else if refname.has_prefix("refs/heads/") {
+      String::unsafe_substring(refname, start=11, end=refname.length())
+    } else if refname.has_prefix("refs/") {
+      String::unsafe_substring(refname, start=5, end=refname.length())
+    } else {
+      refname
+    }
+    let ref_path = git_dir +
+      "/refs/relay/remote/" +
+      sender_session_id +
+      "/heads/" +
+      branch
+    let dir = serve_parent_path(ref_path)
+    fs.mkdir_p(dir)
+    fs.write_string(ref_path, commit_hex + "\n")
+    print_line(
+      "  Fetched: refs/relay/remote/\{sender_session_id}/heads/\{branch} -> \{commit_hex}",
+    )
+  }
+}
+
+///|
+fn serve_parent_path(path : String) -> String {
+  let mut last_slash = -1
+  let mut i = 0
+  for c in path {
+    if c == '/' {
+      last_slash = i
+    }
+    i += 1
+  }
+  if last_slash > 0 {
+    String::unsafe_substring(path, start=0, end=last_slash)
+  } else {
+    path
   }
 }
