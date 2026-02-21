@@ -436,22 +436,20 @@ async fn handle_push(args : Array[String]) -> Unit raise Error {
   }
   let mut resolved_push_url = raw_url
   if push_remote_uses_relay_signaling(resolved_push_url) {
-    let preferred_sender = match push_normalize_optional_value(
-      relay_preferred_sender_opt,
-    ) {
+    let preferred_sender = match
+      push_normalize_optional_value(relay_preferred_sender_opt) {
       Some(value) => Some(value)
       None => push_relay_preferred_sender()
     }
-    let preferred_repo = match push_normalize_optional_value(
-      relay_preferred_repo_opt,
-    ) {
+    let preferred_repo = match
+      push_normalize_optional_value(relay_preferred_repo_opt) {
       Some(value) => Some(value)
       None => push_relay_preferred_repo()
     }
     let (relay_sender, relay_push_url) = resolve_push_remote_via_relay(
       resolved_push_url,
-      preferred_sender=preferred_sender,
-      preferred_repo=preferred_repo,
+      preferred_sender~,
+      preferred_repo~,
     )
     if not(quiet) && not(porcelain) {
       print_line("Relay peer selected: \{relay_sender} -> \{relay_push_url}")
@@ -1454,7 +1452,11 @@ fn push_normalize_optional_value(value : String?) -> String? {
   match value {
     Some(raw) => {
       let normalized = raw.trim(chars=" \n\r\t").to_string()
-      if normalized.length() == 0 { None } else { Some(normalized) }
+      if normalized.length() == 0 {
+        None
+      } else {
+        Some(normalized)
+      }
     }
     None => None
   }
@@ -1477,25 +1479,23 @@ fn push_select_relay_peer(
   preferred_repo~ : String?,
 ) -> (String, String)? {
   match preferred_sender {
-    Some(target_sender) => {
+    Some(target_sender) =>
       for peer in peers {
         let (sender, push_url, _repo) = peer
         if sender == target_sender {
           return Some((sender, push_url))
         }
       }
-    }
     None => ()
   }
   match preferred_repo {
-    Some(target_repo) => {
+    Some(target_repo) =>
       for peer in peers {
         let (sender, push_url, repo) = peer
         if repo == Some(target_repo) {
           return Some((sender, push_url))
         }
       }
-    }
     None => ()
   }
   if peers.length() == 0 {
@@ -1516,11 +1516,8 @@ async fn resolve_push_remote_via_relay(
     relay_remote_url,
     auth_token=None,
   )
-  guard push_select_relay_peer(
-    peers,
-    preferred_sender=preferred_sender,
-    preferred_repo=preferred_repo,
-  ) is Some((sender, push_url)) else {
+  guard push_select_relay_peer(peers, preferred_sender~, preferred_repo~)
+    is Some((sender, push_url)) else {
     raise @bitcore.GitError::InvalidObject(
       "No push peers announced via relay: \{relay_remote_url}",
     )

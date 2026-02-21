@@ -229,22 +229,20 @@ async fn handle_fetch(args : Array[String]) -> Unit raise Error {
   }
   let mut resolved_remote_url = url
   if fetch_remote_uses_relay_signaling(resolved_remote_url) {
-    let preferred_sender = match fetch_normalize_optional_value(
-      relay_preferred_sender_opt,
-    ) {
+    let preferred_sender = match
+      fetch_normalize_optional_value(relay_preferred_sender_opt) {
       Some(value) => Some(value)
       None => fetch_relay_preferred_sender()
     }
-    let preferred_repo = match fetch_normalize_optional_value(
-      relay_preferred_repo_opt,
-    ) {
+    let preferred_repo = match
+      fetch_normalize_optional_value(relay_preferred_repo_opt) {
       Some(value) => Some(value)
       None => fetch_relay_preferred_repo()
     }
     let (relay_sender, relay_fetch_url) = resolve_fetch_remote_via_relay(
       resolved_remote_url,
-      preferred_sender=preferred_sender,
-      preferred_repo=preferred_repo,
+      preferred_sender~,
+      preferred_repo~,
     )
     if not(quiet) {
       print_line("Relay peer selected: \{relay_sender} -> \{relay_fetch_url}")
@@ -253,9 +251,7 @@ async fn handle_fetch(args : Array[String]) -> Unit raise Error {
   }
   let rewrite_rules = read_url_rewrite_rules(fs, git_dir)
   let resolved_url = rewrite_url_by_rules(
-    resolved_remote_url,
-    rewrite_rules,
-    false,
+    resolved_remote_url, rewrite_rules, false,
   )
   let mut is_partial_clone = false
   let mut inherited_filter = @protocol.FilterSpec::NoFilter
@@ -329,7 +325,11 @@ fn fetch_normalize_optional_value(value : String?) -> String? {
   match value {
     Some(raw) => {
       let normalized = raw.trim(chars=" \n\r\t").to_string()
-      if normalized.length() == 0 { None } else { Some(normalized) }
+      if normalized.length() == 0 {
+        None
+      } else {
+        Some(normalized)
+      }
     }
     None => None
   }
@@ -352,25 +352,23 @@ fn fetch_select_relay_peer(
   preferred_repo~ : String?,
 ) -> (String, String)? {
   match preferred_sender {
-    Some(target_sender) => {
+    Some(target_sender) =>
       for peer in peers {
         let (sender, fetch_url, _repo) = peer
         if sender == target_sender {
           return Some((sender, fetch_url))
         }
       }
-    }
     None => ()
   }
   match preferred_repo {
-    Some(target_repo) => {
+    Some(target_repo) =>
       for peer in peers {
         let (sender, fetch_url, repo) = peer
         if repo == Some(target_repo) {
           return Some((sender, fetch_url))
         }
       }
-    }
     None => ()
   }
   if peers.length() == 0 {
@@ -391,11 +389,8 @@ async fn resolve_fetch_remote_via_relay(
     relay_remote_url,
     auth_token=None,
   )
-  guard fetch_select_relay_peer(
-    peers,
-    preferred_sender=preferred_sender,
-    preferred_repo=preferred_repo,
-  ) is Some((sender, fetch_url)) else {
+  guard fetch_select_relay_peer(peers, preferred_sender~, preferred_repo~)
+    is Some((sender, fetch_url)) else {
     raise @bitcore.GitError::InvalidObject(
       "No fetch peers announced via relay: \{relay_remote_url}",
     )

@@ -46,6 +46,16 @@ pub fn update_subdir_base(OsFs, String, String) -> Unit
 // Errors
 
 // Types and methods
+type AiCherryPickCommandOptions
+
+type AiCommitCommandOptions
+
+type AiDiffUnit
+
+type AiMergeCommandOptions
+
+type AiRevertCommandOptions
+
 pub enum AliasResolution {
   Resolved(String, Array[String])
   Shell(String)
@@ -86,6 +96,12 @@ type HubPrListOptions
 type HubSearchOptions
 
 type HubSearchType
+
+type HubSyncCloneAnnounceOptions
+
+type HubSyncClonePeersOptions
+
+type HubSyncIssueUrlOptions
 
 type HubSyncRuntimeOptions
 

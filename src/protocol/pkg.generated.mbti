@@ -39,8 +39,6 @@ pub fn parse_remote(String) -> RemoteSpec
 
 pub fn parse_sideband(Bytes) -> (Int, Bytes)
 
-pub fn parse_symrefs_from_capabilities(Array[String]) -> Map[String, String]
-
 pub fn parse_v0_advertised_caps(Bytes) -> Array[String] raise @object.GitError
 
 pub fn parse_v2_advertised_caps(Bytes) -> Array[String] raise @object.GitError

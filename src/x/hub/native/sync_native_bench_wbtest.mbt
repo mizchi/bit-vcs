@@ -1,4 +1,5 @@
 ///| Benchmarks for relay push path.
+
 ///|
 /// Run with:
 /// - moon bench -p mizchi/bit/x/hub/native --target native -f sync_native_bench_wbtest.mbt
@@ -20,7 +21,9 @@ priv struct PushBenchFixture {
 }
 
 ///|
-fn build_push_bench_fixture(record_count : Int) -> PushBenchFixture raise @bit.GitError {
+fn build_push_bench_fixture(
+  record_count : Int,
+) -> PushBenchFixture raise @bit.GitError {
   let fs = @bit.TestFs::new()
   let git_dir = "/bench-relay/.git"
   fs.mkdir_p(git_dir)
@@ -49,7 +52,9 @@ fn build_push_bench_fixture(record_count : Int) -> PushBenchFixture raise @bit.G
 }
 
 ///|
-let relay_push_fixture_200 : PushBenchFixture = try! build_push_bench_fixture(200)
+let relay_push_fixture_200 : PushBenchFixture = try! build_push_bench_fixture(
+  200,
+)
 
 ///|
 async fn relay_bench_http_post_ok(

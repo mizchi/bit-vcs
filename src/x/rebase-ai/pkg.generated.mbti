@@ -9,6 +9,8 @@ import {
 }
 
 // Values
+pub fn ai_generate_commit_message(&@types.RepoFileSystem, String, String, String, options? : AiRebaseOptions) -> String raise @object.GitError
+
 pub fn ai_rebase_abort(&@types.FileSystem, &@types.RepoFileSystem, String) -> Unit raise @object.GitError
 
 pub fn ai_rebase_continue(&@types.FileSystem, &@types.RepoFileSystem, String, options? : AiRebaseOptions) -> @lib.RebaseResult raise @object.GitError
@@ -16,6 +18,8 @@ pub fn ai_rebase_continue(&@types.FileSystem, &@types.RepoFileSystem, String, op
 pub fn ai_rebase_skip(&@types.FileSystem, &@types.RepoFileSystem, String, options? : AiRebaseOptions) -> @lib.RebaseResult raise @object.GitError
 
 pub fn ai_rebase_start(&@types.FileSystem, &@types.RepoFileSystem, String, @object.ObjectId, options? : AiRebaseOptions) -> @lib.RebaseResult raise @object.GitError
+
+pub fn ai_resolve_conflict_paths(&@types.FileSystem, &@types.RepoFileSystem, String, Array[String], AiRebaseOptions, String) -> AiConflictResolution raise @object.GitError
 
 pub let default_model : String
 

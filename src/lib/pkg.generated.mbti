@@ -392,9 +392,13 @@ pub fn upload_pack_v2(&@types.RepoFileSystem, String, UploadPackRequestV2, Uploa
 
 pub fn write_index_entries(&@types.FileSystem, String, Array[IndexEntry]) -> Unit raise @object.GitError
 
+pub fn write_index_entries_with_skip_worktree(&@types.FileSystem, String, Array[IndexEntry], Map[String, Bool]) -> Unit raise @object.GitError
+
 pub fn write_loose_object(&@types.FileSystem, String, @object.ObjectType, Bytes) -> @object.ObjectId raise @object.GitError
 
 pub fn write_object_bytes(&@types.FileSystem, String, @object.ObjectId, Bytes) -> Unit raise @object.GitError
+
+pub fn write_skip_worktree_paths(&@types.FileSystem, String, Array[String]) -> Unit raise @object.GitError
 
 pub fn write_sparse_patterns(&@types.FileSystem, String, Array[String]) -> Unit raise @object.GitError
 

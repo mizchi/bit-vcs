@@ -809,7 +809,8 @@ test "hub sync parser: rejects unknown option" {
 test "hub sync clone announce parser: parse clone url and runtime options" {
   let options = parse_hub_sync_clone_announce_options(
     [
-      "--url", "http://127.0.0.1:9418/repo.git", "--repo", "repo-a", "--auth-token", "token-1", "relay+http://127.0.0.1:8787",
+      "--url", "http://127.0.0.1:9418/repo.git", "--repo", "repo-a", "--auth-token",
+      "token-1", "relay+http://127.0.0.1:8787",
     ],
     default_remote_url=Some("https://origin.example/repo.git"),
   )
@@ -839,12 +840,61 @@ test "hub sync clone announce parser: missing --url fails" {
 ///|
 test "hub sync clone peers parser: include-self and runtime options" {
   let options = parse_hub_sync_clone_peers_options(
-    ["--include-self", "--auth-token=token-2", "relay+https://relay.example.com"],
+    [
+      "--include-self", "--auth-token=token-2", "relay+https://relay.example.com",
+    ],
     default_remote_url=Some("https://origin.example/repo.git"),
   )
   assert_true(options.include_self)
   assert_eq(options.runtime.remote_url, Some("relay+https://relay.example.com"))
   assert_eq(options.runtime.auth_token, Some("token-2"))
+}
+
+///|
+test "hub sync issue-url parser: parse room/token and remote" {
+  let options = parse_hub_sync_issue_url_options(
+    [
+      "--room", "team-a", "--room-token", "token-1", "relay+https://relay.example.com",
+    ],
+    default_remote_url=Some("relay+https://origin.example"),
+  )
+  assert_eq(options.remote_url, Some("relay+https://relay.example.com"))
+  assert_eq(options.room, Some("team-a"))
+  assert_eq(options.room_token, Some("token-1"))
+}
+
+///|
+test "hub sync issue-url parser: missing --room value fails" {
+  ignore(
+    parse_hub_sync_issue_url_options(
+      ["--room"],
+      default_remote_url=Some("relay+https://origin.example"),
+    ) catch {
+      @bitcore.GitError::InvalidObject(message) => {
+        assert_true(message.contains("--room"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
+}
+
+///|
+test "hub sync issue-url parser: missing --room-token value fails" {
+  ignore(
+    parse_hub_sync_issue_url_options(
+      ["--room-token"],
+      default_remote_url=Some("relay+https://origin.example"),
+    ) catch {
+      @bitcore.GitError::InvalidObject(message) => {
+        assert_true(message.contains("--room-token"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
 }
 
 ///|

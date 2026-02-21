@@ -111,10 +111,16 @@ test "fetch-delegate: parses multiline -c overrides and ignores empty lines" {
 ///|
 test "fetch relay: remote detection handles explicit relay schemes" {
   assert_true(fetch_remote_uses_relay_signaling("relay+http://127.0.0.1:8788"))
-  assert_true(fetch_remote_uses_relay_signaling("relay+https://relay.example.com"))
+  assert_true(
+    fetch_remote_uses_relay_signaling("relay+https://relay.example.com"),
+  )
   assert_true(fetch_remote_uses_relay_signaling("relay://relay.example.com"))
-  assert_false(fetch_remote_uses_relay_signaling("https://relay.example.com/repo.git"))
-  assert_false(fetch_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"))
+  assert_false(
+    fetch_remote_uses_relay_signaling("https://relay.example.com/repo.git"),
+  )
+  assert_false(
+    fetch_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"),
+  )
 }
 
 ///|

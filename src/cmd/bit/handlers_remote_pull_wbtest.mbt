@@ -73,10 +73,16 @@ test "fetch transport: file path uses process transport" {
 ///|
 test "pull relay: remote detection handles explicit relay schemes" {
   assert_true(pull_remote_uses_relay_signaling("relay+http://127.0.0.1:8788"))
-  assert_true(pull_remote_uses_relay_signaling("relay+https://relay.example.com"))
+  assert_true(
+    pull_remote_uses_relay_signaling("relay+https://relay.example.com"),
+  )
   assert_true(pull_remote_uses_relay_signaling("relay://relay.example.com"))
-  assert_false(pull_remote_uses_relay_signaling("https://relay.example.com/repo.git"))
-  assert_false(pull_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"))
+  assert_false(
+    pull_remote_uses_relay_signaling("https://relay.example.com/repo.git"),
+  )
+  assert_false(
+    pull_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"),
+  )
 }
 
 ///|

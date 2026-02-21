@@ -61,6 +61,56 @@ test "relay: parse_relay_base_url handles explicit prefixes" {
 }
 
 ///|
+test "relay: relay_resolve_control_endpoint parses room and token query" {
+  let endpoint = relay_resolve_control_endpoint(
+    "relay+https://relay.example.com/base/?room=team-a&room_token=token-1",
+  )
+  assert_eq(endpoint.base_url, "https://relay.example.com/base")
+  assert_eq(endpoint.room, "team-a")
+  assert_eq(endpoint.room_token, Some("token-1"))
+}
+
+///|
+test "relay: relay_resolve_control_endpoint rejects invalid room name" {
+  ignore(
+    relay_resolve_control_endpoint(
+      "relay+https://relay.example.com?room=invalid/room",
+    ) catch {
+      @bit.GitError::InvalidObject(message) => {
+        assert_true(message.contains("invalid relay room"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid room error")
+}
+
+///|
+test "relay: publish and poll urls include room token query when provided" {
+  let publish_url = relay_publish_url(
+    "https://relay.example.com",
+    "team-a",
+    "node-a",
+    "event-1",
+    room_token=Some("token-1"),
+  )
+  assert_true(publish_url.contains("room=team-a"))
+  assert_true(publish_url.contains("room_token=token-1"))
+  let poll_url = relay_poll_url(
+    "https://relay.example.com",
+    "team-a",
+    3,
+    50,
+    room_token=Some("token-1"),
+  )
+  assert_true(poll_url.contains("room=team-a"))
+  assert_true(poll_url.contains("room_token=token-1"))
+  assert_true(poll_url.contains("after=3"))
+  assert_true(poll_url.contains("limit=50"))
+}
+
+///|
 test "relay: should_fallback_to_relay only for http 404 smart-http errors" {
   assert_true(
     should_fallback_to_relay(
@@ -159,7 +209,7 @@ async test "relay: relay_fetch_with_http imports records and stores cursor" {
   let reloaded = @hub.HubStore::load(objects, refs, node_id="node-local")
   let loaded = reloaded.get_record(objects, "hub/pr/1/meta")
   assert_true(loaded is Some(_))
-  let cursor_path = relay_cursor_path(git_dir, "http://relay.test")
+  let cursor_path = relay_cursor_path(git_dir, "http://relay.test?room=main")
   assert_true(fs.is_file(cursor_path))
 }
 
@@ -262,17 +312,13 @@ async test "relay: relay push adds relay signature headers when key env is set" 
   let clock_ref : &@lib.Clock = clock
   ignore(
     store.put_record(
-      objects,
-      refs,
-      clock_ref,
-      "hub/pr/1/meta",
-      "hub.pr",
-      "payload",
-      "node-local",
+      objects, refs, clock_ref, "hub/pr/1/meta", "hub.pr", "payload", "node-local",
     ),
   )
 
-  let key_path = "/tmp/bit-relay-sign-" + @env.now().to_int().to_string() + ".pem"
+  let key_path = "/tmp/bit-relay-sign-" +
+    @env.now().to_int().to_string() +
+    ".pem"
   let keygen_code = @process.run(
     "openssl",
     ["genpkey", "-algorithm", "Ed25519", "-out", key_path],
@@ -336,7 +382,11 @@ async test "relay: relay push adds relay signature headers when key env is set" 
 
   @sys.unset_env_var("BIT_RELAY_SIGN_PRIVATE_KEY_FILE")
   @sys.unset_env_var("BIT_RELAY_SIGN_PUBLIC_KEY")
-  ignore(@process.run("rm", ["-f", key_path], inherit_env=true) catch { _ => -1 })
+  ignore(
+    @process.run("rm", ["-f", key_path], inherit_env=true) catch {
+      _ => -1
+    },
+  )
 
   assert_true(result.success())
   assert_eq(seen_public_keys.length(), 1)
@@ -389,7 +439,7 @@ async test "relay: relay push uses BIT_RELAY_SENDER for publish sender query" {
   let result = relay_push_with_http(
     fs,
     git_dir,
-    "http://relay.test",
+    "relay+http://relay.test?room=team-a&room_token=token-1",
     post,
     signing_key=None,
     auth_token=None,
@@ -398,6 +448,8 @@ async test "relay: relay push uses BIT_RELAY_SENDER for publish sender query" {
   assert_true(result.success())
   assert_eq(seen_urls.length(), 1)
   assert_true(seen_urls[0].contains("sender=node-a"))
+  assert_true(seen_urls[0].contains("room=team-a"))
+  assert_true(seen_urls[0].contains("room_token=token-1"))
 }
 
 ///|
@@ -412,8 +464,9 @@ async test "relay: relay fetch forwards auth token header" {
   let refs : &@lib.RefStore = native_refs
   let hub = @hub.Hub::load(objects, refs, node_id="node-local")
   let seen_auth : Array[String] = []
+  let seen_urls : Array[String] = []
   let get = async fn(
-    _url : String,
+    url : String,
     headers : Map[String, String],
   ) -> (@bit.HttpResponse, Bytes) raise @bit.GitError {
     let no_ops : Array[async () -> Unit] = []
@@ -422,6 +475,7 @@ async test "relay: relay fetch forwards auth token header" {
         err => raise @bit.GitError::IoError(err.to_string())
       },
     )
+    seen_urls.push(url)
     match headers.get("Authorization") {
       Some(value) => seen_auth.push(value)
       None => ()
@@ -434,7 +488,7 @@ async test "relay: relay fetch forwards auth token header" {
     fs,
     fs,
     git_dir,
-    "http://relay.test",
+    "relay+http://relay.test?room=team-a&room_token=token-2",
     get,
     signing_key=None,
     auth_token=Some("token-2"),
@@ -442,6 +496,9 @@ async test "relay: relay fetch forwards auth token header" {
   assert_true(result.success())
   assert_eq(seen_auth.length(), 1)
   assert_eq(seen_auth[0], "Bearer token-2")
+  assert_eq(seen_urls.length(), 1)
+  assert_true(seen_urls[0].contains("room=team-a"))
+  assert_true(seen_urls[0].contains("room_token=token-2"))
 }
 
 ///|
@@ -488,8 +545,7 @@ async test "relay: strict signed policy rejects unsigned records during fetch" {
 
 ///|
 test "relay: parse_relay_poll_clone_peers extracts latest announce per sender" {
-  let body =
-    "{\"ok\":true,\"room\":\"main\",\"next_cursor\":4,\"envelopes\":[{\"room\":\"main\",\"id\":\"h1\",\"sender\":\"node-a\",\"topic\":\"notify\",\"payload\":{\"kind\":\"hub.record\",\"record\":\"ignored\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c1\",\"sender\":\"node-a\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://node-a:9418/repo.git\",\"repo\":\"repo-a\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c2\",\"sender\":\"node-self\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://self:9418/repo.git\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c3\",\"sender\":\"node-a\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://node-a-new:9418/repo.git\",\"repo\":\"repo-a\"},\"signature\":null}]}"
+  let body = "{\"ok\":true,\"room\":\"main\",\"next_cursor\":4,\"envelopes\":[{\"room\":\"main\",\"id\":\"h1\",\"sender\":\"node-a\",\"topic\":\"notify\",\"payload\":{\"kind\":\"hub.record\",\"record\":\"ignored\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c1\",\"sender\":\"node-a\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://node-a:9418/repo.git\",\"repo\":\"repo-a\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c2\",\"sender\":\"node-self\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://self:9418/repo.git\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c3\",\"sender\":\"node-a\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://node-a-new:9418/repo.git\",\"repo\":\"repo-a\"},\"signature\":null}]}"
   let (cursor, peers) = parse_relay_poll_clone_peers(
     body,
     include_self=false,
@@ -532,7 +588,7 @@ async test "relay: relay_publish_clone_announce_with_http publishes notify paylo
     )
   }
   let accepted = relay_publish_clone_announce_with_http(
-    "http://relay.test",
+    "relay+http://relay.test?room=team-a&room_token=token-3",
     "http://node-self:9418/repo.git",
     post,
     repo=Some("repo-self"),
@@ -543,18 +599,23 @@ async test "relay: relay_publish_clone_announce_with_http publishes notify paylo
   assert_eq(seen_urls.length(), 1)
   assert_true(seen_urls[0].contains("sender=node-self"))
   assert_true(seen_urls[0].contains("topic=notify"))
+  assert_true(seen_urls[0].contains("room=team-a"))
+  assert_true(seen_urls[0].contains("room_token=token-3"))
   assert_eq(seen_auth.length(), 1)
   assert_eq(seen_auth[0], "Bearer token-3")
   assert_eq(seen_bodies.length(), 1)
   assert_true(seen_bodies[0].contains("\"kind\":\"bit.clone.announce.v1\""))
-  assert_true(seen_bodies[0].contains("\"clone_url\":\"http://node-self:9418/repo.git\""))
+  assert_true(
+    seen_bodies[0].contains("\"clone_url\":\"http://node-self:9418/repo.git\""),
+  )
 }
 
 ///|
 async test "relay: relay_list_clone_peers_with_http filters self sender by default" {
   let seen_auth : Array[String] = []
+  let seen_urls : Array[String] = []
   let get = async fn(
-    _url : String,
+    url : String,
     headers : Map[String, String],
   ) -> (@bit.HttpResponse, Bytes) raise @bit.GitError {
     let no_ops : Array[async () -> Unit] = []
@@ -563,27 +624,32 @@ async test "relay: relay_list_clone_peers_with_http filters self sender by defau
         err => raise @bit.GitError::IoError(err.to_string())
       },
     )
+    seen_urls.push(url)
     match headers.get("Authorization") {
       Some(value) => seen_auth.push(value)
       None => ()
     }
-    let body =
-      "{\"ok\":true,\"room\":\"main\",\"next_cursor\":2,\"envelopes\":[{\"room\":\"main\",\"id\":\"c1\",\"sender\":\"bit\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://self:9418/repo.git\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c2\",\"sender\":\"node-peer\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://peer:9418/repo.git\",\"repo\":\"repo-peer\"},\"signature\":null}]}"
+    let body = "{\"ok\":true,\"room\":\"main\",\"next_cursor\":2,\"envelopes\":[{\"room\":\"main\",\"id\":\"c1\",\"sender\":\"bit\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://self:9418/repo.git\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c2\",\"sender\":\"node-peer\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://peer:9418/repo.git\",\"repo\":\"repo-peer\"},\"signature\":null}]}"
     (@bit.HttpResponse::new(200), @utf8.encode(body))
   }
   let peers = relay_list_clone_peers_with_http(
-    "http://relay.test",
+    "relay+http://relay.test?room=team-a&room_token=token-4",
     get,
     auth_token=Some("token-4"),
     include_self=false,
   )
   let peers_including_self = relay_list_clone_peers_with_http(
-    "http://relay.test",
+    "relay+http://relay.test?room=team-a&room_token=token-4",
     get,
     auth_token=Some("token-4"),
     include_self=true,
   )
   assert_eq(seen_auth.length(), 2)
+  assert_eq(seen_urls.length(), 2)
+  assert_true(seen_urls[0].contains("room=team-a"))
+  assert_true(seen_urls[0].contains("room_token=token-4"))
+  assert_true(seen_urls[1].contains("room=team-a"))
+  assert_true(seen_urls[1].contains("room_token=token-4"))
   assert_eq(seen_auth[0], "Bearer token-4")
   assert_eq(seen_auth[1], "Bearer token-4")
   assert_eq(peers.length(), 1)

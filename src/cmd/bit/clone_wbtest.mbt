@@ -77,10 +77,14 @@ test "clone reftable advanced compat depends on ref-format only" {
 ///|
 test "clone relay: remote detection handles explicit relay schemes" {
   assert_true(clone_remote_uses_relay_signaling("relay+http://127.0.0.1:8788"))
-  assert_true(clone_remote_uses_relay_signaling("relay+https://relay.example.com"))
+  assert_true(
+    clone_remote_uses_relay_signaling("relay+https://relay.example.com"),
+  )
   assert_true(clone_remote_uses_relay_signaling("relay://relay.example.com"))
   assert_false(clone_remote_uses_relay_signaling("https://relay.example.com"))
-  assert_false(clone_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"))
+  assert_false(
+    clone_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"),
+  )
 }
 
 ///|

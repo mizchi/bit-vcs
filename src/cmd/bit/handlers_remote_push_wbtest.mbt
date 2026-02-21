@@ -256,10 +256,16 @@ test "push/fetch options: strip long option prefix for error messages" {
 ///|
 test "push relay: remote detection handles explicit relay schemes" {
   assert_true(push_remote_uses_relay_signaling("relay+http://127.0.0.1:8788"))
-  assert_true(push_remote_uses_relay_signaling("relay+https://relay.example.com"))
+  assert_true(
+    push_remote_uses_relay_signaling("relay+https://relay.example.com"),
+  )
   assert_true(push_remote_uses_relay_signaling("relay://relay.example.com"))
-  assert_false(push_remote_uses_relay_signaling("https://relay.example.com/repo.git"))
-  assert_false(push_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"))
+  assert_false(
+    push_remote_uses_relay_signaling("https://relay.example.com/repo.git"),
+  )
+  assert_false(
+    push_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"),
+  )
 }
 
 ///|

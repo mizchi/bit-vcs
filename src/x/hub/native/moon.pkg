@@ -21,7 +21,7 @@ warnings = "-29"
 options(
   targets: {
     "sync_native.mbt": [ "native" ],
-    "sync_native_wbtest.mbt": [ "native" ],
     "sync_native_bench_wbtest.mbt": [ "native" ],
+    "sync_native_wbtest.mbt": [ "native" ],
   },
 )
