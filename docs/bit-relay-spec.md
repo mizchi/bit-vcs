@@ -234,3 +234,16 @@ CLI:
 ---
 
 この仕様は現行実装（`bit` と `bit-relay`）に合わせた draft であり、将来の topic 拡張や認証追加で更新される。
+
+## 11. ベンチマーク（k6）
+
+- シナリオ: `tools/relay-k6-scenario.js`
+- ローカル relay 起動付き実行:
+  - `bash tools/bench-relay-k6.sh`
+- 例（15秒、publish 120 req/s, poll 12 VU）:
+  - `K6_BENCH_DURATION=15s K6_PUBLISH_RATE=120 K6_POLL_VUS=12 bash tools/bench-relay-k6.sh`
+- 署名必須 relay（Cloudflare Worker など）で poll のみ測る場合:
+  - `RELAY_BASE_URL=https://bit-relay.mizchi.workers.dev K6_PUBLISH_RATE=0 K6_POLL_VUS=20 bash tools/bench-relay-k6.sh`
+- 署名必須 relay で publish も測る場合（ローカル signer 自動起動）:
+  - `RELAY_BASE_URL=https://bit-relay.mizchi.workers.dev RELAY_SIGN_PRIVATE_KEY_FILE=~/.config/bit/relay-ed25519.pem K6_PUBLISH_RATE=80 K6_POLL_VUS=8 bash tools/bench-relay-k6.sh`
+  - 必要に応じて `RELAY_SIGN_PUBLIC_KEY=<base64url>` で公開鍵を明示指定できる
