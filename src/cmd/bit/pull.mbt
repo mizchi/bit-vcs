@@ -25,16 +25,56 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
   let mut arg_remote : String? = None
   let mut arg_refspec : String? = None
   let mut pull_adhoc_remote = false
-  for arg in args {
+  let mut relay_preferred_sender_opt : String? = None
+  let mut relay_preferred_repo_opt : String? = None
+  let mut i = 0
+  while i < args.length() {
+    let arg = args[i]
     match arg {
-      "--rebase" | "-r" => rebase = true
-      _ if arg.has_prefix("-") => warn_unimplemented_arg("pull", arg)
-      _ =>
+      "--rebase" | "-r" => {
+        rebase = true
+        i += 1
+      }
+      "--relay-sender" if i + 1 < args.length() => {
+        relay_preferred_sender_opt = Some(args[i + 1])
+        i += 2
+      }
+      "--relay-sender" =>
+        raise @bitcore.GitError::InvalidObject(
+          "pull: --relay-sender requires a value",
+        )
+      "--relay-repo" if i + 1 < args.length() => {
+        relay_preferred_repo_opt = Some(args[i + 1])
+        i += 2
+      }
+      "--relay-repo" =>
+        raise @bitcore.GitError::InvalidObject(
+          "pull: --relay-repo requires a value",
+        )
+      _ if arg.has_prefix("--relay-sender=") => {
+        relay_preferred_sender_opt = Some(
+          String::unsafe_substring(arg, start=15, end=arg.length()),
+        )
+        i += 1
+      }
+      _ if arg.has_prefix("--relay-repo=") => {
+        relay_preferred_repo_opt = Some(
+          String::unsafe_substring(arg, start=13, end=arg.length()),
+        )
+        i += 1
+      }
+      _ if arg.has_prefix("-") => {
+        warn_unimplemented_arg("pull", arg)
+        i += 1
+      }
+      _ => {
         if arg_remote is None {
           arg_remote = Some(arg)
         } else if arg_refspec is None {
           arg_refspec = Some(arg)
         }
+        i += 1
+      }
     }
   }
   // Apply explicit remote argument
@@ -94,11 +134,33 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
       }
     None => ()
   }
-  guard remote_url is Some(url) else {
+  guard remote_url is Some(initial_url) else {
     raise @bitcore.GitError::InvalidObject("No remote configured")
   }
-  print_line("Fetching from \{url}...")
-  fetch_from_remote(fs, git_dir, root, remote_name, url, [])
+  let mut pull_url = initial_url
+  if pull_remote_uses_relay_signaling(pull_url) {
+    let preferred_sender = match pull_normalize_optional_value(
+      relay_preferred_sender_opt,
+    ) {
+      Some(value) => Some(value)
+      None => pull_relay_preferred_sender()
+    }
+    let preferred_repo = match pull_normalize_optional_value(
+      relay_preferred_repo_opt,
+    ) {
+      Some(value) => Some(value)
+      None => pull_relay_preferred_repo()
+    }
+    let (relay_sender, relay_fetch_url) = resolve_pull_remote_via_relay(
+      pull_url,
+      preferred_sender=preferred_sender,
+      preferred_repo=preferred_repo,
+    )
+    print_line("Relay peer selected: \{relay_sender} -> \{relay_fetch_url}")
+    pull_url = relay_fetch_url
+  }
+  print_line("Fetching from \{pull_url}...")
+  fetch_from_remote(fs, git_dir, root, remote_name, pull_url, [])
   let target_ref = match merge_ref {
     Some(r) =>
       if r.has_prefix("refs/remotes/") {
@@ -135,7 +197,7 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
   }
   let mut target_id = @bitlib.resolve_ref(fs, git_dir, target_ref)
   if target_id is None {
-    match @bitlib.resolve_local_repo_path(fs, root, url) {
+    match @bitlib.resolve_local_repo_path(fs, root, pull_url) {
       Some(src_path) =>
         match @bitlib.detect_git_dir(fs, src_path) {
           Some((src_git_dir, _)) =>
@@ -155,9 +217,9 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
           None => ()
         }
       None =>
-        match resolve_remote_ref_id(url, upstream_ref) {
+        match resolve_remote_ref_id(pull_url, upstream_ref) {
           Some((id, _)) => {
-            let pack = @bitnative.fetch_pack_http(url, [id], true)
+            let pack = @bitnative.fetch_pack_http(pull_url, [id], true)
             let objects = @pack.parse_packfile(pack)
             @pack.write_packfile_with_index(fs, git_dir, pack, objects)
             write_ref_file(fs, git_dir, target_ref, id)
@@ -256,6 +318,92 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
   if pull_adhoc_remote {
     @bitlib.remove_remote_refs(fs, fs, git_dir, remote_name)
   }
+}
+
+///|
+fn pull_remote_uses_relay_signaling(remote_url : String) -> Bool {
+  remote_url.has_prefix("relay+http://") ||
+  remote_url.has_prefix("relay+https://") ||
+  remote_url.has_prefix("relay://")
+}
+
+///|
+fn pull_normalize_optional_value(value : String?) -> String? {
+  match value {
+    Some(raw) => {
+      let normalized = raw.trim(chars=" \n\r\t").to_string()
+      if normalized.length() == 0 { None } else { Some(normalized) }
+    }
+    None => None
+  }
+}
+
+///|
+fn pull_relay_preferred_sender() -> String? {
+  pull_normalize_optional_value(@sys.get_env_var("BIT_RELAY_PULL_SENDER"))
+}
+
+///|
+fn pull_relay_preferred_repo() -> String? {
+  pull_normalize_optional_value(@sys.get_env_var("BIT_RELAY_PULL_REPO"))
+}
+
+///|
+fn pull_select_relay_peer(
+  peers : Array[(String, String, String?)],
+  preferred_sender~ : String?,
+  preferred_repo~ : String?,
+) -> (String, String)? {
+  match preferred_sender {
+    Some(target_sender) => {
+      for peer in peers {
+        let (sender, fetch_url, _repo) = peer
+        if sender == target_sender {
+          return Some((sender, fetch_url))
+        }
+      }
+    }
+    None => ()
+  }
+  match preferred_repo {
+    Some(target_repo) => {
+      for peer in peers {
+        let (sender, fetch_url, repo) = peer
+        if repo == Some(target_repo) {
+          return Some((sender, fetch_url))
+        }
+      }
+    }
+    None => ()
+  }
+  if peers.length() == 0 {
+    None
+  } else {
+    let (sender, fetch_url, _repo) = peers[0]
+    Some((sender, fetch_url))
+  }
+}
+
+///|
+async fn resolve_pull_remote_via_relay(
+  relay_remote_url : String,
+  preferred_sender~ : String?,
+  preferred_repo~ : String?,
+) -> (String, String) raise Error {
+  let peers = @hub_native.relay_list_clone_peers(
+    relay_remote_url,
+    auth_token=None,
+  )
+  guard pull_select_relay_peer(
+    peers,
+    preferred_sender=preferred_sender,
+    preferred_repo=preferred_repo,
+  ) is Some((sender, fetch_url)) else {
+    raise @bitcore.GitError::InvalidObject(
+      "No pull peers announced via relay: \{relay_remote_url}",
+    )
+  }
+  (sender, fetch_url)
 }
 
 ///|

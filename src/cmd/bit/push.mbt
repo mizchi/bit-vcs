@@ -19,28 +19,105 @@ async fn handle_push(args : Array[String]) -> Unit raise Error {
   let mut delete_mode = false
   let mut porcelain = false
   let mut quiet = false
+  let mut relay_preferred_sender_opt : String? = None
+  let mut relay_preferred_repo_opt : String? = None
   let positional_args : Array[String] = []
-  for arg in args {
+  let mut i = 0
+  while i < args.length() {
+    let arg = args[i]
     match arg {
-      "-f" | "--force" => force = true
-      "--no-force" => force = false
-      "-u" | "--set-upstream" => set_upstream = true
-      "--all" => push_all = true
-      "--tags" => push_tags = true
-      "--follow-tags" => follow_tags = true
-      "--no-follow-tags" => follow_tags = false
-      "--prune" => push_prune = true
-      "--dry-run" => dry_run = true
-      "-d" | "--delete" => delete_mode = true
-      "--porcelain" => porcelain = true
-      "-q" | "--quiet" => quiet = true
-      "--no-quiet" => quiet = false
+      "-f" | "--force" => {
+        force = true
+        i += 1
+      }
+      "--no-force" => {
+        force = false
+        i += 1
+      }
+      "-u" | "--set-upstream" => {
+        set_upstream = true
+        i += 1
+      }
+      "--all" => {
+        push_all = true
+        i += 1
+      }
+      "--tags" => {
+        push_tags = true
+        i += 1
+      }
+      "--follow-tags" => {
+        follow_tags = true
+        i += 1
+      }
+      "--no-follow-tags" => {
+        follow_tags = false
+        i += 1
+      }
+      "--prune" => {
+        push_prune = true
+        i += 1
+      }
+      "--dry-run" => {
+        dry_run = true
+        i += 1
+      }
+      "-d" | "--delete" => {
+        delete_mode = true
+        i += 1
+      }
+      "--porcelain" => {
+        porcelain = true
+        i += 1
+      }
+      "-q" | "--quiet" => {
+        quiet = true
+        i += 1
+      }
+      "--no-quiet" => {
+        quiet = false
+        i += 1
+      }
+      "--relay-sender" if i + 1 < args.length() => {
+        relay_preferred_sender_opt = Some(args[i + 1])
+        i += 2
+      }
+      "--relay-sender" =>
+        raise @bitcore.GitError::InvalidObject(
+          "push: --relay-sender requires a value",
+        )
+      "--relay-repo" if i + 1 < args.length() => {
+        relay_preferred_repo_opt = Some(args[i + 1])
+        i += 2
+      }
+      "--relay-repo" =>
+        raise @bitcore.GitError::InvalidObject(
+          "push: --relay-repo requires a value",
+        )
+      _ if arg.has_prefix("--relay-sender=") => {
+        relay_preferred_sender_opt = Some(
+          String::unsafe_substring(arg, start=15, end=arg.length()),
+        )
+        i += 1
+      }
+      _ if arg.has_prefix("--relay-repo=") => {
+        relay_preferred_repo_opt = Some(
+          String::unsafe_substring(arg, start=13, end=arg.length()),
+        )
+        i += 1
+      }
       "--no-ipv4" | "--no-ipv6" =>
         raise @bitcore.GitError::InvalidObject(
           "unknown option '" + option_name_without_prefix(arg) + "'",
         )
-      _ if arg.has_prefix("-") => warn_unimplemented_arg("push", arg)
-      _ => positional_args.push(arg)
+      _ if arg.has_prefix("-") => {
+        warn_unimplemented_arg("push", arg)
+        i += 1
+      }
+      _ => {
+        positional_args.push(arg)
+        i += 1
+      }
     }
   }
   let legacy_branch_remote : (String, String, String?)? = if positional_args.length() >
@@ -357,15 +434,39 @@ async fn handle_push(args : Array[String]) -> Unit raise Error {
   guard remote_url is Some(raw_url) else {
     raise @bitcore.GitError::InvalidObject("No such remote: \{remote_name}")
   }
+  let mut resolved_push_url = raw_url
+  if push_remote_uses_relay_signaling(resolved_push_url) {
+    let preferred_sender = match push_normalize_optional_value(
+      relay_preferred_sender_opt,
+    ) {
+      Some(value) => Some(value)
+      None => push_relay_preferred_sender()
+    }
+    let preferred_repo = match push_normalize_optional_value(
+      relay_preferred_repo_opt,
+    ) {
+      Some(value) => Some(value)
+      None => push_relay_preferred_repo()
+    }
+    let (relay_sender, relay_push_url) = resolve_push_remote_via_relay(
+      resolved_push_url,
+      preferred_sender=preferred_sender,
+      preferred_repo=preferred_repo,
+    )
+    if not(quiet) && not(porcelain) {
+      print_line("Relay peer selected: \{relay_sender} -> \{relay_push_url}")
+    }
+    resolved_push_url = relay_push_url
+  }
   let rewrite_rules = read_url_rewrite_rules(fs, git_dir)
   let has_explicit_pushurl = match remote_configs.get(remote_name) {
     Some(rc) => rc.pushurls.length() > 0
     None => false
   }
   let url = if has_explicit_pushurl {
-    raw_url
+    resolved_push_url
   } else {
-    rewrite_url_by_rules(raw_url, rewrite_rules, true)
+    rewrite_url_by_rules(resolved_push_url, rewrite_rules, true)
   }
   let push_target_display = if explicit_remote is Some(_) &&
     remote_configs.get(remote_name) is None {
@@ -1339,6 +1440,92 @@ async fn handle_push(args : Array[String]) -> Unit raise Error {
       "Branch '\{branch_name}' set up to track remote branch '\{remote_branch_name}' from '\{remote_name}'.",
     )
   }
+}
+
+///|
+fn push_remote_uses_relay_signaling(remote_url : String) -> Bool {
+  remote_url.has_prefix("relay+http://") ||
+  remote_url.has_prefix("relay+https://") ||
+  remote_url.has_prefix("relay://")
+}
+
+///|
+fn push_normalize_optional_value(value : String?) -> String? {
+  match value {
+    Some(raw) => {
+      let normalized = raw.trim(chars=" \n\r\t").to_string()
+      if normalized.length() == 0 { None } else { Some(normalized) }
+    }
+    None => None
+  }
+}
+
+///|
+fn push_relay_preferred_sender() -> String? {
+  push_normalize_optional_value(@sys.get_env_var("BIT_RELAY_PUSH_SENDER"))
+}
+
+///|
+fn push_relay_preferred_repo() -> String? {
+  push_normalize_optional_value(@sys.get_env_var("BIT_RELAY_PUSH_REPO"))
+}
+
+///|
+fn push_select_relay_peer(
+  peers : Array[(String, String, String?)],
+  preferred_sender~ : String?,
+  preferred_repo~ : String?,
+) -> (String, String)? {
+  match preferred_sender {
+    Some(target_sender) => {
+      for peer in peers {
+        let (sender, push_url, _repo) = peer
+        if sender == target_sender {
+          return Some((sender, push_url))
+        }
+      }
+    }
+    None => ()
+  }
+  match preferred_repo {
+    Some(target_repo) => {
+      for peer in peers {
+        let (sender, push_url, repo) = peer
+        if repo == Some(target_repo) {
+          return Some((sender, push_url))
+        }
+      }
+    }
+    None => ()
+  }
+  if peers.length() == 0 {
+    None
+  } else {
+    let (sender, push_url, _repo) = peers[0]
+    Some((sender, push_url))
+  }
+}
+
+///|
+async fn resolve_push_remote_via_relay(
+  relay_remote_url : String,
+  preferred_sender~ : String?,
+  preferred_repo~ : String?,
+) -> (String, String) raise Error {
+  let peers = @hub_native.relay_list_clone_peers(
+    relay_remote_url,
+    auth_token=None,
+  )
+  guard push_select_relay_peer(
+    peers,
+    preferred_sender=preferred_sender,
+    preferred_repo=preferred_repo,
+  ) is Some((sender, push_url)) else {
+    raise @bitcore.GitError::InvalidObject(
+      "No push peers announced via relay: \{relay_remote_url}",
+    )
+  }
+  (sender, push_url)
 }
 
 ///|

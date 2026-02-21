@@ -107,3 +107,66 @@ test "fetch-delegate: parses multiline -c overrides and ignores empty lines" {
   assert_eq(args[3], "core.eol=lf")
   restore_env_var_for_fetch_wbtest("GIT_CONFIG_OVERRIDES", prev_overrides)
 }
+
+///|
+test "fetch relay: remote detection handles explicit relay schemes" {
+  assert_true(fetch_remote_uses_relay_signaling("relay+http://127.0.0.1:8788"))
+  assert_true(fetch_remote_uses_relay_signaling("relay+https://relay.example.com"))
+  assert_true(fetch_remote_uses_relay_signaling("relay://relay.example.com"))
+  assert_false(fetch_remote_uses_relay_signaling("https://relay.example.com/repo.git"))
+  assert_false(fetch_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"))
+}
+
+///|
+test "fetch relay: preferred sender env is trimmed and optional" {
+  let prev_sender = @sys.get_env_var("BIT_RELAY_FETCH_SENDER")
+  @sys.set_env_var("BIT_RELAY_FETCH_SENDER", " node-a ")
+  assert_eq(fetch_relay_preferred_sender(), Some("node-a"))
+  @sys.set_env_var("BIT_RELAY_FETCH_SENDER", "   ")
+  assert_eq(fetch_relay_preferred_sender(), None)
+  restore_env_var_for_fetch_wbtest("BIT_RELAY_FETCH_SENDER", prev_sender)
+}
+
+///|
+test "fetch relay: preferred repo env is trimmed and optional" {
+  let prev_repo = @sys.get_env_var("BIT_RELAY_FETCH_REPO")
+  @sys.set_env_var("BIT_RELAY_FETCH_REPO", " repo-b ")
+  assert_eq(fetch_relay_preferred_repo(), Some("repo-b"))
+  @sys.set_env_var("BIT_RELAY_FETCH_REPO", "   ")
+  assert_eq(fetch_relay_preferred_repo(), None)
+  restore_env_var_for_fetch_wbtest("BIT_RELAY_FETCH_REPO", prev_repo)
+}
+
+///|
+test "fetch relay: sender filter is preferred over repo filter" {
+  let peers : Array[(String, String, String?)] = [
+    ("node-a", "http://node-a:9418/repo-a.git", Some("repo-a")),
+    ("node-b", "http://node-b:9418/repo-b.git", Some("repo-b")),
+  ]
+  let selected = fetch_select_relay_peer(
+    peers,
+    preferred_sender=Some("node-a"),
+    preferred_repo=Some("repo-b"),
+  )
+  assert_eq(selected, Some(("node-a", "http://node-a:9418/repo-a.git")))
+}
+
+///|
+test "fetch relay: falls back to repo and then first peer" {
+  let peers : Array[(String, String, String?)] = [
+    ("node-a", "http://node-a:9418/repo-a.git", Some("repo-a")),
+    ("node-b", "http://node-b:9418/repo-b.git", Some("repo-b")),
+  ]
+  let by_repo = fetch_select_relay_peer(
+    peers,
+    preferred_sender=Some("node-z"),
+    preferred_repo=Some("repo-b"),
+  )
+  assert_eq(by_repo, Some(("node-b", "http://node-b:9418/repo-b.git")))
+  let first = fetch_select_relay_peer(
+    peers,
+    preferred_sender=None,
+    preferred_repo=Some("repo-z"),
+  )
+  assert_eq(first, Some(("node-a", "http://node-a:9418/repo-a.git")))
+}

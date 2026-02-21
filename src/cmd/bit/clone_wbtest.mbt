@@ -75,6 +75,102 @@ test "clone reftable advanced compat depends on ref-format only" {
 }
 
 ///|
+test "clone relay: remote detection handles explicit relay schemes" {
+  assert_true(clone_remote_uses_relay_signaling("relay+http://127.0.0.1:8788"))
+  assert_true(clone_remote_uses_relay_signaling("relay+https://relay.example.com"))
+  assert_true(clone_remote_uses_relay_signaling("relay://relay.example.com"))
+  assert_false(clone_remote_uses_relay_signaling("https://relay.example.com"))
+  assert_false(clone_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"))
+}
+
+///|
+test "clone relay: select preferred sender when available" {
+  let peers : Array[(String, String, String?)] = [
+    ("node-a", "http://node-a:9418/repo.git", Some("repo-a")),
+    ("node-b", "http://node-b:9418/repo.git", Some("repo-b")),
+  ]
+  let selected = clone_select_relay_peer(
+    peers,
+    preferred_sender=Some("node-b"),
+    preferred_repo=None,
+  )
+  assert_eq(selected, Some(("node-b", "http://node-b:9418/repo.git")))
+}
+
+///|
+test "clone relay: fallback to first sender when preferred missing" {
+  let peers : Array[(String, String, String?)] = [
+    ("node-a", "http://node-a:9418/repo.git", Some("repo-a")),
+    ("node-b", "http://node-b:9418/repo.git", Some("repo-b")),
+  ]
+  let selected = clone_select_relay_peer(
+    peers,
+    preferred_sender=Some("node-z"),
+    preferred_repo=None,
+  )
+  assert_eq(selected, Some(("node-a", "http://node-a:9418/repo.git")))
+}
+
+///|
+test "clone relay: no peers returns none" {
+  let peers : Array[(String, String, String?)] = []
+  let selected = clone_select_relay_peer(
+    peers,
+    preferred_sender=None,
+    preferred_repo=None,
+  )
+  assert_eq(selected, None)
+}
+
+///|
+test "clone relay: preferred sender env is trimmed and optional" {
+  @sys.set_env_var("BIT_RELAY_CLONE_SENDER", " node-preferred ")
+  assert_eq(clone_relay_preferred_sender(), Some("node-preferred"))
+  @sys.set_env_var("BIT_RELAY_CLONE_SENDER", "   ")
+  assert_eq(clone_relay_preferred_sender(), None)
+  @sys.unset_env_var("BIT_RELAY_CLONE_SENDER")
+  assert_eq(clone_relay_preferred_sender(), None)
+}
+
+///|
+test "clone relay: preferred repo env is trimmed and optional" {
+  @sys.set_env_var("BIT_RELAY_CLONE_REPO", " repo-b ")
+  assert_eq(clone_relay_preferred_repo(), Some("repo-b"))
+  @sys.set_env_var("BIT_RELAY_CLONE_REPO", "   ")
+  assert_eq(clone_relay_preferred_repo(), None)
+  @sys.unset_env_var("BIT_RELAY_CLONE_REPO")
+  assert_eq(clone_relay_preferred_repo(), None)
+}
+
+///|
+test "clone relay: preferred repo selects matching peer" {
+  let peers : Array[(String, String, String?)] = [
+    ("node-a", "http://node-a:9418/repo-a.git", Some("repo-a")),
+    ("node-b", "http://node-b:9418/repo-b.git", Some("repo-b")),
+  ]
+  let selected = clone_select_relay_peer(
+    peers,
+    preferred_sender=None,
+    preferred_repo=Some("repo-b"),
+  )
+  assert_eq(selected, Some(("node-b", "http://node-b:9418/repo-b.git")))
+}
+
+///|
+test "clone relay: sender filter is applied before repo filter" {
+  let peers : Array[(String, String, String?)] = [
+    ("node-a", "http://node-a:9418/repo-a.git", Some("repo-a")),
+    ("node-b", "http://node-b:9418/repo-b.git", Some("repo-b")),
+  ]
+  let selected = clone_select_relay_peer(
+    peers,
+    preferred_sender=Some("node-a"),
+    preferred_repo=Some("repo-b"),
+  )
+  assert_eq(selected, Some(("node-a", "http://node-a:9418/repo-a.git")))
+}
+
+///|
 fn cleanup_clone_wbtest_tree(fs : OsFs, path : String) -> Unit {
   if fs.is_file(path) {
     fs.remove_file(path) catch {

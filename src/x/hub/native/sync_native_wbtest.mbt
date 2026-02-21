@@ -350,6 +350,57 @@ async test "relay: relay push adds relay signature headers when key env is set" 
 }
 
 ///|
+async test "relay: relay push uses BIT_RELAY_SENDER for publish sender query" {
+  let fs = @bit.TestFs::new()
+  let git_dir = "/repo/.git"
+  fs.mkdir_p(git_dir)
+  let db = @lib.ObjectDb::load_lazy(fs, git_dir)
+  let native_objects : NativeObjectStore = { db, rfs: fs, fs, git_dir }
+  let native_refs : NativeRefStore = { fs, rfs: fs, git_dir }
+  let objects : &@lib.ObjectStore = native_objects
+  let refs : &@lib.RefStore = native_refs
+  let store = @hub.HubStore::load(objects, refs, node_id="node-local")
+  let clock : FixedClock = { now_ts: 1L }
+  let clock_ref : &@lib.Clock = clock
+  ignore(
+    store.put_record(
+      objects, refs, clock_ref, "hub/pr/1/meta", "hub.pr", "payload", "node-local",
+    ),
+  )
+  @sys.set_env_var("BIT_RELAY_SENDER", "node-a")
+  let seen_urls : Array[String] = []
+  let post = async fn(
+    url : String,
+    _body : Bytes,
+    _headers : Map[String, String],
+  ) -> (@bit.HttpResponse, Bytes) raise @bit.GitError {
+    let no_ops : Array[async () -> Unit] = []
+    ignore(
+      @async.all(no_ops) catch {
+        err => raise @bit.GitError::IoError(err.to_string())
+      },
+    )
+    seen_urls.push(url)
+    (
+      @bit.HttpResponse::new(200),
+      @utf8.encode("{\"ok\":true,\"accepted\":true,\"cursor\":1}"),
+    )
+  }
+  let result = relay_push_with_http(
+    fs,
+    git_dir,
+    "http://relay.test",
+    post,
+    signing_key=None,
+    auth_token=None,
+  )
+  @sys.unset_env_var("BIT_RELAY_SENDER")
+  assert_true(result.success())
+  assert_eq(seen_urls.length(), 1)
+  assert_true(seen_urls[0].contains("sender=node-a"))
+}
+
+///|
 async test "relay: relay fetch forwards auth token header" {
   let fs = @bit.TestFs::new()
   let git_dir = "/repo/.git"
@@ -433,4 +484,112 @@ async test "relay: strict signed policy rejects unsigned records during fetch" {
   )
   let record = strict_store.get_record(objects, "hub/pr/1/meta")
   assert_true(record is None)
+}
+
+///|
+test "relay: parse_relay_poll_clone_peers extracts latest announce per sender" {
+  let body =
+    "{\"ok\":true,\"room\":\"main\",\"next_cursor\":4,\"envelopes\":[{\"room\":\"main\",\"id\":\"h1\",\"sender\":\"node-a\",\"topic\":\"notify\",\"payload\":{\"kind\":\"hub.record\",\"record\":\"ignored\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c1\",\"sender\":\"node-a\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://node-a:9418/repo.git\",\"repo\":\"repo-a\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c2\",\"sender\":\"node-self\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://self:9418/repo.git\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c3\",\"sender\":\"node-a\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://node-a-new:9418/repo.git\",\"repo\":\"repo-a\"},\"signature\":null}]}"
+  let (cursor, peers) = parse_relay_poll_clone_peers(
+    body,
+    include_self=false,
+    self_sender="node-self",
+  )
+  assert_eq(cursor, 4)
+  assert_eq(peers.length(), 1)
+  let (sender, clone_url, repo) = peers[0]
+  assert_eq(sender, "node-a")
+  assert_eq(clone_url, "http://node-a-new:9418/repo.git")
+  assert_eq(repo, Some("repo-a"))
+}
+
+///|
+async test "relay: relay_publish_clone_announce_with_http publishes notify payload" {
+  @sys.set_env_var("BIT_RELAY_SENDER", "node-self")
+  let seen_urls : Array[String] = []
+  let seen_bodies : Array[String] = []
+  let seen_auth : Array[String] = []
+  let post = async fn(
+    url : String,
+    body : Bytes,
+    headers : Map[String, String],
+  ) -> (@bit.HttpResponse, Bytes) raise @bit.GitError {
+    let no_ops : Array[async () -> Unit] = []
+    ignore(
+      @async.all(no_ops) catch {
+        err => raise @bit.GitError::IoError(err.to_string())
+      },
+    )
+    seen_urls.push(url)
+    seen_bodies.push(@utf8.decode_lossy(body[:]))
+    match headers.get("Authorization") {
+      Some(value) => seen_auth.push(value)
+      None => ()
+    }
+    (
+      @bit.HttpResponse::new(200),
+      @utf8.encode("{\"ok\":true,\"accepted\":true,\"cursor\":1}"),
+    )
+  }
+  let accepted = relay_publish_clone_announce_with_http(
+    "http://relay.test",
+    "http://node-self:9418/repo.git",
+    post,
+    repo=Some("repo-self"),
+    auth_token=Some("token-3"),
+  )
+  @sys.unset_env_var("BIT_RELAY_SENDER")
+  assert_true(accepted)
+  assert_eq(seen_urls.length(), 1)
+  assert_true(seen_urls[0].contains("sender=node-self"))
+  assert_true(seen_urls[0].contains("topic=notify"))
+  assert_eq(seen_auth.length(), 1)
+  assert_eq(seen_auth[0], "Bearer token-3")
+  assert_eq(seen_bodies.length(), 1)
+  assert_true(seen_bodies[0].contains("\"kind\":\"bit.clone.announce.v1\""))
+  assert_true(seen_bodies[0].contains("\"clone_url\":\"http://node-self:9418/repo.git\""))
+}
+
+///|
+async test "relay: relay_list_clone_peers_with_http filters self sender by default" {
+  let seen_auth : Array[String] = []
+  let get = async fn(
+    _url : String,
+    headers : Map[String, String],
+  ) -> (@bit.HttpResponse, Bytes) raise @bit.GitError {
+    let no_ops : Array[async () -> Unit] = []
+    ignore(
+      @async.all(no_ops) catch {
+        err => raise @bit.GitError::IoError(err.to_string())
+      },
+    )
+    match headers.get("Authorization") {
+      Some(value) => seen_auth.push(value)
+      None => ()
+    }
+    let body =
+      "{\"ok\":true,\"room\":\"main\",\"next_cursor\":2,\"envelopes\":[{\"room\":\"main\",\"id\":\"c1\",\"sender\":\"bit\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://self:9418/repo.git\"},\"signature\":null},{\"room\":\"main\",\"id\":\"c2\",\"sender\":\"node-peer\",\"topic\":\"notify\",\"payload\":{\"kind\":\"bit.clone.announce.v1\",\"clone_url\":\"http://peer:9418/repo.git\",\"repo\":\"repo-peer\"},\"signature\":null}]}"
+    (@bit.HttpResponse::new(200), @utf8.encode(body))
+  }
+  let peers = relay_list_clone_peers_with_http(
+    "http://relay.test",
+    get,
+    auth_token=Some("token-4"),
+    include_self=false,
+  )
+  let peers_including_self = relay_list_clone_peers_with_http(
+    "http://relay.test",
+    get,
+    auth_token=Some("token-4"),
+    include_self=true,
+  )
+  assert_eq(seen_auth.length(), 2)
+  assert_eq(seen_auth[0], "Bearer token-4")
+  assert_eq(seen_auth[1], "Bearer token-4")
+  assert_eq(peers.length(), 1)
+  let (sender, clone_url, repo) = peers[0]
+  assert_eq(sender, "node-peer")
+  assert_eq(clone_url, "http://peer:9418/repo.git")
+  assert_eq(repo, Some("repo-peer"))
+  assert_eq(peers_including_self.length(), 2)
 }

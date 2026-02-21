@@ -248,6 +248,12 @@ fn print_hub_sync_usage() -> Unit {
   println(
     "  fetch [<remote-url>] [--auth-token <token>] [--signing-key <key>] [--require-signed|--allow-unsigned]",
   )
+  println(
+    "  clone-announce [<remote-url>] --url <clone-url> [--repo <repo>] [--auth-token <token>]",
+  )
+  println(
+    "  clone-peers [<remote-url>] [--include-self] [--auth-token <token>]",
+  )
   println("")
   println("Remote URL:")
   println("  - Smart HTTP remote: https://host/repo.git")
@@ -257,6 +263,7 @@ fn print_hub_sync_usage() -> Unit {
   println("Relay signing env:")
   println("  BIT_RELAY_SIGN_PRIVATE_KEY_FILE=<path>   Sign relay publish requests with Ed25519")
   println("  BIT_RELAY_SIGN_PUBLIC_KEY=<base64url>    Optional override for x-relay-public-key")
+  println("  BIT_RELAY_SENDER=<id>                    Sender id for relay publish (default: bit)")
 }
 
 ///|
@@ -3639,6 +3646,8 @@ async fn handle_hub_sync(args : Array[String]) -> Unit raise Error {
   match subcmd {
     "push" => handle_hub_sync_push(rest)
     "fetch" => handle_hub_sync_fetch(rest)
+    "clone-announce" => handle_hub_sync_clone_announce(rest)
+    "clone-peers" => handle_hub_sync_clone_peers(rest)
     "help" | "-h" | "--help" => print_hub_sync_usage()
     _ => {
       eprint_line("bit hub sync: unknown subcommand '\{subcmd}'")
@@ -3763,6 +3772,120 @@ fn parse_hub_sync_runtime_options(
 }
 
 ///|
+struct HubSyncCloneAnnounceOptions {
+  runtime : HubSyncRuntimeOptions
+  clone_url : String
+  repo : String?
+}
+
+///|
+fn parse_hub_sync_clone_announce_options(
+  args : Array[String],
+  default_remote_url? : String? = None,
+) -> HubSyncCloneAnnounceOptions raise @bitcore.GitError {
+  let runtime_args : Array[String] = []
+  let mut clone_url : String? = None
+  let mut repo : String? = None
+  let mut i = 0
+  while i < args.length() {
+    let arg = args[i]
+    match arg {
+      "--url" if i + 1 < args.length() => {
+        clone_url = Some(args[i + 1])
+        i += 2
+        continue
+      }
+      "--url" =>
+        raise @bitcore.GitError::InvalidObject(
+          "hub sync clone-announce: --url requires a value",
+        )
+      "--repo" if i + 1 < args.length() => {
+        repo = Some(args[i + 1])
+        i += 2
+        continue
+      }
+      "--repo" =>
+        raise @bitcore.GitError::InvalidObject(
+          "hub sync clone-announce: --repo requires a value",
+        )
+      _ if arg.has_prefix("--url=") => {
+        clone_url = Some(
+          String::unsafe_substring(arg, start=6, end=arg.length()),
+        )
+        i += 1
+        continue
+      }
+      _ if arg.has_prefix("--repo=") => {
+        repo = Some(
+          String::unsafe_substring(arg, start=7, end=arg.length()),
+        )
+        i += 1
+        continue
+      }
+      _ => {
+        runtime_args.push(arg)
+        i += 1
+        continue
+      }
+    }
+  }
+  let runtime = parse_hub_sync_runtime_options(
+    runtime_args,
+    default_remote_url=default_remote_url,
+  )
+  guard clone_url is Some(raw_clone_url) else {
+    raise @bitcore.GitError::InvalidObject(
+      "hub sync clone-announce: --url is required",
+    )
+  }
+  let normalized_clone_url = raw_clone_url.trim(chars=" \n\r\t").to_string()
+  if normalized_clone_url.length() == 0 {
+    raise @bitcore.GitError::InvalidObject(
+      "hub sync clone-announce: --url must not be empty",
+    )
+  }
+  let normalized_repo = match repo {
+    Some(raw_repo) => {
+      let value = raw_repo.trim(chars=" \n\r\t").to_string()
+      if value.length() == 0 { None } else { Some(value) }
+    }
+    None => None
+  }
+  {
+    runtime,
+    clone_url: normalized_clone_url,
+    repo: normalized_repo,
+  }
+}
+
+///|
+struct HubSyncClonePeersOptions {
+  runtime : HubSyncRuntimeOptions
+  include_self : Bool
+}
+
+///|
+fn parse_hub_sync_clone_peers_options(
+  args : Array[String],
+  default_remote_url? : String? = None,
+) -> HubSyncClonePeersOptions raise @bitcore.GitError {
+  let runtime_args : Array[String] = []
+  let mut include_self = false
+  for arg in args {
+    if arg == "--include-self" {
+      include_self = true
+    } else {
+      runtime_args.push(arg)
+    }
+  }
+  let runtime = parse_hub_sync_runtime_options(
+    runtime_args,
+    default_remote_url=default_remote_url,
+  )
+  { runtime, include_self }
+}
+
+///|
 async fn handle_hub_sync_push(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   let git_dir = root + "/.git"
@@ -3791,6 +3914,61 @@ async fn handle_hub_sync_push(args : Array[String]) -> Unit raise Error {
   } else {
     eprint_line(result.message())
     @sys.exit(1)
+  }
+}
+
+///|
+async fn handle_hub_sync_clone_announce(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  let options = parse_hub_sync_clone_announce_options(
+    args,
+    default_remote_url=get_effective_remote_url(fs, git_dir),
+  )
+  guard options.runtime.remote_url is Some(url) else {
+    raise @bitcore.GitError::InvalidObject("No remote configured")
+  }
+  let accepted = @hub_native.relay_publish_clone_announce(
+    url,
+    options.clone_url,
+    repo=options.repo,
+    auth_token=options.runtime.auth_token,
+  )
+  if accepted {
+    print_line("Clone announce published")
+  } else {
+    print_line("Clone announce already published (duplicate id)")
+  }
+}
+
+///|
+async fn handle_hub_sync_clone_peers(args : Array[String]) -> Unit raise Error {
+  let root = get_work_root()
+  let git_dir = root + "/.git"
+  let fs = OsFs::new()
+  let options = parse_hub_sync_clone_peers_options(
+    args,
+    default_remote_url=get_effective_remote_url(fs, git_dir),
+  )
+  guard options.runtime.remote_url is Some(url) else {
+    raise @bitcore.GitError::InvalidObject("No remote configured")
+  }
+  let peers = @hub_native.relay_list_clone_peers(
+    url,
+    auth_token=options.runtime.auth_token,
+    include_self=options.include_self,
+  )
+  if peers.length() == 0 {
+    print_line("No clone peers found")
+    return ()
+  }
+  for peer in peers {
+    let (sender, clone_url, repo) = peer
+    match repo {
+      Some(repo_name) => print_line("\{sender}\t\{clone_url}\t\{repo_name}")
+      None => print_line("\{sender}\t\{clone_url}")
+    }
   }
 }
 

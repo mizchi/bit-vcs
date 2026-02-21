@@ -28,6 +28,8 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
   let mut ref_spec : String? = None
   let mut ref_format = clone_default_ref_format()
   let mut ssh_ip_option : String? = None
+  let mut relay_preferred_sender_opt : String? = None
+  let mut relay_preferred_repo_opt : String? = None
   let mut i = 0
   while i < args.length() {
     let arg = args[i]
@@ -71,6 +73,30 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
     }
     if arg == "-4" || arg == "-6" {
       ssh_ip_option = Some(arg)
+      i += 1
+      continue
+    }
+    if arg == "--relay-sender" && i + 1 < args.length() {
+      relay_preferred_sender_opt = Some(args[i + 1])
+      i += 2
+      continue
+    }
+    if arg.has_prefix("--relay-sender=") {
+      relay_preferred_sender_opt = Some(
+        String::unsafe_substring(arg, start=15, end=arg.length()),
+      )
+      i += 1
+      continue
+    }
+    if arg == "--relay-repo" && i + 1 < args.length() {
+      relay_preferred_repo_opt = Some(args[i + 1])
+      i += 2
+      continue
+    }
+    if arg.has_prefix("--relay-repo=") {
+      relay_preferred_repo_opt = Some(
+        String::unsafe_substring(arg, start=13, end=arg.length()),
+      )
       i += 1
       continue
     }
@@ -201,8 +227,31 @@ async fn handle_clone(args : Array[String]) -> Unit raise Error {
   if positional.length() > 1 {
     dest = Some(positional[1])
   }
-  guard url is Some(remote_url) else {
+  guard url is Some(initial_remote_url) else {
     raise @bitcore.GitError::InvalidObject("repository URL required")
+  }
+  let mut remote_url = initial_remote_url
+  if clone_remote_uses_relay_signaling(remote_url) {
+    let preferred_sender = match clone_normalize_optional_value(
+      relay_preferred_sender_opt,
+    ) {
+      Some(value) => Some(value)
+      None => clone_relay_preferred_sender()
+    }
+    let preferred_repo = match clone_normalize_optional_value(
+      relay_preferred_repo_opt,
+    ) {
+      Some(value) => Some(value)
+      None => clone_relay_preferred_repo()
+    }
+    let (relay_sender, relay_clone_url) = resolve_clone_remote_via_relay(
+      remote_url,
+      preferred_sender=preferred_sender,
+      preferred_repo=preferred_repo,
+    )
+    print_line("Relay peer selected: \{relay_sender} -> \{relay_clone_url}")
+    remote_url = relay_clone_url
+    url = Some(relay_clone_url)
   }
   let config_overrides = @bitlib.parse_config_overrides()
   let protocol_version = match config_overrides.get("protocol.version") {
@@ -690,6 +739,94 @@ fn resolve_local_clone_source_file(
     return Some(normalize_path(raw))
   }
   None
+}
+
+///|
+fn clone_remote_uses_relay_signaling(remote_url : String) -> Bool {
+  remote_url.has_prefix("relay+http://") ||
+  remote_url.has_prefix("relay+https://") ||
+  remote_url.has_prefix("relay://")
+}
+
+///|
+fn clone_normalize_optional_value(value : String?) -> String? {
+  match value {
+    Some(raw) => {
+      let normalized = raw.trim(chars=" \n\r\t").to_string()
+      if normalized.length() == 0 { None } else { Some(normalized) }
+    }
+    None => None
+  }
+}
+
+///|
+fn clone_relay_preferred_sender() -> String? {
+  clone_normalize_optional_value(@sys.get_env_var("BIT_RELAY_CLONE_SENDER"))
+}
+
+///|
+fn clone_relay_preferred_repo() -> String? {
+  clone_normalize_optional_value(@sys.get_env_var("BIT_RELAY_CLONE_REPO"))
+}
+
+///|
+fn clone_select_relay_peer(
+  peers : Array[(String, String, String?)],
+  preferred_sender~ : String?,
+  preferred_repo~ : String?,
+) -> (String, String)? {
+  match preferred_sender {
+    Some(target_sender) => {
+      for peer in peers {
+        let (sender, clone_url, _repo) = peer
+        if sender == target_sender {
+          return Some((sender, clone_url))
+        }
+      }
+    }
+    None => ()
+  }
+  match preferred_repo {
+    Some(target_repo) => {
+      for peer in peers {
+        let (sender, clone_url, repo) = peer
+        if repo == Some(target_repo) {
+          return Some((sender, clone_url))
+        }
+      }
+    }
+    None => ()
+  }
+  if peers.length() == 0 {
+    None
+  } else {
+    let (sender, clone_url, _repo) = peers[0]
+    Some((sender, clone_url))
+  }
+}
+
+///|
+async fn resolve_clone_remote_via_relay(
+  relay_remote_url : String,
+  preferred_sender~ : String?,
+  preferred_repo~ : String?,
+) -> (String, String) raise Error {
+  let peers = @hub_native.relay_list_clone_peers(
+    relay_remote_url,
+    auth_token=None,
+  )
+  guard clone_select_relay_peer(
+    peers,
+    preferred_sender=preferred_sender,
+    preferred_repo=preferred_repo,
+  ) is Some(
+    (sender, clone_url),
+  ) else {
+    raise @bitcore.GitError::InvalidObject(
+      "No clone peers announced via relay: \{relay_remote_url}",
+    )
+  }
+  (sender, clone_url)
 }
 
 ///|

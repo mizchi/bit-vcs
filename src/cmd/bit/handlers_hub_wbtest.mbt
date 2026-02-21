@@ -806,6 +806,48 @@ test "hub sync parser: rejects unknown option" {
 }
 
 ///|
+test "hub sync clone announce parser: parse clone url and runtime options" {
+  let options = parse_hub_sync_clone_announce_options(
+    [
+      "--url", "http://127.0.0.1:9418/repo.git", "--repo", "repo-a", "--auth-token", "token-1", "relay+http://127.0.0.1:8787",
+    ],
+    default_remote_url=Some("https://origin.example/repo.git"),
+  )
+  assert_eq(options.clone_url, "http://127.0.0.1:9418/repo.git")
+  assert_eq(options.repo, Some("repo-a"))
+  assert_eq(options.runtime.remote_url, Some("relay+http://127.0.0.1:8787"))
+  assert_eq(options.runtime.auth_token, Some("token-1"))
+}
+
+///|
+test "hub sync clone announce parser: missing --url fails" {
+  ignore(
+    parse_hub_sync_clone_announce_options(
+      ["relay+http://127.0.0.1:8787"],
+      default_remote_url=Some("https://origin.example/repo.git"),
+    ) catch {
+      @bitcore.GitError::InvalidObject(message) => {
+        assert_true(message.contains("--url"))
+        return ()
+      }
+      err => fail("unexpected error: \{err.to_string()}")
+    },
+  )
+  fail("expected invalid object error")
+}
+
+///|
+test "hub sync clone peers parser: include-self and runtime options" {
+  let options = parse_hub_sync_clone_peers_options(
+    ["--include-self", "--auth-token=token-2", "relay+https://relay.example.com"],
+    default_remote_url=Some("https://origin.example/repo.git"),
+  )
+  assert_true(options.include_self)
+  assert_eq(options.runtime.remote_url, Some("relay+https://relay.example.com"))
+  assert_eq(options.runtime.auth_token, Some("token-2"))
+}
+
+///|
 test "hub notify: select_notify_records filters notify-only records" {
   let canonical = @hub.HubRecord::new(
     "hub/pr/1/meta", "pr", "canonical", "node-a", 1L,

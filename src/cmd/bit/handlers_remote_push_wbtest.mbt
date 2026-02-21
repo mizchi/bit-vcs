@@ -1,4 +1,12 @@
 ///|
+fn restore_env_var_for_push_wbtest(name : String, prev : String?) -> Unit {
+  match prev {
+    Some(value) => @sys.set_env_var(name, value)
+    None => @sys.unset_env_var(name)
+  }
+}
+
+///|
 test "push-default: upstream uses configured tracking" {
   let plan = resolve_push_target_plan(
     None,
@@ -243,6 +251,65 @@ test "push-refspec: ignore head and rev-expression tokens" {
 test "push/fetch options: strip long option prefix for error messages" {
   assert_eq(option_name_without_prefix("--no-ipv4"), "no-ipv4")
   assert_eq(option_name_without_prefix("--no-ipv6"), "no-ipv6")
+}
+
+///|
+test "push relay: remote detection handles explicit relay schemes" {
+  assert_true(push_remote_uses_relay_signaling("relay+http://127.0.0.1:8788"))
+  assert_true(push_remote_uses_relay_signaling("relay+https://relay.example.com"))
+  assert_true(push_remote_uses_relay_signaling("relay://relay.example.com"))
+  assert_false(push_remote_uses_relay_signaling("https://relay.example.com/repo.git"))
+  assert_false(push_remote_uses_relay_signaling("git@github.com:mizchi/bit.git"))
+}
+
+///|
+test "push relay: preferred sender/repo env is trimmed and optional" {
+  let prev_sender = @sys.get_env_var("BIT_RELAY_PUSH_SENDER")
+  let prev_repo = @sys.get_env_var("BIT_RELAY_PUSH_REPO")
+  @sys.set_env_var("BIT_RELAY_PUSH_SENDER", " node-a ")
+  @sys.set_env_var("BIT_RELAY_PUSH_REPO", " repo-b ")
+  assert_eq(push_relay_preferred_sender(), Some("node-a"))
+  assert_eq(push_relay_preferred_repo(), Some("repo-b"))
+  @sys.set_env_var("BIT_RELAY_PUSH_SENDER", "   ")
+  @sys.set_env_var("BIT_RELAY_PUSH_REPO", "   ")
+  assert_eq(push_relay_preferred_sender(), None)
+  assert_eq(push_relay_preferred_repo(), None)
+  restore_env_var_for_push_wbtest("BIT_RELAY_PUSH_SENDER", prev_sender)
+  restore_env_var_for_push_wbtest("BIT_RELAY_PUSH_REPO", prev_repo)
+}
+
+///|
+test "push relay: sender filter is preferred over repo filter" {
+  let peers : Array[(String, String, String?)] = [
+    ("node-a", "http://node-a:9418/repo-a.git", Some("repo-a")),
+    ("node-b", "http://node-b:9418/repo-b.git", Some("repo-b")),
+  ]
+  let selected = push_select_relay_peer(
+    peers,
+    preferred_sender=Some("node-a"),
+    preferred_repo=Some("repo-b"),
+  )
+  assert_eq(selected, Some(("node-a", "http://node-a:9418/repo-a.git")))
+}
+
+///|
+test "push relay: falls back to repo and then first peer" {
+  let peers : Array[(String, String, String?)] = [
+    ("node-a", "http://node-a:9418/repo-a.git", Some("repo-a")),
+    ("node-b", "http://node-b:9418/repo-b.git", Some("repo-b")),
+  ]
+  let by_repo = push_select_relay_peer(
+    peers,
+    preferred_sender=Some("node-z"),
+    preferred_repo=Some("repo-b"),
+  )
+  assert_eq(by_repo, Some(("node-b", "http://node-b:9418/repo-b.git")))
+  let first = push_select_relay_peer(
+    peers,
+    preferred_sender=None,
+    preferred_repo=Some("repo-z"),
+  )
+  assert_eq(first, Some(("node-a", "http://node-a:9418/repo-a.git")))
 }
 
 ///|

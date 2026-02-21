@@ -177,6 +177,43 @@ fn relay_auth_token() -> String? {
 }
 
 ///|
+fn relay_sender_safe_char(c : Char) -> Bool {
+  (c >= 'a' && c <= 'z') ||
+  (c >= 'A' && c <= 'Z') ||
+  (c >= '0' && c <= '9') ||
+  c == '.' ||
+  c == '_' ||
+  c == '-'
+}
+
+///|
+fn normalize_relay_sender(raw : String) -> String {
+  let trimmed = raw.trim(chars=" \n\r\t").to_string()
+  let out = StringBuilder::new()
+  for c in trimmed {
+    if relay_sender_safe_char(c) {
+      out.write_char(c)
+    } else {
+      out.write_char('-')
+    }
+  }
+  let normalized = out.to_string()
+  if normalized.length() == 0 {
+    "bit"
+  } else {
+    normalized
+  }
+}
+
+///|
+fn relay_sender() -> String {
+  match @sys.get_env_var("BIT_RELAY_SENDER") {
+    Some(value) => normalize_relay_sender(value)
+    None => "bit"
+  }
+}
+
+///|
 fn relay_conflict_policy() -> @hub.RecordMergePolicy {
   match @sys.get_env_var("BIT_HUB_CONFLICT_POLICY") {
     Some(value) =>
@@ -672,6 +709,80 @@ fn parse_relay_poll_body(
 }
 
 ///|
+fn relay_clone_announce_kind() -> String {
+  "bit.clone.announce.v1"
+}
+
+///|
+fn parse_relay_poll_clone_peers(
+  text : String,
+  include_self? : Bool = false,
+  self_sender? : String = "",
+) -> (Int, Array[(String, String, String?)]) raise @bit.GitError {
+  let parsed = @json.parse(text) catch {
+    err =>
+      raise @bit.GitError::InvalidObject(
+        "invalid relay poll response: \{err.to_string()}",
+      )
+  }
+  guard parsed is Json::Object(root) else {
+    raise @bit.GitError::InvalidObject(
+      "invalid relay poll response: expected object",
+    )
+  }
+  let next_cursor = json_get_int(root, "next_cursor", 0)
+  let peers_by_sender : Map[String, (String, String, String?)] = {}
+  match root.get("envelopes") {
+    Some(Json::Array(items)) =>
+      for item in items {
+        guard item is Json::Object(envelope_obj) else { continue }
+        let sender = json_get_string(
+          envelope_obj,
+          "sender",
+          "",
+        ).trim(chars=" \n\r\t").to_string()
+        if sender.length() == 0 {
+          continue
+        }
+        if not(include_self) && sender == self_sender {
+          continue
+        }
+        guard envelope_obj.get("payload") is Some(Json::Object(payload_obj)) else {
+          continue
+        }
+        if json_get_string(payload_obj, "kind", "") != relay_clone_announce_kind() {
+          continue
+        }
+        let clone_url = json_get_string(
+          payload_obj,
+          "clone_url",
+          "",
+        ).trim(chars=" \n\r\t").to_string()
+        if clone_url.length() == 0 {
+          continue
+        }
+        let repo = match payload_obj.get("repo") {
+          Some(Json::String(raw_repo)) => {
+            let normalized = raw_repo.trim(chars=" \n\r\t").to_string()
+            if normalized.length() == 0 { None } else { Some(normalized) }
+          }
+          _ => None
+        }
+        peers_by_sender[sender] = (sender, clone_url, repo)
+      }
+    _ => ()
+  }
+  let entries = peers_by_sender.to_array()
+  entries.sort_by((a, b) => String::compare(a.0, b.0))
+  let peers : Array[(String, String, String?)] = []
+  for entry in entries {
+    let (_sender, peer) = entry
+    peers.push(peer)
+  }
+  (next_cursor, peers)
+}
+
+///|
 fn hub_record_entry_name(key : String) -> String {
   let (target_id, _) = @bit.create_blob_string(key)
   target_id.to_hex()
@@ -908,13 +1019,160 @@ fn write_relay_cursor(
 }
 
 ///|
-fn relay_publish_url(base_url : String, event_id : String) -> String {
-  "\{base_url}/api/v1/publish?room=main&sender=bit&topic=notify&id=\{event_id}"
+fn relay_publish_url(base_url : String, sender : String, event_id : String) -> String {
+  "\{base_url}/api/v1/publish?room=main&sender=\{sender}&topic=notify&id=\{event_id}"
 }
 
 ///|
 fn relay_poll_url(base_url : String, after : Int, limit : Int) -> String {
   "\{base_url}/api/v1/poll?room=main&after=\{after}&limit=\{limit}"
+}
+
+///|
+fn relay_resolve_control_base_url(remote_url : String) -> String raise @bit.GitError {
+  match parse_relay_base_url(remote_url) {
+    Some(base_url) => base_url
+    None =>
+      if is_http_url(remote_url) {
+        trim_trailing_slash(remote_url)
+      } else {
+        raise @bit.GitError::InvalidObject(
+          "relay url must be relay+http(s)://, relay://, or http(s)://",
+        )
+      }
+  }
+}
+
+///|
+fn relay_normalize_optional_text(value : String?) -> String? {
+  match value {
+    Some(raw) => {
+      let normalized = raw.trim(chars=" \n\r\t").to_string()
+      if normalized.length() == 0 { None } else { Some(normalized) }
+    }
+    None => None
+  }
+}
+
+///|
+fn relay_build_clone_announce_payload(
+  clone_url : String,
+  repo~ : String?,
+) -> Json {
+  let payload_obj : Map[String, Json] = {}
+  payload_obj["kind"] = Json::string(relay_clone_announce_kind())
+  payload_obj["clone_url"] = Json::string(clone_url)
+  match repo {
+    Some(value) => payload_obj["repo"] = Json::string(value)
+    None => ()
+  }
+  Json::object(payload_obj)
+}
+
+///|
+fn relay_clone_announce_event_id(
+  sender : String,
+  clone_url : String,
+  repo~ : String?,
+) -> String {
+  let repo_text = match repo {
+    Some(value) => value
+    None => ""
+  }
+  let stable_text = sender + "\n" + clone_url + "\n" + repo_text
+  let (blob_id, _) = @bit.create_blob_string(stable_text)
+  "clone-" + blob_id.to_hex()
+}
+
+///|
+async fn relay_publish_clone_announce_with_http(
+  remote_url : String,
+  clone_url : String,
+  http_post : async (String, Bytes, Map[String, String]) -> (
+    @bit.HttpResponse,
+    Bytes,
+  ) raise @bit.GitError,
+  repo~ : String?,
+  auth_token~ : String?,
+) -> Bool raise @bit.GitError {
+  let base_url = relay_resolve_control_base_url(remote_url)
+  let normalized_clone_url = clone_url.trim(chars=" \n\r\t").to_string()
+  if normalized_clone_url.length() == 0 {
+    raise @bit.GitError::InvalidObject(
+      "hub sync clone-announce: --url must not be empty",
+    )
+  }
+  let normalized_repo = relay_normalize_optional_text(repo)
+  let sender = relay_sender()
+  let payload_json = relay_build_clone_announce_payload(
+    normalized_clone_url,
+    repo=normalized_repo,
+  )
+  let payload_text = payload_json.stringify()
+  let event_id = relay_clone_announce_event_id(
+    sender,
+    normalized_clone_url,
+    repo=normalized_repo,
+  )
+  let base_headers = relay_headers_with_auth(
+    { "Content-Type": "application/json" },
+    auth_token,
+  )
+  let relay_signing = relay_http_signing_config()
+  let publish_signature = relay_sign_publish_payload(
+    relay_signing,
+    sender,
+    "main",
+    "notify",
+    event_id,
+    payload_json,
+  )
+  let headers = relay_headers_with_publish_signature(
+    relay_copy_headers(base_headers),
+    publish_signature,
+  )
+  let url = relay_publish_url(base_url, sender, event_id)
+  let (response, response_body) = http_post(
+    url,
+    @utf8.encode(payload_text),
+    headers,
+  )
+  if response.code != 200 {
+    let body_text = @utf8.decode_lossy(response_body[:])
+    raise @bit.GitError::ProtocolError(
+      "Relay clone announce failed: HTTP \{response.code} \{body_text}",
+    )
+  }
+  parse_relay_publish_accepted(@utf8.decode_lossy(response_body[:]))
+}
+
+///|
+async fn relay_list_clone_peers_with_http(
+  remote_url : String,
+  http_get : async (String, Map[String, String]) -> (@bit.HttpResponse, Bytes) raise @bit.GitError,
+  auth_token~ : String?,
+  include_self? : Bool = false,
+) -> Array[(String, String, String?)] raise @bit.GitError {
+  let base_url = relay_resolve_control_base_url(remote_url)
+  let headers = relay_headers_with_auth(
+    { "Accept": "application/json" },
+    auth_token,
+  )
+  let url = relay_poll_url(base_url, 0, 200)
+  let (response, response_body) = http_get(url, headers)
+  if response.code != 200 {
+    let body_text = @utf8.decode_lossy(response_body[:])
+    raise @bit.GitError::ProtocolError(
+      "Relay clone peers poll failed: HTTP \{response.code} \{body_text}",
+    )
+  }
+  let poll_text = @utf8.decode_lossy(response_body[:])
+  let (_, peers) = parse_relay_poll_clone_peers(
+    poll_text,
+    include_self=include_self,
+    self_sender=relay_sender(),
+  )
+  peers
 }
 
 ///|
@@ -941,6 +1199,7 @@ async fn relay_push_with_http(
     )
   }
   let base_url = trim_trailing_slash(remote_url)
+  let sender = relay_sender()
   let db = @lib.ObjectDb::load(rfs, git_dir)
   let ro_objects : NativeReadObjectStore = { db, rfs }
   let ro_refs : NativeReadRefStore = { rfs, git_dir }
@@ -970,7 +1229,7 @@ async fn relay_push_with_http(
     let event_id = record_blob_id.to_hex()
     let publish_signature = relay_sign_publish_payload(
       relay_signing,
-      "bit",
+      sender,
       "main",
       "notify",
       event_id,
@@ -980,7 +1239,7 @@ async fn relay_push_with_http(
       relay_copy_headers(base_headers),
       publish_signature,
     )
-    let url = relay_publish_url(base_url, event_id)
+    let url = relay_publish_url(base_url, sender, event_id)
     let (response, response_body) = http_post(
       url,
       @utf8.encode(payload_text),
@@ -1255,6 +1514,44 @@ pub async fn hub_push(
         }
       }
   }
+}
+
+///|
+pub async fn relay_publish_clone_announce(
+  remote_url : String,
+  clone_url : String,
+  repo~ : String?,
+  auth_token~ : String?,
+) -> Bool raise @bit.GitError {
+  let effective_auth_token = match auth_token {
+    Some(value) => Some(value)
+    None => relay_auth_token()
+  }
+  relay_publish_clone_announce_with_http(
+    remote_url,
+    clone_url,
+    @bitnative.native_http_post,
+    repo=repo,
+    auth_token=effective_auth_token,
+  )
+}
+
+///|
+pub async fn relay_list_clone_peers(
+  remote_url : String,
+  auth_token~ : String?,
+  include_self? : Bool = false,
+) -> Array[(String, String, String?)] raise @bit.GitError {
+  let effective_auth_token = match auth_token {
+    Some(value) => Some(value)
+    None => relay_auth_token()
+  }
+  relay_list_clone_peers_with_http(
+    remote_url,
+    @bitnative.native_http_get,
+    auth_token=effective_auth_token,
+    include_self=include_self,
+  )
 }
 
 ///|
