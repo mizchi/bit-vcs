@@ -430,18 +430,47 @@ async fn relay_sign_ed25519(
   private_key_file : String,
   message : String,
 ) -> String raise @bit.GitError {
-  let stdin = relay_prepare_process_stdin(message)
+  // Ed25519 is a oneshot signature scheme — openssl pkeyutl cannot read
+  // from a pipe because it needs to know the input size upfront.  Write to
+  // a temporary file so -in works reliably on both macOS and Linux.
+  let tmp_in = "/tmp/bit-relay-sign-in-" +
+    @env.now().to_int().to_string() +
+    ".bin"
+  let write_code = @process.run(
+    "sh",
+    ["-c", "cat > \"$BIT_SIGN_TMP\""],
+    inherit_env=true,
+    stdin=relay_prepare_process_stdin(message),
+    extra_env={ "BIT_SIGN_TMP": tmp_in },
+  ) catch {
+    err =>
+      raise @bit.GitError::IoError(
+        "relay sign: failed to write temp file: \{err}",
+      )
+  }
+  if write_code != 0 {
+    raise @bit.GitError::IoError("relay sign: failed to write temp file")
+  }
   let (code, stdout, stderr) = @process.collect_output(
     "sh",
     [
-      "-c", "openssl pkeyutl -sign -inkey \"$BIT_RELAY_SIGN_PRIVATE_KEY_FILE\" -in /dev/stdin | openssl base64 -A",
+      "-c",
+      "openssl pkeyutl -sign -rawin -inkey \"$BIT_RELAY_SIGN_PRIVATE_KEY_FILE\" -in \"$BIT_SIGN_TMP\" | openssl base64 -A; rm -f \"$BIT_SIGN_TMP\"",
     ],
     inherit_env=true,
-    stdin~,
-    extra_env={ "BIT_RELAY_SIGN_PRIVATE_KEY_FILE": private_key_file },
+    extra_env={
+      "BIT_RELAY_SIGN_PRIVATE_KEY_FILE": private_key_file,
+      "BIT_SIGN_TMP": tmp_in,
+    },
   ) catch {
-    err =>
-      raise @bit.GitError::IoError("relay sign: openssl pkeyutl failed: \{err}")
+    err => {
+      ignore(
+        @process.run("rm", ["-f", tmp_in], inherit_env=true) catch { _ => -1 },
+      )
+      raise @bit.GitError::IoError(
+        "relay sign: openssl pkeyutl failed: \{err}",
+      )
+    }
   }
   if code != 0 {
     let err_text = stderr.text() catch { _ => "" }
