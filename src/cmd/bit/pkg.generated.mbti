@@ -97,6 +97,8 @@ type HubSearchOptions
 
 type HubSearchType
 
+type HubServeOptions
+
 type HubSyncCloneAnnounceOptions
 
 type HubSyncClonePeersOptions
@@ -149,6 +151,10 @@ type RunGitCommandInvocation
 type RunGitEnvSnapshot
 
 type ScalarCloneOptions
+
+type ServeFeatureBroadcast
+
+type ServePollRequest
 
 type SubdirChangeInfo
 

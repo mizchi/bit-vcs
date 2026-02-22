@@ -247,7 +247,7 @@ fn collect_tree_objects(
   tree_id : @bitcore.ObjectId,
   out : Array[(@bitcore.ObjectId, String)],
   visited : Map[String, Bool],
-  parent_path~ : String = "",
+  parent_path? : String = "",
 ) -> Unit {
   let hex = tree_id.to_hex()
   if visited.contains(hex) {

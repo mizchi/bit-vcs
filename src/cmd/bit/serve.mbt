@@ -1,6 +1,8 @@
 ///|
 fn print_hub_serve_usage() -> Unit {
-  println("Usage: bit hub serve [<relay-url>] [--repo <name>] [--allow-push] [--broadcast] [--auto-fetch] [--room <name>]")
+  println(
+    "Usage: bit hub serve [<relay-url>] [--repo <name>] [--allow-push] [--broadcast] [--auto-fetch] [--room <name>]",
+  )
   println("")
   println("Serve the current repository via relay for remote cloning.")
   println("The relay URL should use relay+https:// or relay+http:// prefix.")
@@ -9,15 +11,19 @@ fn print_hub_serve_usage() -> Unit {
   println("  --repo <name>    Repository name to advertise")
   println("  --allow-push     Accept incoming push (receive-pack)")
   println("  --broadcast      Broadcast feature notifications on push")
-  println("  --auto-fetch     Auto-fetch when feature-broadcast is detected in room")
-  println("  --room <name>    Room name for broadcast/auto-fetch (default: serve-{session_id})")
+  println(
+    "  --auto-fetch     Auto-fetch when feature-broadcast is detected in room",
+  )
+  println(
+    "  --room <name>    Room name for broadcast/auto-fetch (default: serve-{session_id})",
+  )
   println("  -h, --help       Show this help")
 }
 
 ///|
 struct HubServeOptions {
   relay_url : String
-  repo : String?
+  _repo : String?
   allow_push : Bool
   broadcast : Bool
   auto_fetch : Bool
@@ -60,9 +66,7 @@ fn parse_hub_serve_options(args : Array[String]) -> HubServeOptions? {
       continue
     }
     if arg.has_prefix("--room=") {
-      room = Some(
-        String::unsafe_substring(arg, start=7, end=arg.length()),
-      )
+      room = Some(String::unsafe_substring(arg, start=7, end=arg.length()))
       i += 1
       continue
     }
@@ -72,9 +76,7 @@ fn parse_hub_serve_options(args : Array[String]) -> HubServeOptions? {
       continue
     }
     if arg.has_prefix("--repo=") {
-      repo = Some(
-        String::unsafe_substring(arg, start=7, end=arg.length()),
-      )
+      repo = Some(String::unsafe_substring(arg, start=7, end=arg.length()))
       i += 1
       continue
     }
@@ -97,7 +99,7 @@ fn parse_hub_serve_options(args : Array[String]) -> HubServeOptions? {
         }
       }
   }
-  Some({ relay_url: url, repo, allow_push, broadcast, auto_fetch, room })
+  Some({ relay_url: url, _repo: repo, allow_push, broadcast, auto_fetch, room })
 }
 
 ///|
@@ -140,10 +142,7 @@ fn serve_decode_bytes(data : Bytes) -> String {
 }
 
 ///|
-fn serve_json_get_string(
-  obj : Map[String, Json],
-  key : String,
-) -> String? {
+fn serve_json_get_string(obj : Map[String, Json], key : String) -> String? {
   match obj.get(key) {
     Some(Json::String(value)) => Some(value)
     _ => None
@@ -223,7 +222,9 @@ fn serve_base64_decode(b64 : String) -> Bytes {
   let mut i = 0
   while i + 1 < chars.length() {
     if i + 3 < chars.length() {
-      let n = (chars[i] << 18) | (chars[i + 1] << 12) | (chars[i + 2] << 6) |
+      let n = (chars[i] << 18) |
+        (chars[i + 1] << 12) |
+        (chars[i + 2] << 6) |
         chars[i + 3]
       out.push(((n >> 16) & 0xff).to_byte())
       out.push(((n >> 8) & 0xff).to_byte())
@@ -244,13 +245,9 @@ fn serve_base64_decode(b64 : String) -> Bytes {
 }
 
 ///|
-async fn serve_register_session(
-  base_url : String,
-) -> String raise Error {
+async fn serve_register_session(base_url : String) -> String raise Error {
   let url = base_url + "/api/v1/serve/register"
-  let headers : Map[String, String] = {
-    "Content-Type": "application/json",
-  }
+  let headers : Map[String, String] = { "Content-Type": "application/json" }
   let (response, body) = @bitnative.native_http_post(
     url,
     Bytes::new(0),
@@ -269,9 +266,7 @@ async fn serve_register_session(
       )
   }
   guard parsed is Json::Object(obj) else {
-    raise @bitcore.GitError::ProtocolError(
-      "Invalid register response format",
-    )
+    raise @bitcore.GitError::ProtocolError("Invalid register response format")
   }
   guard serve_json_get_string(obj, "session_id") is Some(session_id) else {
     raise @bitcore.GitError::ProtocolError(
@@ -286,7 +281,7 @@ struct ServePollRequest {
   request_id : String
   req_method : String
   path : String
-  headers : Map[String, String]
+  _headers : Map[String, String]
   body_base64 : String?
 }
 
@@ -329,7 +324,13 @@ fn serve_parse_poll_response(body : Bytes) -> Array[ServePollRequest]? {
       _ => ()
     }
     let body_base64 : String? = serve_json_get_string(obj, "body_base64")
-    requests.push({ request_id, req_method, path, headers, body_base64 })
+    requests.push({
+      request_id,
+      req_method,
+      path,
+      _headers: headers,
+      body_base64,
+    })
   }
   Some(requests)
 }
@@ -344,9 +345,7 @@ async fn serve_poll(
   let headers : Map[String, String] = {}
   let (response, body) = @bitnative.native_http_get(url, headers)
   if response.code != 200 {
-    raise @bitcore.GitError::ProtocolError(
-      "Poll failed: HTTP \{response.code}",
-    )
+    raise @bitcore.GitError::ProtocolError("Poll failed: HTTP \{response.code}")
   }
   match serve_parse_poll_response(body) {
     Some(requests) => requests
@@ -389,13 +388,9 @@ async fn serve_respond(
   let payload = Json::object(payload_obj)
   let payload_text = payload.stringify()
   let payload_bytes = @encoding.encode(@encoding.Encoding::UTF8, payload_text)
-  let headers : Map[String, String] = {
-    "Content-Type": "application/json",
-  }
+  let headers : Map[String, String] = { "Content-Type": "application/json" }
   let (response, _body) = @bitnative.native_http_post(
-    url,
-    payload_bytes,
-    headers,
+    url, payload_bytes, headers,
   )
   if response.code != 200 {
     eprint_line(
@@ -405,6 +400,7 @@ async fn serve_respond(
 }
 
 ///|
+
 ///|
 fn serve_extract_query_param(path : String, param : String) -> String? {
   let query_start = path.find("?")
@@ -441,7 +437,7 @@ fn serve_rewrite_ref_incoming(refname : String) -> String {
 async fn serve_handle_git_request(
   repo_root : String,
   req : ServePollRequest,
-  allow_push~ : Bool = false,
+  allow_push? : Bool = false,
 ) -> (Int, Map[String, String], Bytes) raise Error {
   let path = req.path
   if path.has_prefix("/info/refs") {
@@ -662,11 +658,7 @@ fn serve_rewrite_status_response(
       }
       match trimmed_rest.find(" ") {
         Some(sp) => {
-          let refname = String::unsafe_substring(
-            trimmed_rest,
-            start=0,
-            end=sp,
-          )
+          let refname = String::unsafe_substring(trimmed_rest, start=0, end=sp)
           let msg = String::unsafe_substring(
             trimmed_rest,
             start=sp + 1,
@@ -755,7 +747,9 @@ async fn handle_hub_serve(args : Array[String]) -> Unit raise Error {
   print_line("Session registered: \{session_id}")
   print_line("Clone URL: \{options.relay_url}/\{session_id}")
   if options.allow_push {
-    print_line("Push enabled: incoming pushes will be stored in refs/relay/incoming/")
+    print_line(
+      "Push enabled: incoming pushes will be stored in refs/relay/incoming/",
+    )
   }
   if options.broadcast {
     print_line("Broadcast enabled: feature notifications will be sent on push")
@@ -765,7 +759,9 @@ async fn handle_hub_serve(args : Array[String]) -> Unit raise Error {
     None => "serve-\{session_id}"
   }
   if options.auto_fetch {
-    print_line("Auto-fetch enabled: watching room '\{effective_room}' for feature broadcasts")
+    print_line(
+      "Auto-fetch enabled: watching room '\{effective_room}' for feature broadcasts",
+    )
   }
   print_line("Waiting for requests... (Ctrl-C to stop)")
   let poll_timeout = if options.auto_fetch { 5 } else { 30 }
@@ -805,7 +801,11 @@ async fn handle_hub_serve(args : Array[String]) -> Unit raise Error {
           None => ""
         }
         serve_broadcast_push_notification(
-          base_url, session_id, repo_root, req.path, room=broadcast_room,
+          base_url,
+          session_id,
+          repo_root,
+          req.path,
+          room=broadcast_room,
         ) catch {
           err => eprint_line("Broadcast error: \{err}")
         }
@@ -848,7 +848,7 @@ async fn serve_broadcast_push_notification(
   session_id : String,
   repo_root : String,
   _path : String,
-  room~ : String = "",
+  room? : String = "",
 ) -> Unit raise Error {
   // Collect incoming refs that were just updated
   let fs = OsFs::new()
@@ -887,19 +887,18 @@ async fn serve_broadcast_push_notification(
   let payload_text = payload.stringify()
   let payload_bytes = @encoding.encode(@encoding.Encoding::UTF8, payload_text)
   let room = if room.length() > 0 { room } else { "serve-\{session_id}" }
-  let event_id = session_id + "-push-" +
-    @bitcore.sha1(payload_bytes).to_hex()
+  let event_id = session_id + "-push-" + @bitcore.sha1(payload_bytes).to_hex()
   let url = "\{base_url}/api/v1/publish?room=\{room}&sender=\{session_id}&topic=notify&id=\{event_id}"
   let headers : Map[String, String] = {
     "Content-Type": "application/octet-stream",
   }
-  let (response, _body) = @bitnative.native_http_post(url, payload_bytes, headers)
+  let (response, _body) = @bitnative.native_http_post(
+    url, payload_bytes, headers,
+  )
   if response.code == 200 {
     print_line("[\{session_id}] Broadcast: feature push notification sent")
   } else {
-    eprint_line(
-      "[\{session_id}] Broadcast warning: HTTP \{response.code}",
-    )
+    eprint_line("[\{session_id}] Broadcast warning: HTTP \{response.code}")
   }
 }
 
@@ -998,7 +997,10 @@ async fn serve_auto_fetch_from_room(
       "[\{own_session_id}] Auto-fetch: detected broadcast from \{broadcast.sender_session_id}",
     )
     serve_fetch_from_session(
-      base_url, broadcast.sender_session_id, broadcast.refs, repo_root,
+      base_url,
+      broadcast.sender_session_id,
+      broadcast.refs,
+      repo_root,
     ) catch {
       err =>
         eprint_line(
