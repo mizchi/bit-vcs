@@ -245,7 +245,13 @@ fn serve_base64_decode(b64 : String) -> Bytes {
 }
 
 ///|
-async fn serve_register_session(base_url : String) -> String raise Error {
+struct ServeSession {
+  session_id : String
+  session_token : String
+}
+
+///|
+async fn serve_register_session(base_url : String) -> ServeSession raise Error {
   let url = base_url + "/api/v1/serve/register"
   let headers : Map[String, String] = { "Content-Type": "application/json" }
   let (response, body) = @bitnative.native_http_post(
@@ -273,7 +279,12 @@ async fn serve_register_session(base_url : String) -> String raise Error {
       "Missing session_id in register response",
     )
   }
-  session_id
+  guard serve_json_get_string(obj, "session_token") is Some(session_token) else {
+    raise @bitcore.GitError::ProtocolError(
+      "Missing session_token in register response",
+    )
+  }
+  { session_id, session_token }
 }
 
 ///|
@@ -340,8 +351,13 @@ async fn serve_poll(
   base_url : String,
   session_id : String,
   timeout : Int,
+  session_token? : String = "",
 ) -> Array[ServePollRequest] raise Error {
-  let url = "\{base_url}/api/v1/serve/poll?session=\{session_id}&timeout=\{timeout}"
+  let url = if session_token.length() > 0 {
+    "\{base_url}/api/v1/serve/poll?session=\{session_id}&timeout=\{timeout}&session_token=\{session_token}"
+  } else {
+    "\{base_url}/api/v1/serve/poll?session=\{session_id}&timeout=\{timeout}"
+  }
   let headers : Map[String, String] = {}
   let (response, body) = @bitnative.native_http_get(url, headers)
   if response.code != 200 {
@@ -373,8 +389,13 @@ async fn serve_respond(
   status : Int,
   response_headers : Map[String, String],
   body_base64 : String,
+  session_token? : String = "",
 ) -> Unit raise Error {
-  let url = "\{base_url}/api/v1/serve/respond?session=\{session_id}"
+  let url = if session_token.length() > 0 {
+    "\{base_url}/api/v1/serve/respond?session=\{session_id}&session_token=\{session_token}"
+  } else {
+    "\{base_url}/api/v1/serve/respond?session=\{session_id}"
+  }
   let headers_obj : Map[String, Json] = {}
   for entry in response_headers.to_array() {
     let (key, value) = entry
@@ -743,7 +764,9 @@ async fn handle_hub_serve(args : Array[String]) -> Unit raise Error {
     return
   }
   let repo_root = get_work_root()
-  let session_id = serve_register_session(base_url)
+  let session = serve_register_session(base_url)
+  let session_id = session.session_id
+  let session_token = session.session_token
   print_line("Session registered: \{session_id}")
   print_line("Clone URL: \{options.relay_url}/\{session_id}")
   if options.allow_push {
@@ -767,7 +790,12 @@ async fn handle_hub_serve(args : Array[String]) -> Unit raise Error {
   let poll_timeout = if options.auto_fetch { 5 } else { 30 }
   let mut room_cursor = 0
   while true {
-    let requests = serve_poll(base_url, session_id, poll_timeout) catch {
+    let requests = serve_poll(
+      base_url,
+      session_id,
+      poll_timeout,
+      session_token~,
+    ) catch {
       err => {
         if @async.is_cancellation_error(err) {
           break
@@ -818,6 +846,7 @@ async fn handle_hub_serve(args : Array[String]) -> Unit raise Error {
         status,
         response_headers,
         body_b64,
+        session_token~,
       ) catch {
         err => {
           if @async.is_cancellation_error(err) {
