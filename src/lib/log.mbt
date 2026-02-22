@@ -22,7 +22,7 @@ pub fn log_head(
   let result : Array[LogEntry] = []
   let mut current = resolve_head_commit(fs, git_dir)
   let mut count = 0
-  let db = ObjectDb::load(fs, git_dir)
+  let db = ObjectDb::load_lazy(fs, git_dir)
   while count < max_count {
     match current {
       None => break

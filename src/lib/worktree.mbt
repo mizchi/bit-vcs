@@ -445,7 +445,7 @@ pub fn commit(
       }
     }
   } else {
-    write_tree_from_index(fs, rfs, actual_git_dir, entries)
+    write_tree_from_index(fs, rfs, actual_git_dir, entries, missing_ok=true)
   }
   let parents = match parent {
     Some(p) => [p]
@@ -921,7 +921,7 @@ pub fn write_tree_from_index(
   let object_db = if missing_ok {
     None
   } else {
-    Some(ObjectDb::load(rfs, git_dir))
+    Some(ObjectDb::load_lazy(rfs, git_dir))
   }
   write_tree_from_entries(fs, rfs, git_dir, rel_entries, object_db)
 }
