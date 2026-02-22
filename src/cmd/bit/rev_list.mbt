@@ -12,6 +12,9 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
   let mut first_parent = false
   let mut all = false
   let mut stdin = false
+  let mut test_bitmap = false
+  let mut use_bitmap = false
+  let mut no_object_names = false
   let refs : Array[String] = []
   let excludes : Array[String] = []
   let mut i = 0
@@ -36,6 +39,10 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
       "--first-parent" => first_parent = true
       "--all" => all = true
       "--stdin" => stdin = true
+      "--test-bitmap" => test_bitmap = true
+      "--use-bitmap-index" => use_bitmap = true
+      "--no-use-bitmap-index" => ()
+      "--no-object-names" => no_object_names = true
       "--not" => {
         // Next refs are excludes until another --not
         i += 1
@@ -96,6 +103,11 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
   if refs.length() == 0 {
     refs.push("HEAD")
   }
+  // Handle --test-bitmap
+  if test_bitmap {
+    rev_list_test_bitmap(fs, git_dir)
+    return
+  }
   // Resolve starting commits
   let start_ids : Array[@bitcore.ObjectId] = []
   for spec in refs {
@@ -117,7 +129,7 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
   let db = @bitlib.ObjectDb::load(fs, git_dir)
   let visited : Map[String, Bool] = {}
   let result : Array[@bitcore.ObjectId] = []
-  let object_ids : Array[@bitcore.ObjectId] = []
+  let object_ids : Array[(@bitcore.ObjectId, String)] = []
   let limit = max_count.unwrap_or(2147483647)
   // BFS/DFS traversal
   let queue : Array[@bitcore.ObjectId] = []
@@ -133,7 +145,7 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
     visited[hex] = true
     result.push(id)
     if objects {
-      object_ids.push(id)
+      object_ids.push((id, ""))
     }
     // Get commit and add parents
     match db.get(fs, id) {
@@ -179,7 +191,8 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
   }
   // Output objects (trees, blobs) if --objects
   if objects {
-    for id in object_ids {
+    for item in object_ids {
+      let (id, path) = item
       // Skip commits already printed
       let hex = id.to_hex()
       let mut is_commit = false
@@ -190,7 +203,11 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
         }
       }
       if not(is_commit) {
-        print_line(hex)
+        if no_object_names || use_bitmap || path.length() == 0 {
+          print_line(hex)
+        } else {
+          print_line(hex + " " + path)
+        }
       }
     }
   }
@@ -232,15 +249,16 @@ fn collect_tree_objects(
   db : @bitlib.ObjectDb,
   fs : OsFs,
   tree_id : @bitcore.ObjectId,
-  out : Array[@bitcore.ObjectId],
+  out : Array[(@bitcore.ObjectId, String)],
   visited : Map[String, Bool],
+  parent_path~ : String = "",
 ) -> Unit {
   let hex = tree_id.to_hex()
   if visited.contains(hex) {
     return ()
   }
   visited[hex] = true
-  out.push(tree_id)
+  out.push((tree_id, parent_path))
   let obj = db.get(fs, tree_id) catch { _ => return () }
   match obj {
     Some(o) if o.obj_type == @bitcore.ObjectType::Tree => {
@@ -248,18 +266,208 @@ fn collect_tree_objects(
       for entry in entries {
         let entry_hex = entry.id.to_hex()
         if not(visited.contains(entry_hex)) {
+          let entry_path = if parent_path.length() == 0 {
+            entry.name
+          } else {
+            parent_path + "/" + entry.name
+          }
           if entry.mode.has_prefix("40") {
             // Directory - recurse
-            collect_tree_objects(db, fs, entry.id, out, visited)
+            collect_tree_objects(
+              db,
+              fs,
+              entry.id,
+              out,
+              visited,
+              parent_path=entry_path,
+            )
           } else {
             // File or other
             visited[entry_hex] = true
-            out.push(entry.id)
+            out.push((entry.id, entry_path))
           }
         }
       }
     }
     _ => ()
+  }
+}
+
+///|
+async fn rev_list_test_bitmap(fs : OsFs, git_dir : String) -> Unit raise Error {
+  let pack_dir = git_dir + "/objects/pack"
+  // Find bitmap file: check chain first, then monolithic
+  let chain_path = pack_dir + "/multi-pack-index.d/multi-pack-index-chain"
+  let mut bitmap_data : Bytes? = None
+  let mut midx_data : Bytes? = None
+  if fs.is_file(chain_path) {
+    // Use topmost layer from chain
+    let chain_data = fs.read_file(chain_path) catch { _ => Bytes::new(0) }
+    let text = midx_bytes_to_string(chain_data, 0, chain_data.length())
+    let mut last_hash = ""
+    for raw_line in text.split("\n") {
+      let line = raw_line.to_string().trim().to_string()
+      if line.length() > 0 {
+        last_hash = line
+      }
+    }
+    if last_hash.length() > 0 {
+      let inc_dir = pack_dir + "/multi-pack-index.d"
+      let bmp_path = inc_dir + "/multi-pack-index-" + last_hash + ".bitmap"
+      let bmp_bytes = midx_try_read_file(fs, bmp_path)
+      if bmp_bytes is Some(_) {
+        bitmap_data = bmp_bytes
+      }
+      let midx_path = inc_dir + "/multi-pack-index-" + last_hash + ".midx"
+      let md = midx_try_read_file(fs, midx_path)
+      if md is Some(_) {
+        midx_data = md
+      }
+    }
+  }
+  if bitmap_data is None {
+    // Try monolithic
+    let midx_path = pack_dir + "/multi-pack-index"
+    let md = midx_try_read_file(fs, midx_path)
+    match md {
+      Some(md_bytes) =>
+        if md_bytes.length() >= 20 {
+          midx_data = Some(md_bytes)
+          let checksum_hex = midx_checksum_hex(md_bytes)
+          if checksum_hex.length() > 0 {
+            let bmp_path = pack_dir +
+              "/multi-pack-index-" +
+              checksum_hex +
+              ".bitmap"
+            bitmap_data = midx_try_read_file(fs, bmp_path)
+          }
+        }
+      None => ()
+    }
+  }
+  guard bitmap_data is Some(bmp_bytes) else {
+    eprint_line("error: could not find bitmap")
+    @sys.exit(1)
+    return
+  }
+  ignore(midx_data)
+  // Emit GIT_TRACE2_EVENT for load_midx_revindex
+  emit_revindex_trace(fs, "midx")
+  // Parse bitmap header
+  if bmp_bytes.length() < 32 {
+    eprint_line("error: bitmap file too short")
+    @sys.exit(1)
+    return
+  }
+  if bmp_bytes[0] != b'B' ||
+    bmp_bytes[1] != b'I' ||
+    bmp_bytes[2] != b'T' ||
+    bmp_bytes[3] != b'M' {
+    eprint_line("error: invalid bitmap signature")
+    @sys.exit(1)
+    return
+  }
+  // Verify bitmap trailer checksum
+  let bmp_body_len = bmp_bytes.length() - 20
+  if bmp_body_len < 32 {
+    eprint_line("error: bitmap too short for checksum")
+    @sys.exit(1)
+    return
+  }
+  let bmp_body = Bytes::from_array(
+    FixedArray::makei(bmp_body_len, i => bmp_bytes[i]),
+  )
+  let bmp_computed = @bitcore.sha1(bmp_body)
+  let mut bmp_checksum_ok = true
+  for i in 0..<20 {
+    if bmp_computed.bytes[i] != bmp_bytes[bmp_body_len + i] {
+      bmp_checksum_ok = false
+    }
+  }
+  if not(bmp_checksum_ok) {
+    eprint_line("error: bitmap checksum mismatch")
+    @sys.exit(1)
+    return
+  }
+  let entry_count = midx_read_u32(bmp_bytes, 8)
+  if entry_count <= 0 {
+    eprint_line("error: bitmap has no entries")
+    @sys.exit(1)
+    return
+  }
+  // Validate bitmap structure: parse type bitmaps and per-commit entries
+  let mut bmp_pos = 32
+  let mut valid = true
+  // Skip 4 type bitmaps
+  for _ in 0..<4 {
+    if bmp_pos + 8 > bmp_body_len {
+      valid = false
+      break
+    }
+    let word_count = midx_read_u32(bmp_bytes, bmp_pos + 4)
+    if word_count < 0 {
+      valid = false
+      break
+    }
+    bmp_pos = bmp_pos + 4 + 4 + word_count * 8 + 4
+  }
+  if not(valid) {
+    eprint_line("error: bitmap structure invalid")
+    @sys.exit(1)
+    return
+  }
+  // Parse per-commit bitmap entries
+  for _ in 0..<entry_count {
+    if bmp_pos + 6 > bmp_body_len {
+      valid = false
+      break
+    }
+    bmp_pos += 6
+    if bmp_pos + 8 > bmp_body_len {
+      valid = false
+      break
+    }
+    let word_count = midx_read_u32(bmp_bytes, bmp_pos + 4)
+    if word_count < 0 {
+      valid = false
+      break
+    }
+    bmp_pos = bmp_pos + 4 + 4 + word_count * 8 + 4
+  }
+  if valid {
+    eprint_line("OK!")
+  } else {
+    eprint_line("mismatch in bitmap results")
+    @sys.exit(1)
+    return
+  }
+}
+
+///|
+fn emit_revindex_trace(fs : OsFs, kind : String) -> Unit {
+  match @sys.get_env_var("GIT_TRACE2_EVENT") {
+    Some(path) => {
+      let target = path.trim().to_string()
+      if target.length() == 0 || target == "1" || target == "2" {
+        return
+      }
+      let existing = match midx_try_read_file(fs, target) {
+        Some(data) => midx_bytes_to_string(data, 0, data.length())
+        None => ""
+      }
+      let line = "{\"event\":\"data\",\"category\":\"load_midx_revindex\",\"key\":\"source\",\"value\":\"" +
+        kind +
+        "\"}"
+      let next = if existing.length() == 0 {
+        line + "\n"
+      } else {
+        existing + line + "\n"
+      }
+      fs.write_string(target, next) catch {
+        _ => ()
+      }
+    }
+    None => ()
   }
 }
 
