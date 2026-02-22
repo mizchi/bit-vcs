@@ -191,18 +191,14 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
   }
   // Output objects (trees, blobs) if --objects
   if objects {
+    let commit_set : Map[String, Bool] = {}
+    for r in result {
+      commit_set[r.to_hex()] = true
+    }
     for item in object_ids {
       let (id, path) = item
-      // Skip commits already printed
       let hex = id.to_hex()
-      let mut is_commit = false
-      for r in result {
-        if r.to_hex() == hex {
-          is_commit = true
-          break
-        }
-      }
-      if not(is_commit) {
+      if not(commit_set.contains(hex)) {
         if no_object_names || use_bitmap || path.length() == 0 {
           print_line(hex)
         } else {

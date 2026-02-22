@@ -762,9 +762,7 @@ fn clone_is_session_id_char(c : Char) -> Bool {
 }
 
 ///|
-fn clone_detect_relay_session(
-  remote_url : String,
-) -> (String, String)? {
+fn clone_detect_relay_session(remote_url : String) -> (String, String)? {
   // Parse relay URL to get base URL, then check if the last path segment
   // is a 6-16 character alphanumeric session ID.
   let base_url = if remote_url.has_prefix("relay+http://") ||
@@ -798,11 +796,7 @@ fn clone_detect_relay_session(
       return None
     }
   }
-  let base = String::unsafe_substring(
-    normalized,
-    start=0,
-    end=slash_idx,
-  )
+  let base = String::unsafe_substring(normalized, start=0, end=slash_idx)
   Some((base, segment))
 }
 
@@ -968,6 +962,10 @@ fn clone_caps_contain_token(caps : Array[String], token : String) -> Bool {
   for cap in caps {
     if cap == token || cap.has_prefix(token_with_eq) {
       return true
+    }
+    // Skip expensive word splitting if token is not a substring of cap
+    if not(cap.contains(token)) {
+      continue
     }
     let words = clone_split_words(cap)
     if words.length() == 0 {
