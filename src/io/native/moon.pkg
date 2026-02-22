@@ -17,6 +17,7 @@ import {
 warnings = "-29"
 
 options(
+  "native-stub": [ "lstat_stub.c" ],
   targets: {
     "env_native.mbt": [ "native" ],
     "http_client_native.mbt": [ "native" ],

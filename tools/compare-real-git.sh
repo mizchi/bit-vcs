@@ -73,14 +73,14 @@ cd "$BENCH_DIR"
 echo "=== Clone ==="
 
 echo -n "Cloning with git..."
-git_clone=$(measure "git clone --depth=1 '$REPO_URL' repo-git")
+git_clone=$(measure "git clone '$REPO_URL' repo-git")
 echo " done"
 
 echo -n "Cloning with bit..."
 bit_clone=$(measure "'$BIT_BIN' clone '$REPO_URL' '$BENCH_DIR/repo-bit'")
 echo " done"
 
-print_result "clone (shallow)" "$git_clone" "$bit_clone"
+print_result "clone (full)" "$git_clone" "$bit_clone"
 echo ""
 
 # ============================================

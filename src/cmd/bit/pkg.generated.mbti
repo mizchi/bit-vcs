@@ -156,6 +156,8 @@ type ServeFeatureBroadcast
 
 type ServePollRequest
 
+type ServeSession
+
 type SubdirChangeInfo
 
 type SubdirDiffEntry
