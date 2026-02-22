@@ -32,14 +32,32 @@ Repository: expressjs/express (full clone)
 | checkout -b | 0.024s | 0.784s | git 32.7x faster |
 | log --oneline -10 | 0.024s | 0.104s | git 4.3x faster |
 
+## After all optimizations (lstat + checkout-b + commit + log)
+
+| Scenario | git | bit | Result |
+|----------|-----|-----|--------|
+| clone (full) | 1.438s | 12.836s | git 8.9x faster |
+| add (100 files) | 0.066s | 0.254s | git 3.8x faster |
+| add (1000 files) | 0.367s | 0.405s | git 1.1x faster |
+| commit (1000 files) | 0.061s | 0.101s | git 1.7x faster |
+| status (clean) | 0.027s | 0.065s | git 2.4x faster |
+| status (500 modified) | 0.026s | 0.064s | git 2.5x faster |
+| diff --stat (500 files) | 0.068s | 0.068s | equal |
+| checkout . (restore) | 0.080s | 0.020s | bit 4.0x faster |
+| checkout -b | 0.023s | 0.021s | bit 1.1x faster |
+| log --oneline -10 | 0.023s | 0.064s | git 2.8x faster |
+
 ## Improvement summary
 
-| Scenario | Before | After | Change |
-|----------|--------|-------|--------|
-| status (clean) | git 5.1x faster | git 2.6x faster | halved the gap |
-| status (500 modified) | git 4.3x faster | git 2.5x faster | halved the gap |
-| diff --stat | git 2.8x faster | git 1.1x faster | nearly equal |
-| add (1000 files) | git 2.0x faster | git 1.2x faster | nearly equal |
+| Scenario | Before | After all | Change |
+|----------|--------|-----------|--------|
+| checkout -b | git 21.7x faster | bit 1.1x faster | **reversed** |
+| diff --stat | git 2.8x faster | equal | **closed** |
+| status (clean) | git 5.1x faster | git 2.4x faster | 2.1x improvement |
+| status (500 modified) | git 4.3x faster | git 2.5x faster | 1.7x improvement |
+| commit (1000 files) | git 3.1x faster | git 1.7x faster | 1.8x improvement |
+| add (1000 files) | git 2.0x faster | git 1.1x faster | nearly equal |
+| log --oneline -10 | git 2.4x faster | git 2.8x faster | no change |
 
 ## Status Benchmark (bit internal, moon bench)
 
@@ -53,6 +71,8 @@ Repository: expressjs/express (full clone)
 | dirty 2500/5000 files | 181.61 ms | 100.33 ms | 1.81x |
 
 ## What changed
+
+### 1. lstat optimization (status, diff, add)
 
 Replaced multi-syscall `worktree_entry_meta` with single `lstat()` C FFI call.
 
@@ -69,3 +89,20 @@ After (1 syscall per file):
 1. `lstat()` - file type, mode, size, mtime all at once
 
 Files: `src/io/native/worktree_probe_native.mbt`, `src/io/native/lstat_stub.c`
+
+### 2. checkout -b optimization
+
+Skip full tree checkout when creating a branch on the same commit.
+Pass `checkout_files=false` to `switch_branch` when no start-point is given.
+
+File: `src/cmd/bit/checkout.mbt`
+
+### 3. commit + log lazy ObjectDb
+
+Replace eager `ObjectDb::load()` with `ObjectDb::load_lazy()` to avoid scanning
+all loose objects and parsing all pack indexes upfront.
+
+For commit, also pass `missing_ok=true` to `write_tree_from_index` to skip
+per-blob existence checks.
+
+Files: `src/lib/log.mbt`, `src/lib/worktree.mbt`
