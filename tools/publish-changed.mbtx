@@ -379,7 +379,7 @@ fn arg_value_after(args : Array[String], flag : String) -> String? {
 
 ///|
 async fn main_async() -> Unit {
-  let args = @sys.get_cli_args()
+  let args = @env.args()
   let apply = args.contains("--apply")
   let root = "."
   let modules = try load_workspace_modules(root) catch {
