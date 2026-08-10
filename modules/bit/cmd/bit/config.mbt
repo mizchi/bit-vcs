@@ -282,7 +282,7 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
             if worktree_mode {
               git_dir + "/config.worktree"
             } else {
-              git_dir + "/config"
+              resolve_common_git_dir(rfs, git_dir) + "/config"
             }
           }
         }
@@ -310,9 +310,10 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
         let rfs : &@bitcore.RepoFileSystem = fs
         let root = get_work_root()
         let git_dir = resolve_git_dir(rfs, root)
+        let common_git_dir = resolve_common_git_dir(rfs, git_dir)
         let core_editor = get_config_value(
           fs,
-          git_dir + "/config",
+          common_git_dir + "/config",
           "core.editor",
           None,
           false,
@@ -428,7 +429,7 @@ async fn handle_config(args : Array[String]) -> Unit raise Error {
       // Local
       let root = get_work_root()
       let git_dir = resolve_git_dir(rfs3, root)
-      let local_path = git_dir + "/config"
+      let local_path = resolve_common_git_dir(rfs3, git_dir) + "/config"
       if rfs3.is_file(local_path) {
         let scope = if show_scope { "local" } else { "" }
         let origin = if show_origin {

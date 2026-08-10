@@ -402,13 +402,7 @@ fn object_storage_git_dir(
   fs : &@bit.RepoFileSystem,
   git_dir : String,
 ) -> String {
-  if fs.is_dir(join_path(git_dir, "objects")) {
-    return git_dir
-  }
-  match resolve_ref_commondir(fs, git_dir) {
-    Some(common) => common
-    None => git_dir
-  }
+  resolve_common_git_dir(fs, git_dir)
 }
 
 ///|

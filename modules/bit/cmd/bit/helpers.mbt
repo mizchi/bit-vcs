@@ -337,6 +337,17 @@ fn resolve_git_dir(fs : &@bitcore.RepoFileSystem, root : String) -> String {
 }
 
 ///|
+/// Resolve the directory that owns repository-wide metadata. A linked
+/// worktree keeps HEAD and index in its private git dir, while config, refs,
+/// and objects live in this common directory.
+fn resolve_common_git_dir(
+  fs : &@bitcore.RepoFileSystem,
+  git_dir : String,
+) -> String {
+  @bitlib.resolve_common_git_dir(fs, git_dir)
+}
+
+///|
 fn is_reftable_repo(fs : &@bitcore.RepoFileSystem, git_dir : String) -> Bool {
   if fs.is_dir(git_dir + "/reftable") {
     return true
@@ -606,8 +617,10 @@ fn get_author_string() -> String {
 fn get_identity_from_config() -> String {
   // Try reading user.name/user.email from git config
   let root = get_work_root()
-  let git_dir = root + "/.git"
-  let config_path = git_dir + "/config"
+  let fs = OsFs::new()
+  let git_dir = resolve_git_dir(fs, root)
+  let common_git_dir = resolve_common_git_dir(fs, git_dir)
+  let config_path = common_git_dir + "/config"
   let content = @fs.read_file_to_string(config_path) catch { _ => "" }
   let name = if content.length() > 0 {
     @config_parse.get_config_value_from_content(

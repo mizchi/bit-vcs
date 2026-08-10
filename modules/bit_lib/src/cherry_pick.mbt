@@ -27,7 +27,12 @@ pub fn cherry_pick(
   message_suffix? : String = "",
   signoff_committer? : String = "",
 ) -> CherryPickResult raise @bit.GitError {
-  let git_dir = join_path(root, ".git")
+  let git_marker = join_path(root, ".git")
+  let git_dir = if rfs.is_file(git_marker) {
+    resolve_gitdir(rfs, git_marker)
+  } else {
+    git_marker
+  }
   let db = ObjectDb::load(rfs, git_dir)
   // Read the commit to cherry-pick
   let commit_obj = db.get(rfs, commit_id)
@@ -237,6 +242,7 @@ fn cherry_pick_write_result_commit(
   timestamp : Int64,
   message : String,
 ) -> CherryPickResult raise @bit.GitError {
+  let object_git_dir = resolve_common_git_dir(rfs, git_dir)
   let result_entries = tree_files_to_index(db, rfs, result_files)
   write_index_entries(fs, git_dir, result_entries)
   let result_tree = write_tree_from_index(fs, rfs, git_dir, result_entries)
@@ -245,7 +251,7 @@ fn cherry_pick_write_result_commit(
     message,
   )
   let (new_id, new_data) = @bit.create_commit(new_commit)
-  write_object_bytes(fs, git_dir, new_id, new_data)
+  write_object_bytes(fs, object_git_dir, new_id, new_data)
   update_head_ref(fs, rfs, git_dir, new_id)
   write_worktree_from_files(db, fs, rfs, root, git_dir, result_files)
   { status: CherryPickStatus::Success, commit_id: Some(new_id), conflicts: [] }

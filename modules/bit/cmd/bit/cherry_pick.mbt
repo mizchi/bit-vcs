@@ -102,10 +102,10 @@ fn cherry_pick_collect_linear_replay_commits(
 async fn handle_cherry_pick(args : Array[String]) -> Unit raise Error {
   let root = get_work_root()
   check_and_exit_unsupported_attrs(root)
-  let git_dir = root + "/.git"
   let fs = OsFs::new()
   let wfs : &@bitcore.FileSystem = fs
   let rfs : &@bitcore.RepoFileSystem = fs
+  let git_dir = resolve_git_dir(rfs, root)
   let mut do_abort = false
   let mut use_threeway = false
   let mut allow_empty = false
@@ -187,7 +187,9 @@ async fn handle_cherry_pick(args : Array[String]) -> Unit raise Error {
   }
   let commit_ids : Array[@bitcore.ObjectId] = []
   if pick_count is Some(n) {
-    let replay_commits = cherry_pick_collect_last_n_commits(rfs, git_dir, cid, n)
+    let replay_commits = cherry_pick_collect_last_n_commits(
+      rfs, git_dir, cid, n,
+    )
     if replay_commits.length() > 0 {
       for replay_id in replay_commits {
         commit_ids.push(replay_id)
