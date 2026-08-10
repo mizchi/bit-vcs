@@ -81,7 +81,7 @@ async fn handle_quiltimport(args : Array[String]) -> Unit raise Error {
     }
     print_line("Applying \{patch_name}")
     // Use bit's own am/apply/commit instead of delegating to real git
-    let bit_exe = @sys.get_cli_args()[0]
+    let bit_exe = @env.args()[0]
     // Try bit am first for mbox-style patches
     let am_args : Array[String] = ["am", "--3way"]
     if author.length() > 0 {

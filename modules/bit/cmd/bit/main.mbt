@@ -719,7 +719,7 @@ async fn handle_help(args : Array[String]) -> Unit {
 ///|
 async fn main_async() -> Unit {
   bit_ignore_sigpipe_safe()
-  let args = @sys.get_cli_args()
+  let args = @env.args()
   run_main_for_args(args)
 }
 

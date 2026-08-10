@@ -96,7 +96,7 @@ async fn run_git_bit_for_args(args : Array[String]) -> Unit {
 
 ///|
 async fn main_async() -> Unit {
-  let args = @sys.get_cli_args()
+  let args = @env.args()
   run_git_bit_for_args(args)
 }
 

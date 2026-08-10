@@ -19,7 +19,7 @@ fn init {
 /// git shim (`tools/git-shim/bin/git`). Derive the root from the running test
 /// executable's `/_build/` path instead, falling back to CWD when that fails.
 fn wbtest_resolve_repo_root() -> String {
-  let exe = @sys.get_cli_args()[0]
+  let exe = @env.args()[0]
   match exe.find("/_build/") {
     Some(i) => String::unsafe_substring(exe, start=0, end=i)
     None => @env.current_dir().unwrap_or(".")
@@ -51,7 +51,7 @@ fn wbtest_resolve_bit_exe(repo_root : String) -> String {
   // test executable path (independent of CWD, which `moon test` may set to the
   // module dir), then the caller-supplied repo_root.
   let roots : Array[String] = []
-  let exe = @sys.get_cli_args()[0]
+  let exe = @env.args()[0]
   match exe.find("/_build/") {
     Some(i) => roots.push(String::unsafe_substring(exe, start=0, end=i))
     None => ()
