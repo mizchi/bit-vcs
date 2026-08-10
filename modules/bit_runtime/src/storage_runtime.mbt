@@ -785,7 +785,7 @@ fn storage_resolve_common_git_dir(
   }
   let raw = storage_decode_bytes(
     rfs.read_file(commondir_path) catch {
-      _ => Bytes::default()
+      _ => Default::default()
     },
   )
   let rel = storage_trim_string(raw)

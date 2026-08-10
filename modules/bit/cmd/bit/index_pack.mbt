@@ -794,17 +794,17 @@ async fn handle_index_pack(args : Array[String]) -> Unit raise Error {
           err if @async.is_cancellation_error(err) => raise err
           err => {
             @stdio.stderr.write(
-              "fatal: " + @debug.render(@debug.to_repr(err)) + "\n",
+              "fatal: " + @debug.render(Repr(err)) + "\n",
             )
             @sys.exit(1)
-            Bytes::default()
+            Default::default()
           }
         }
         let max_depth = @pack.max_delta_chain_length(pack) catch {
           err if @async.is_cancellation_error(err) => raise err
           err => {
             @stdio.stderr.write(
-              "fatal: " + @debug.render(@debug.to_repr(err)) + "\n",
+              "fatal: " + @debug.render(Repr(err)) + "\n",
             )
             @sys.exit(1)
             0
@@ -828,10 +828,10 @@ async fn handle_index_pack(args : Array[String]) -> Unit raise Error {
           err if @async.is_cancellation_error(err) => raise err
           err => {
             @stdio.stderr.write(
-              "fatal: " + @debug.render(@debug.to_repr(err)) + "\n",
+              "fatal: " + @debug.render(Repr(err)) + "\n",
             )
             @sys.exit(1)
-            Bytes::default()
+            Default::default()
           }
         }
         let idx_path = if pack_path.has_suffix(".pack") {
@@ -844,10 +844,10 @@ async fn handle_index_pack(args : Array[String]) -> Unit raise Error {
           err if @async.is_cancellation_error(err) => raise err
           err => {
             @stdio.stderr.write(
-              "fatal: " + @debug.render(@debug.to_repr(err)) + "\n",
+              "fatal: " + @debug.render(Repr(err)) + "\n",
             )
             @sys.exit(1)
-            Bytes::default()
+            Default::default()
           }
         }
         match verify_pack_index(idx, pack, hash_size~) {
@@ -869,11 +869,11 @@ async fn handle_index_pack(args : Array[String]) -> Unit raise Error {
                 err => {
                   @stdio.stderr.write(
                     "error: could not read reverse index: " +
-                    @debug.render(@debug.to_repr(err)) +
+                    @debug.render(Repr(err)) +
                     "\n",
                   )
                   @sys.exit(1)
-                  Bytes::default()
+                  Default::default()
                 }
               }
               match verify_reverse_index(rev, pack, hash_size~) {
@@ -1094,10 +1094,10 @@ async fn handle_index_pack(args : Array[String]) -> Unit raise Error {
         err if @async.is_cancellation_error(err) => raise err
         err => {
           @stdio.stderr.write(
-            "fatal: " + @debug.render(@debug.to_repr(err)) + "\n",
+            "fatal: " + @debug.render(Repr(err)) + "\n",
           )
           @sys.exit(1)
-          Bytes::default()
+          Default::default()
         }
       }
       // Check --max-input-size for file mode

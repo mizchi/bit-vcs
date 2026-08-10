@@ -1419,7 +1419,7 @@ fn worktree_sanitize_admin_component(name : String) -> String {
     return name
   }
   let out : Array[Char] = []
-  let mut last = Char::default()
+  let mut last = Default::default()
   for ch in name.to_array() {
     if ch == '.' && last == '.' {
       last = ch

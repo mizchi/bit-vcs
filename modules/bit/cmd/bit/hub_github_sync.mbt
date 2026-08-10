@@ -487,7 +487,7 @@ async fn handle_hub_issue_sync_install_hook(
   if fs.is_file(hook_path) {
     let existing = decode_bytes(
       fs.read_file(hook_path) catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     )
     if existing.contains("bit issue sync") {

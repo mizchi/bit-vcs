@@ -1186,7 +1186,7 @@ fn notes_resolve_common_git_dir(
     return git_dir
   }
   let raw = @utf8.decode_lossy(
-    (rfs.read_file(commondir_path) catch { _ => Bytes::default() })[:],
+    (rfs.read_file(commondir_path) catch { _ => Default::default() })[:],
   )
   let rel = trim_string(raw)
   if rel.length() == 0 {

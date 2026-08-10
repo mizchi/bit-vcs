@@ -35,7 +35,7 @@ test "merge: content-level merge non-overlapping changes" {
   match result.status {
     Merged => ()
     _ => {
-      println("Expected Merged, got conflicts: \{to_repr(result.conflicts)}")
+      println("Expected Merged, got conflicts: \{Repr(result.conflicts)}")
       assert_true(false)
     }
   }
@@ -112,7 +112,7 @@ test "merge: file-level merge without conflicts" {
   match result.status {
     Merged => ()
     Conflicted => {
-      println("CONFLICT: \{to_repr(result.conflicts)}")
+      println("CONFLICT: \{Repr(result.conflicts)}")
       assert_true(false)
     }
     AlreadyUpToDate => {
@@ -291,7 +291,7 @@ test "merge: rename on one side, no conflict" {
   match result.status {
     Merged => ()
     _ => {
-      println("Expected Merged, got conflicts: \{to_repr(result.conflicts)}")
+      println("Expected Merged, got conflicts: \{Repr(result.conflicts)}")
       fail("expected merged")
     }
   }
@@ -347,7 +347,7 @@ test "merge: rename on one side, modify on other (rename/modify)" {
   match result.status {
     Merged => ()
     Conflicted => {
-      println("Conflicts: \{to_repr(result.conflicts)}")
+      println("Conflicts: \{Repr(result.conflicts)}")
       fail("expected merged, got conflicted")
     }
     _ => fail("expected merged")
@@ -477,7 +477,7 @@ test "merge: rename/add-source - rename a->b with new file at a" {
   match result.status {
     Merged => ()
     _ => {
-      println("Expected Merged, got conflicts: \{to_repr(result.conflicts)}")
+      println("Expected Merged, got conflicts: \{Repr(result.conflicts)}")
       fail("expected merged")
     }
   }

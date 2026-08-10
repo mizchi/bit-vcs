@@ -100,7 +100,7 @@ async fn handle_merge_file(args : Array[String]) -> Unit raise Error {
     @fs.write_string_to_file(current_arg, result.content) catch {
       e => {
         eprint_line(
-          "fatal: could not write '\{current_arg}': \{@debug.render(@debug.to_repr(e))}",
+          "fatal: could not write '\{current_arg}': \{@debug.render(Repr(e))}",
         )
         @sys.exit(128)
       }

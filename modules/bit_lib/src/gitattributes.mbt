@@ -36,7 +36,7 @@ pub fn resolve_diff_driver(
   let attr_path = join_path(root, ".gitattributes")
   guard rfs.is_file(attr_path) else { return None }
   let content = @utf8.decode_lossy(
-    (rfs.read_file(attr_path) catch { _ => Bytes::default() })[:],
+    (rfs.read_file(attr_path) catch { _ => Default::default() })[:],
   )
   let normalized = gitattr_normalize_path(path)
   let mut diff_driver : String? = None
@@ -135,7 +135,7 @@ pub fn resolve_eol_attrs(
     }
   }
   let content = @utf8.decode_lossy(
-    (rfs.read_file(attr_path) catch { _ => Bytes::default() })[:],
+    (rfs.read_file(attr_path) catch { _ => Default::default() })[:],
   )
   let normalized = gitattr_normalize_path(path)
   let mut text : TextAttr = TextAttr::Unspecified
@@ -335,7 +335,7 @@ pub fn check_unsupported_gitattributes(
     return None
   }
   let content = @utf8.decode_lossy(
-    (rfs.read_file(attr_path) catch { _ => Bytes::default() })[:],
+    (rfs.read_file(attr_path) catch { _ => Default::default() })[:],
   )
   for line_view in content.split("\n") {
     let line = line_view.to_owned().trim().to_owned()
@@ -444,7 +444,7 @@ pub fn has_any_filter_attributes(
     return false
   }
   let content = @utf8.decode_lossy(
-    (rfs.read_file(attr_path) catch { _ => Bytes::default() })[:],
+    (rfs.read_file(attr_path) catch { _ => Default::default() })[:],
   )
   for line_view in content.split("\n") {
     let line = line_view.to_owned().trim().to_owned()

@@ -1015,7 +1015,7 @@ pub fn read_skip_worktree_paths(
   let sidecar_path = join_path(git_dir, "bit-skip-worktree")
   if fs.is_file(sidecar_path) {
     let text = @utf8.decode_lossy(
-      (fs.read_file(sidecar_path) catch { _ => Bytes::default() })[:],
+      (fs.read_file(sidecar_path) catch { _ => Default::default() })[:],
     )
     for line_view in text.split("\n") {
       let line = line_view.to_owned()

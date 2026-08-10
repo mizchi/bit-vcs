@@ -190,7 +190,7 @@ fn resolve_hub_common_git_dir(git_dir : String) -> String {
   let commondir_path = resolved_git_dir + "/commondir"
   if fs.is_file(commondir_path) {
     let raw = @utf8.decode_lossy(
-      (fs.read_file(commondir_path) catch { _ => Bytes::default() })[:],
+      (fs.read_file(commondir_path) catch { _ => Default::default() })[:],
     )
     let rel = raw.trim(chars=" \t\r\n").to_owned()
     if rel.length() > 0 {

@@ -513,7 +513,7 @@ fn interactive_read_file_or_empty(
   if !rfs.is_file(path) {
     return ""
   }
-  @utf8.decode_lossy((rfs.read_file(path) catch { _ => Bytes::default() })[:])
+  @utf8.decode_lossy((rfs.read_file(path) catch { _ => Default::default() })[:])
 }
 
 // ============================================================================

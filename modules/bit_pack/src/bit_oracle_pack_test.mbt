@@ -10,13 +10,13 @@ async fn run_git(
     .prefix("git-stdout-")
     .suffix(".out")
     .create_temp_file() catch {
-      _ => return (-1, Bytes::default(), Bytes::default())
+      _ => return (-1, Default::default(), Default::default())
     }
   let stderr_file = @tempfile.Builder::new()
     .prefix("git-stderr-")
     .suffix(".err")
     .create_temp_file() catch {
-      _ => return (-1, Bytes::default(), Bytes::default())
+      _ => return (-1, Default::default(), Default::default())
     }
   let stdout_path = stdout_file.path()
   let stderr_path = stderr_file.path()
@@ -37,7 +37,7 @@ async fn run_git(
         .prefix("git-stdin-")
         .suffix(".in")
         .create_temp_file() catch {
-          _ => return (-1, Bytes::default(), Bytes::default())
+          _ => return (-1, Default::default(), Default::default())
         }
       f.write_bytes(data) catch {
         _ => ()
@@ -79,8 +79,8 @@ async fn run_git(
           )
       }
   }
-  let out = @fs.read_file_to_bytes(stdout_path) catch { _ => Bytes::default() }
-  let err = @fs.read_file_to_bytes(stderr_path) catch { _ => Bytes::default() }
+  let out = @fs.read_file_to_bytes(stdout_path) catch { _ => Default::default() }
+  let err = @fs.read_file_to_bytes(stderr_path) catch { _ => Default::default() }
   // Cleanup temp files
   stdout_file.cleanup() catch {
     _ => ()

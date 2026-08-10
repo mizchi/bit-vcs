@@ -99,7 +99,7 @@ fn blame_read_path_diff_driver(
   }
   let text = decode_bytes(
     fs.read_file(attr_path) catch {
-      _ => Bytes::default()
+      _ => Default::default()
     },
   )
   let mut diff_driver : String? = None

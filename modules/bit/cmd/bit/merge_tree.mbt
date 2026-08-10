@@ -343,10 +343,10 @@ fn merge_tree_get_blob_data(
   fs : &@bitcore.RepoFileSystem,
   id : @bitcore.ObjectId,
 ) -> Bytes {
-  let obj = db.get(fs, id) catch { _ => return Bytes::default() }
+  let obj = db.get(fs, id) catch { _ => return Default::default() }
   match obj {
     Some(o) if o.obj_type == @bitcore.ObjectType::Blob => o.data
-    _ => Bytes::default()
+    _ => Default::default()
   }
 }
 

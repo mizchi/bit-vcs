@@ -390,7 +390,7 @@ fn index_test_mark_single_entry_skip_worktree(
   fs : @bit.TestFs,
   index_path : String,
 ) -> Unit {
-  let data = fs.read_file(index_path) catch { _ => Bytes::default() }
+  let data = fs.read_file(index_path) catch { _ => Default::default() }
   let arr : Array[Byte] = []
   for b in data {
     arr.push(b)
@@ -434,7 +434,7 @@ fn index_test_replace_single_entry_with_stages(
   index_path : String,
   stages : Array[Int],
 ) -> Unit {
-  let data = fs.read_file(index_path) catch { _ => Bytes::default() }
+  let data = fs.read_file(index_path) catch { _ => Default::default() }
   if data.length() < 12 + 20 {
     panic()
   }
@@ -509,7 +509,7 @@ fn index_test_write_resolve_undo_extension(
   ours_hex : String,
   theirs_hex : String,
 ) -> Unit {
-  let data = fs.read_file(index_path) catch { _ => Bytes::default() }
+  let data = fs.read_file(index_path) catch { _ => Default::default() }
   let arr : Array[Byte] = []
   for b in data {
     arr.push(b)

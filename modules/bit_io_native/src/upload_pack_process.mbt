@@ -645,7 +645,7 @@ async fn run_process_with_files(
   }
   let stdin_bytes = match stdin_data {
     Some(data) => data
-    None => Bytes::default()
+    None => Default::default()
   }
   @fs.write_bytes_to_file(stdin_path, stdin_bytes) catch {
     e =>
@@ -1086,7 +1086,7 @@ async fn run_ssh_upload_pack_interactive(
   }
   if code != 0 {
     let err_bytes = @fs.read_file_to_bytes(stderr_path) catch {
-      _ => Bytes::default()
+      _ => Default::default()
     }
     let err_text = bytes_to_string_lossy(err_bytes)
     cleanup_temp_files([stderr_path])

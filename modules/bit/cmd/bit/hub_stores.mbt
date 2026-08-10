@@ -226,7 +226,7 @@ fn load_hub_origin_sync_plan(fs : OsFs, git_dir : String) -> HubOriginSyncPlan {
   let config_path = hub_sync_config_path(git_dir)
   let content = decode_bytes(
     fs.read_file(config_path) catch {
-      _ => Bytes::default()
+      _ => Default::default()
     },
   )
   compute_hub_origin_sync_plan(content)
@@ -405,7 +405,7 @@ fn resolve_hub_git_dir(root : String) -> String {
   let commondir_path = git_dir + "/commondir"
   if fs.is_file(commondir_path) {
     let raw = @utf8.decode_lossy(
-      (fs.read_file(commondir_path) catch { _ => Bytes::default() })[:],
+      (fs.read_file(commondir_path) catch { _ => Default::default() })[:],
     )
     let rel = raw.trim(chars=" \t\r\n").to_owned()
     if rel.length() > 0 {

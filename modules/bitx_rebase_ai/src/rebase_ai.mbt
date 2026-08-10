@@ -587,7 +587,7 @@ fn collect_conflict_marker_paths_recursive(
     if rfs.is_dir(child_path) {
       collect_conflict_marker_paths_recursive(rfs, root, child_rel, out)
     } else if rfs.is_file(child_path) {
-      let data = rfs.read_file(child_path) catch { _ => Bytes::default() }
+      let data = rfs.read_file(child_path) catch { _ => Default::default() }
       let text = decode_bytes(data)
       if has_conflict_markers(text) {
         out.push(child_rel)

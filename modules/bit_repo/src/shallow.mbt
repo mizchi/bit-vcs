@@ -9,7 +9,7 @@ pub fn read_shallow_boundaries(
   if !fs.is_file(path) {
     return []
   }
-  let data = fs.read_file(path) catch { _ => Bytes::default() }
+  let data = fs.read_file(path) catch { _ => Default::default() }
   let boundaries : Array[@object.ObjectId] = []
   for line_view in @utf8.decode_lossy(data[:]).split("\n") {
     let line = line_view.trim().to_owned()

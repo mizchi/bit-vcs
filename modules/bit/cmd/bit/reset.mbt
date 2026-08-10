@@ -360,7 +360,7 @@ async fn reset_refresh_index_entries(
       let content = rfs.read_file(abs) catch {
         _ => {
           changed = true
-          Bytes::default()
+          Default::default()
         }
       }
       if !changed {
@@ -414,7 +414,7 @@ fn reset_read_skip_worktree_paths(
   if fs.is_file(sidecar_path) {
     let text = decode_bytes(
       fs.read_file(sidecar_path) catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     )
     for line_view in text.split("\n") {
@@ -595,7 +595,7 @@ fn reset_commit_subject_bytes(
       )
       reset_convert_encoding(subject, source_encoding, output_encoding)
     }
-    None => Bytes::default()
+    None => Default::default()
   }
 }
 
@@ -639,7 +639,7 @@ fn reset_extract_commit_subject_and_encoding(data : Bytes) -> (Bytes, String?) {
       break
     }
   }
-  (Bytes::default(), encoding)
+  (Default::default(), encoding)
 }
 
 ///|
@@ -786,7 +786,7 @@ fn reset_slice_bytes(data : Bytes, start : Int, end : Int) -> Bytes {
   }
   let len = safe_end - safe_start
   if len <= 0 {
-    return Bytes::default()
+    return Default::default()
   }
   Bytes::from_array(FixedArray::makei(len, i => data[safe_start + i]))
 }

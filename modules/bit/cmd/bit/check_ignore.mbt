@@ -263,7 +263,7 @@ fn check_ignore_add_rules_file(
   if fs.is_file(file_path) {
     let content = decode_bytes(
       fs.read_file(file_path) catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     )
     matcher.add_rules(base, content)

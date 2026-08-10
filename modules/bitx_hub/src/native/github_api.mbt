@@ -113,7 +113,7 @@ fn parse_json_array_from_api(text : String) -> Array[Json] raise @bit.GitError {
     Json::Array(items) => items
     _ =>
       raise @bit.GitError::InvalidObject(
-        "Expected JSON array from gh api, got: \{to_repr(parsed)}",
+        "Expected JSON array from gh api, got: \{Repr(parsed)}",
       )
   }
 }
@@ -132,7 +132,7 @@ fn parse_json_object_from_api(
     Json::Object(obj) => obj
     _ =>
       raise @bit.GitError::InvalidObject(
-        "Expected JSON object from gh api, got: \{to_repr(parsed)}",
+        "Expected JSON object from gh api, got: \{Repr(parsed)}",
       )
   }
 }

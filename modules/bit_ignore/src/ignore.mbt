@@ -367,7 +367,7 @@ let char_slash : UInt16 = {
 ///|
 fn string_to_uint16_array(s : String) -> FixedArray[UInt16] {
   let len = s.length()
-  let arr = FixedArray::make(len, UInt16::default())
+  let arr = FixedArray::make(len, Default::default())
   for i in 0..<len {
     arr[i] = s.unsafe_get(i)
   }

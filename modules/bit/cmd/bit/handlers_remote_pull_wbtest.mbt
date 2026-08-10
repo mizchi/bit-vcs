@@ -449,13 +449,13 @@ async test "pull: branch remote dot pulls from current repo config" {
   handlers_remote_pull_wbtest_run_shim_git(root, ["pull", "-q"])
 
   @test.assert_eq(
-    decode_bytes(fs.read_file(root + "/file") catch { _ => Bytes::default() }),
+    decode_bytes(fs.read_file(root + "/file") catch { _ => Default::default() }),
     "updated\n",
   )
   assert_true(
     decode_bytes(
       fs.read_file(root + "/.git/logs/HEAD") catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     ).contains("Fast-forward"),
   )
@@ -490,7 +490,7 @@ async test "pull: command path pulls into unborn branch from parent repo" {
   @test.assert_eq(
     decode_bytes(
       fs.read_file(dst_dir + "/file") catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     ),
     "file\n",
@@ -527,7 +527,7 @@ async test "pull: command path keeps staged new file on unborn branch" {
   @test.assert_eq(
     decode_bytes(
       fs.read_file(dst_dir + "/newfile") catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     ),
     "new tracked file\n",
@@ -619,7 +619,7 @@ async test "pull: rebase rejects staged changes on unborn branch" {
   @test.assert_eq(
     decode_bytes(
       fs.read_file(dst_dir + "/staged-file") catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     ),
     "staged-file\n",
@@ -669,11 +669,11 @@ async test "pull: rebase uses previous target as fork point for rebased upstream
   ])
 
   @test.assert_eq(
-    decode_bytes(fs.read_file(root + "/file") catch { _ => Bytes::default() }),
+    decode_bytes(fs.read_file(root + "/file") catch { _ => Default::default() }),
     "conflicting modification\n",
   )
   @test.assert_eq(
-    decode_bytes(fs.read_file(root + "/file2") catch { _ => Bytes::default() }),
+    decode_bytes(fs.read_file(root + "/file2") catch { _ => Default::default() }),
     "new\n",
   )
   @test.assert_eq(@bitlib.read_unmerged_paths(fs, root + "/.git").length(), 0)
@@ -711,7 +711,7 @@ async test "pull: updates checked-out branch worktree when fetch advances it" {
   ])
 
   @test.assert_eq(
-    decode_bytes(fs.read_file(root + "/file") catch { _ => Bytes::default() }),
+    decode_bytes(fs.read_file(root + "/file") catch { _ => Default::default() }),
     "modified\n",
   )
   @test.assert_eq(
@@ -721,7 +721,7 @@ async test "pull: updates checked-out branch worktree when fetch advances it" {
   assert_true(
     decode_bytes(
       fs.read_file(root + "/.git/logs/HEAD") catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     ).contains("Fast-forward"),
   )
@@ -762,7 +762,7 @@ async test "pull: refuses dirty worktree when fetch advances current branch" {
   assert_true(code != 0)
   assert_true(stderr.contains("Cannot fast-forward your working tree"))
   @test.assert_eq(
-    decode_bytes(fs.read_file(root + "/file") catch { _ => Bytes::default() }),
+    decode_bytes(fs.read_file(root + "/file") catch { _ => Default::default() }),
     "conflict\n",
   )
   @test.assert_eq(
@@ -835,13 +835,13 @@ async test "pull: rebase autostash preserves staged file on fast-forward" {
   @test.assert_eq(
     decode_bytes(
       fs.read_file(root + "/new_file") catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     ),
     "dirty\n",
   )
   @test.assert_eq(
-    decode_bytes(fs.read_file(root + "/file") catch { _ => Bytes::default() }),
+    decode_bytes(fs.read_file(root + "/file") catch { _ => Default::default() }),
     "modified again\n",
   )
   @test.assert_eq(@bitlib.stash_list(fs, root + "/.git").length(), 0)

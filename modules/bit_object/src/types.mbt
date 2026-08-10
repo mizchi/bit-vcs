@@ -153,7 +153,7 @@ pub fn ObjectId::is_zero_hex(hex : String) -> Bool {
 pub impl Hash for ObjectId with fn hash_combine(self, hasher) {
   // Use first 8 bytes as hash (sufficient for distribution)
   for i in 0..<8 {
-    self.bytes[i].hash_combine(hasher)
+    Hash::hash_combine(self.bytes[i], hasher)
   }
 }
 

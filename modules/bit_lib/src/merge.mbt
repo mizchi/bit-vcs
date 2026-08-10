@@ -883,15 +883,15 @@ fn merge_get_blob_data(
   fs : &@bit.RepoFileSystem,
   id : @bit.ObjectId,
 ) -> Bytes {
-  let obj = db.get(fs, id) catch { _ => return Bytes::default() }
+  let obj = db.get(fs, id) catch { _ => return Default::default() }
   match obj {
     Some(o) =>
       if o.obj_type == @bit.ObjectType::Blob {
         o.data
       } else {
-        Bytes::default()
+        Default::default()
       }
-    None => Bytes::default()
+    None => Default::default()
   }
 }
 
