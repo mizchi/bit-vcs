@@ -505,6 +505,8 @@ pub fn reset(&@bit_types.FileSystem, &@bit_types.RepoFileSystem, String, String,
 
 pub fn resolve_checkout_common_git_dir(&@bit_types.RepoFileSystem, String) -> String
 
+pub fn resolve_common_git_dir(&@bit_types.RepoFileSystem, String) -> String
+
 pub fn resolve_diff_driver(&@bit_types.RepoFileSystem, String, String) -> String?
 
 pub fn resolve_eol_attrs(&@bit_types.RepoFileSystem, String, String) -> FileEolAttrs

@@ -827,7 +827,7 @@ fn diff_conflict_marker_size(
     return 7
   }
   let content = @utf8.decode_lossy(
-    (fs.read_file(attr_path) catch { _ => Bytes::default() })[:],
+    (fs.read_file(attr_path) catch { _ => Default::default() })[:],
   )
   let mut size = 7
   for line_view in content.split("\n") {

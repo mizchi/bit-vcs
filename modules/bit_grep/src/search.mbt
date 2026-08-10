@@ -53,7 +53,7 @@ pub impl Show for GrepFileMatch with fn output(self, logger) {
     "{path: " +
     grep_search_show_string(self.path) +
     ", matches: " +
-    to_repr(self.matches).to_string() +
+    Repr(self.matches).to_string() +
     "}",
   )
 }

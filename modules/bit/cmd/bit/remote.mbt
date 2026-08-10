@@ -74,7 +74,7 @@ fn emit_trace_region(
   if fs.is_file(target) {
     let existing = decode_bytes(
       fs.read_file(target) catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     )
     fs.write_string(target, existing + enter + leave)
@@ -85,7 +85,7 @@ fn emit_trace_region(
 
 ///|
 fn append_text_file(fs : OsFs, path : String, text : String) -> Unit {
-  let current = decode_bytes(fs.read_file(path) catch { _ => Bytes::default() })
+  let current = decode_bytes(fs.read_file(path) catch { _ => Default::default() })
   fs.write_string(path, current + text) catch {
     _ => ()
   }

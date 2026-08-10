@@ -73,7 +73,7 @@ async fn handle_merge_one_file(args : Array[String]) -> Unit raise Error {
   @fs.write_bytes_to_file(full_path, content_bytes) catch {
     err => {
       eprint_line(
-        "error: cannot write \{full_path}: \{@debug.render(@debug.to_repr(err))}",
+        "error: cannot write \{full_path}: \{@debug.render(Repr(err))}",
       )
       @sys.exit(1)
       return

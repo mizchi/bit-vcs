@@ -67,14 +67,15 @@ fn commit_storage_runtime_delegate_args(
   }
   if !commit_has_no_verify_flag(args) {
     // Check for hooks in default location and core.hooksPath
+    let common_git_dir = resolve_common_git_dir(fs, git_dir)
     let has_hooks_path_config = @bitlib.read_config_value(
         fs,
-        git_dir + "/config",
+        common_git_dir + "/config",
         "core",
         "hookspath",
       )
       is Some(_)
-    if has_hooks_path_config || fs.is_file(git_dir + "/hooks/pre-commit") {
+    if has_hooks_path_config || fs.is_file(common_git_dir + "/hooks/pre-commit") {
       return None
     }
   }
@@ -1162,7 +1163,10 @@ fn commit_args_require_standalone_error(_args : Array[String]) -> Bool {
 fn commit_signing_requested(git_dir : String, args : Array[String]) -> Bool {
   match commit_signing_override(args) {
     Some(flag) => flag
-    None => signing_commit_config_enabled(git_dir)
+    None => {
+      let fs = OsFs::new()
+      signing_commit_config_enabled(resolve_common_git_dir(fs, git_dir))
+    }
   }
 }
 
@@ -1552,8 +1556,10 @@ fn resolve_commit_message_encoding(git_dir : String) -> String {
         "UTF-8"
       }
     }
-    None =>
-      match bit_config_get(git_dir, "i18n", "commitEncoding") {
+    None => {
+      let fs = OsFs::new()
+      let common_git_dir = resolve_common_git_dir(fs, git_dir)
+      match bit_config_get(common_git_dir, "i18n", "commitEncoding") {
         Some(value) => {
           let trimmed = trim_string(value)
           if trimmed.length() > 0 {
@@ -1564,6 +1570,7 @@ fn resolve_commit_message_encoding(git_dir : String) -> String {
         }
         None => "UTF-8"
       }
+    }
   }
 }
 

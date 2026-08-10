@@ -2,7 +2,7 @@
 
 ///|
 fn io_error(err : @fs.IOError) -> @bitcore.GitError {
-  @bitcore.GitError::IoError(@debug.render(@debug.to_repr(err)))
+  @bitcore.GitError::IoError(@debug.render(Repr(err)))
 }
 
 ///|

@@ -114,7 +114,7 @@ async fn handle_upload_pack(args : Array[String]) -> Unit raise Error {
 
 ///|
 fn find_malformed_uploadpackfilter_override() -> String? {
-  let cli_args = @sys.get_cli_args()
+  let cli_args = @env.args()
   if cli_args.length() < 2 {
     return None
   }

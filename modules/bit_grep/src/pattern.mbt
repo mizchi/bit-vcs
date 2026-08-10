@@ -116,7 +116,7 @@ pub impl Show for GrepExprMatch with fn output(self, logger) {
     "{matched: " +
     self.matched.to_string() +
     ", span: " +
-    to_repr(self.span).to_string() +
+    Repr(self.span).to_string() +
     "}",
   )
 }

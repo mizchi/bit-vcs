@@ -35,7 +35,7 @@ pub impl Eq for NodeId with fn equal(self, other) {
 
 ///|
 pub impl Hash for NodeId with fn hash_combine(self, hasher) {
-  self.id.hash_combine(hasher)
+  Hash::hash_combine(self.id, hasher)
 }
 
 ///|

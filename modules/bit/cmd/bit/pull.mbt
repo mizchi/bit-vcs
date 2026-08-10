@@ -7,7 +7,7 @@ async fn handle_pull(args : Array[String]) -> Unit raise Error {
   if rfs.is_file(git_dir) {
     let gitfile = decode_bytes(
       rfs.read_file(git_dir) catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     )
     ignore(gitfile)
@@ -1185,7 +1185,7 @@ fn pull_snapshot_worktree_files(
   for path in paths {
     let full_path = root + "/" + path
     if fs.is_file(full_path) {
-      snapshot[path] = fs.read_file(full_path) catch { _ => Bytes::default() }
+      snapshot[path] = fs.read_file(full_path) catch { _ => Default::default() }
     }
   }
   snapshot
@@ -1626,7 +1626,7 @@ fn read_config_values(
   }
   let content = decode_bytes(
     fs.read_file(config_path) catch {
-      _ => Bytes::default()
+      _ => Default::default()
     },
   )
   let section_lower = section.to_lower()
@@ -1867,7 +1867,7 @@ fn read_url_rewrite_rules(
   }
   let content = decode_bytes(
     fs.read_file(config_path) catch {
-      _ => Bytes::default()
+      _ => Default::default()
     },
   )
   let blocks = @bitlib.parse_config_blocks(content)

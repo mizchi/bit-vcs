@@ -78,7 +78,7 @@ async fn handle_http_fetch(args : Array[String]) -> Unit raise Error {
         @fs.write_bytes_to_file(pack_path, pack_data) catch {
           err => {
             eprint_line(
-              "error: cannot write \{pack_path}: \{@debug.render(@debug.to_repr(err))}",
+              "error: cannot write \{pack_path}: \{@debug.render(Repr(err))}",
             )
             continue
           }
@@ -136,7 +136,7 @@ async fn http_fetch_loose_object(
   @fs.write_bytes_to_file(path, data) catch {
     err => {
       eprint_line(
-        "error: cannot write \{path}: \{@debug.render(@debug.to_repr(err))}",
+        "error: cannot write \{path}: \{@debug.render(Repr(err))}",
       )
       @sys.exit(1)
       return
@@ -162,7 +162,7 @@ fn http_fetch_write_ref(
   @fs.write_bytes_to_file(ref_path, content_bytes) catch {
     err =>
       raise @bitcore.GitError::IoError(
-        "cannot write ref \{ref_path}: \{@debug.render(@debug.to_repr(err))}",
+        "cannot write ref \{ref_path}: \{@debug.render(Repr(err))}",
       )
   }
 }

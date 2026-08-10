@@ -124,7 +124,7 @@ fn check_attr_load_rules(
   if fs.is_file(root_attr) {
     let content = decode_bytes(
       fs.read_file(root_attr) catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     )
     check_attr_parse_rules(content, rules)
@@ -134,7 +134,7 @@ fn check_attr_load_rules(
   if fs.is_file(info_attr) {
     let content = decode_bytes(
       fs.read_file(info_attr) catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     )
     check_attr_parse_rules(content, rules)

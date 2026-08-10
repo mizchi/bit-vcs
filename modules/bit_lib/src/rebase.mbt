@@ -1124,7 +1124,7 @@ pub fn load_rebase_state(
 ///|
 fn read_file_trimmed(fs : &@bit.RepoFileSystem, path : String) -> String {
   let content = @utf8.decode_lossy(
-    (fs.read_file(path) catch { _ => Bytes::default() })[:],
+    (fs.read_file(path) catch { _ => Default::default() })[:],
   )
   let mut end = content.length()
   while end > 0 {
@@ -1148,7 +1148,7 @@ fn parse_todo_file(
     return result
   }
   let content = @utf8.decode_lossy(
-    (fs.read_file(path) catch { _ => Bytes::default() })[:],
+    (fs.read_file(path) catch { _ => Default::default() })[:],
   )
   for line_view in content.split("\n") {
     let line = line_view.to_owned()
@@ -2051,15 +2051,15 @@ fn rebase_get_blob_data(
   fs : &@bit.RepoFileSystem,
   id : @bit.ObjectId,
 ) -> Bytes {
-  let obj = db.get(fs, id) catch { _ => return Bytes::default() }
+  let obj = db.get(fs, id) catch { _ => return Default::default() }
   match obj {
     Some(o) =>
       if o.obj_type == @bit.ObjectType::Blob {
         o.data
       } else {
-        Bytes::default()
+        Default::default()
       }
-    None => Bytes::default()
+    None => Default::default()
   }
 }
 

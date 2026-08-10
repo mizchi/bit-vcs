@@ -90,6 +90,82 @@ async test "worktree: status/add/commit" {
 }
 
 ///|
+async test "worktree: linked commit stores shared objects and updates common branch" {
+  let fs = setup_repo()
+  fs.write_string("/repo/a.txt", "base\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let base = commit(
+    fs, fs, "/repo", "base\n", "Test <test@example.com>", 1700000000L,
+  )
+  create_worktree(
+    fs,
+    fs,
+    "/repo",
+    "/worker",
+    Some(base.to_hex()),
+    new_branch=Some("feature"),
+  )
+
+  fs.write_string("/worker/a.txt", "base\nworker\n")
+  add_paths(fs, fs, "/worker", ["a.txt"])
+  let worker_commit = commit(
+    fs, fs, "/worker", "worker\n", "Test <test@example.com>", 1700000001L,
+  )
+
+  assert_true(
+    ObjectDb::load(fs, "/repo/.git").get(fs, worker_commit) is Some(_),
+  )
+  assert_false(fs.is_dir("/repo/.git/worktrees/worker/objects"))
+  @test.assert_eq(
+    fs.read_string("/repo/.git/refs/heads/feature"),
+    worker_commit.to_hex() + "\n",
+  )
+  let linked_status = status(fs, "/worker")
+  @test.assert_eq(linked_status.staged_added.length(), 0)
+  @test.assert_eq(linked_status.staged_modified.length(), 0)
+  @test.assert_eq(linked_status.unstaged_modified.length(), 0)
+  let worktrees = list_worktrees(fs, "/repo")
+  @test.assert_eq(worktrees.length(), 2)
+  @test.assert_eq(worktrees[1].head_id, Some(worker_commit))
+}
+
+///|
+test "worktree: cherry-pick into linked worktree uses shared objects and refs" {
+  let fs = setup_repo()
+  fs.write_string("/repo/a.txt", "base\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let base = commit(
+    fs, fs, "/repo", "base\n", "Test <test@example.com>", 1700000000L,
+  )
+  fs.write_string("/repo/a.txt", "base\nsource\n")
+  add_paths(fs, fs, "/repo", ["a.txt"])
+  let source = commit(
+    fs, fs, "/repo", "source\n", "Test <test@example.com>", 1700000001L,
+  )
+  create_worktree(
+    fs,
+    fs,
+    "/repo",
+    "/worker",
+    Some(base.to_hex()),
+    new_branch=Some("feature"),
+  )
+
+  let result = cherry_pick(
+    fs, fs, "/worker", source, "Test <test@example.com>", 1700000002L,
+  )
+  guard result.commit_id is Some(picked) else {
+    fail("expected linked worktree cherry-pick to create a commit")
+  }
+  assert_true(ObjectDb::load(fs, "/repo/.git").get(fs, picked) is Some(_))
+  @test.assert_eq(
+    fs.read_string("/repo/.git/refs/heads/feature"),
+    picked.to_hex() + "\n",
+  )
+  @test.assert_eq(fs.read_string("/worker/a.txt"), "base\nsource\n")
+}
+
+///|
 async test "worktree: add_paths writes cache-tree extension" {
   let fs = setup_repo()
   fs.write_string("/repo/one", "frotz\n")

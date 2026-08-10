@@ -165,7 +165,7 @@ fn resolve_submodule_common_git_dir(
   if fs.is_file(commondir_path) {
     let raw = decode_bytes(
       fs.read_file(commondir_path) catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     )
     let rel = trim_string(raw)
@@ -1716,7 +1716,7 @@ fn read_submodule_status_head_label(
   }
   let content = decode_bytes(
     fs.read_file(head_path) catch {
-      _ => Bytes::default()
+      _ => Default::default()
     },
   )
   match submodule_status_head_label(content) {
@@ -2034,7 +2034,7 @@ async fn handle_submodule_status(
   if rfs.is_file(gitmodules_path) {
     let gitmodules = decode_bytes(
       rfs.read_file(gitmodules_path) catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     )
     if gitmodules_has_unmapped_paths(gitmodules) {
@@ -2261,7 +2261,7 @@ async fn handle_submodule_update(
           if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
             raise err
           }
-          Bytes::default()
+          Default::default()
         }
       },
     )

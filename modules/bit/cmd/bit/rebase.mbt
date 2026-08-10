@@ -160,7 +160,7 @@ fn rebase_read_signing_state(
     return (false, None)
   }
   let value = trim_string(
-    decode_bytes(rfs.read_file(path) catch { _ => Bytes::default() }),
+    decode_bytes(rfs.read_file(path) catch { _ => Default::default() }),
   )
   (true, if value.length() > 0 { Some(value) } else { None })
 }

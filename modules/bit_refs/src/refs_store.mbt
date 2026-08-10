@@ -111,7 +111,7 @@ pub fn collect_packed_ref_ids(
   if !fs.is_file(packed_path) {
     return ()
   }
-  let packed = fs.read_file(packed_path) catch { _ => Bytes::default() }
+  let packed = fs.read_file(packed_path) catch { _ => Default::default() }
   let text = @utf8.decode_lossy(packed[:])
   for line_view in text.split("\n") {
     let line = trim_string_refs(line_view.to_owned())
@@ -267,7 +267,7 @@ pub fn rewrite_packed_refs(
   if !rfs.is_file(packed_path) {
     return ()
   }
-  let data = rfs.read_file(packed_path) catch { _ => Bytes::default() }
+  let data = rfs.read_file(packed_path) catch { _ => Default::default() }
   let text = @utf8.decode_lossy(data[:])
   let entries = parse_packed_refs_text(text)
   let kept : Array[PackedRefEntry] = []

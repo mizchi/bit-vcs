@@ -203,7 +203,7 @@ pub fn resolve_checkout_common_git_dir(
     return git_dir
   }
   let raw = @utf8.decode_lossy(
-    (fs.read_file(commondir_path) catch { _ => Bytes::default() })[:],
+    (fs.read_file(commondir_path) catch { _ => Default::default() })[:],
   )
   let rel = @string_utils.trim_string(raw)
   if rel.length() == 0 {

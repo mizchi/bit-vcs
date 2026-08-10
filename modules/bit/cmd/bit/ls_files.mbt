@@ -174,7 +174,7 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
       }
       // Detect worktree EOL from file on disk
       let w_eol = if file_exists {
-        let content = fs.read_file(abs) catch { _ => Bytes::default() }
+        let content = fs.read_file(abs) catch { _ => Default::default() }
         detect_eol_type(content)
       } else {
         ""
@@ -203,7 +203,7 @@ async fn handle_ls_files(args : Array[String]) -> Unit raise Error {
         }
         let abs = root + "/" + path
         let w_eol = if fs.is_file(abs) {
-          let content = fs.read_file(abs) catch { _ => Bytes::default() }
+          let content = fs.read_file(abs) catch { _ => Default::default() }
           detect_eol_type(content)
         } else {
           ""

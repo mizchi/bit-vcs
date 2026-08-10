@@ -395,7 +395,7 @@ fn add_apply_intent_to_add(
           fs,
           git_dir,
           @bitcore.ObjectType::Blob,
-          Bytes::default(),
+          Default::default(),
           algo~,
         )
         @bitlib.compat_record_blob_mapping(
@@ -403,7 +403,7 @@ fn add_apply_intent_to_add(
           rfs,
           git_dir,
           created,
-          Bytes::default(),
+          Default::default(),
         )
         empty_id = Some(created)
         created

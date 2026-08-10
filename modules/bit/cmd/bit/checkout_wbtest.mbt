@@ -723,7 +723,7 @@ async fn checkout_wbtest_case_force_checkout_clears_merge_state() -> Unit raise 
   @test.assert_eq(
     decode_bytes(
       fs.read_file(repo_dir + "/file") catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     ),
     "side\n",

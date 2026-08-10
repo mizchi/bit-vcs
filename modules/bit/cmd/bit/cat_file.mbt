@@ -2824,7 +2824,7 @@ fn cat_file_read_path_attrs(
   if fs.is_file(attr_path) {
     let text = decode_bytes(
       fs.read_file(attr_path) catch {
-        _ => Bytes::default()
+        _ => Default::default()
       },
     )
     for line_view in text.split("\n") {

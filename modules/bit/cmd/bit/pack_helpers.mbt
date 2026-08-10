@@ -289,7 +289,7 @@ fn is_sha256_repo_from_env() -> Bool {
     }
     None => ()
   }
-  let args = @sys.get_cli_args()
+  let args = @env.args()
   let mut i = 1
   while i + 1 < args.length() {
     if args[i] == "-C" {
