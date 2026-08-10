@@ -1,13 +1,13 @@
 name = "mizchi/bit_worktree"
 
-version = "0.45.7"
+version = "0.46.2"
 
 import {
-  "mizchi/bit_core@0.45.7",
-  "mizchi/bit_io@0.45.7",
-  "mizchi/bit_lib@0.45.7",
-  "mizchi/bit_object@0.45.7",
-  "mizchi/bit_types@0.45.7",
+  "mizchi/bit_core@0.46.2",
+  "mizchi/bit_io@0.46.2",
+  "mizchi/bit_lib@0.46.2",
+  "mizchi/bit_object@0.46.2",
+  "mizchi/bit_types@0.46.2",
   "moonbitlang/async@0.19.4",
 }
 
