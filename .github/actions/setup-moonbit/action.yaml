@@ -1,0 +1,44 @@
+name: Setup MoonBit
+description: Install the repository's pinned MoonBit toolchain
+
+inputs:
+  version:
+    description: MoonBit toolchain version
+    required: false
+    # v0.10.7 ICEs while compiling moonbitlang/x@0.4.43. Keep CI on the
+    # last verified compiler until an upstream release fixes that regression.
+    default: "0.10.6+80dc50f24"
+
+runs:
+  using: composite
+  steps:
+    - name: Install MoonBit CLI (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        MOONBIT_INSTALL_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+        echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+    - name: Install MoonBit CLI (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        MOONBIT_INSTALL_VERSION: ${{ inputs.version }}
+      run: |
+        Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+        irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+        echo "$env:USERPROFILE\.moon\bin" |
+          Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Report MoonBit version (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: moon version --all
+
+    - name: Report MoonBit version (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: moon version --all

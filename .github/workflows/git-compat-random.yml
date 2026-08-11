@@ -78,9 +78,7 @@ jobs:
 
       - name: Install MoonBit CLI
         if: ${{ steps.shard_guard.outputs.should_run == 'true' }}
-        run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+        uses: ./.github/actions/setup-moonbit
 
       - name: Build git from source
         if: ${{ steps.shard_guard.outputs.should_run == 'true' }}

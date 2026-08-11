@@ -27,19 +27,8 @@ jobs:
         with:
           submodules: true
 
-      - name: Install MoonBit CLI (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
-
-      - name: Install MoonBit CLI (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
-          echo "$env:USERPROFILE\.moon\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Install MoonBit CLI
+        uses: ./.github/actions/setup-moonbit
 
       - name: Moon update
         run: moon update

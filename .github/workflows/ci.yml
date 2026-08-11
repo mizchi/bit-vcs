@@ -66,9 +66,7 @@ jobs:
           version: 0.4.1
           pkl-version: none
       - name: Install MoonBit CLI
-        run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+        uses: ./.github/actions/setup-moonbit
       - name: Moon update
         run: moon update
       - name: pkf run check
@@ -182,9 +180,7 @@ jobs:
           version: 0.4.1
           pkl-version: none
       - name: Install MoonBit CLI
-        run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+        uses: ./.github/actions/setup-moonbit
       - name: Moon update
         run: moon update
       - name: Build native binary for wbtests
@@ -236,9 +232,7 @@ jobs:
         with:
           submodules: true
       - name: Install MoonBit CLI
-        run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+        uses: ./.github/actions/setup-moonbit
       - name: Moon update
         run: moon update
       - name: Distributed tests
@@ -312,9 +306,7 @@ jobs:
 
       - name: Install MoonBit CLI
         if: steps.shardtests.outputs.count != '0'
-        run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+        uses: ./.github/actions/setup-moonbit
 
       - name: Moon update
         if: steps.shardtests.outputs.count != '0'
