@@ -118,12 +118,12 @@ fn walk_dir_typed(
     let is_dir = if d_type == 4 {
       true
     } else if d_type == 10 {
-      // Symlink: check if it points to a directory via stat
-      let child_path = @bit.join_path(root, child_rel)
-      fs.is_dir(child_path)
+      // A symlink is a worktree entry even when its target is a directory.
+      false
     } else if d_type == 0 {
       // DT_UNKNOWN: fall back to stat
       let child_path = @bit.join_path(root, child_rel)
+      @bitio.read_symlink_target_path(child_path) is None &&
       fs.is_dir(child_path)
     } else {
       false
@@ -185,7 +185,8 @@ fn walk_dir_fallback(
     }
     let child_rel = if rel == "" { name } else { rel + "/" + name }
     let child_path = @bit.join_path(root, child_rel)
-    let is_dir = fs.is_dir(child_path)
+    let is_dir = @bitio.read_symlink_target_path(child_path) is None &&
+      fs.is_dir(child_path)
     if matcher.is_ignored(child_rel, is_dir) {
       if is_dir && matcher.has_negation() {
         walk_dir(fs, root, child_rel, matcher, out)

@@ -902,7 +902,18 @@ async fn handle_worktree_add(args : Array[String]) -> Unit raise Error {
     new_branch~,
     relative_paths~,
     orphan~,
+    checkout_files=!no_checkout,
   )
+  if !orphan && !no_checkout {
+    let worktree_git_dir = resolve_git_dir(fs, resolved_wt_path)
+    match @bitlib.resolve_head_commit(fs, worktree_git_dir) {
+      Some(commit_id) =>
+        @bitlibnative.apply_worktree_modes_from_commit(
+          fs, fs, resolved_wt_path, common_git_dir, commit_id,
+        )
+      None => ()
+    }
+  }
   if lock {
     @bitlib.lock_worktree(fs, fs, root, resolved_wt_path, reason=lock_reason)
   }

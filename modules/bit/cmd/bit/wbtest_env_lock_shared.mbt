@@ -41,8 +41,9 @@ fn wbtest_resolve_real_git(repo_root : String) -> String {
 
 ///|
 /// Resolve the freshly built `bit.exe` for wbtests. The native binary lives
-/// under a debug or release build directory depending on how it was compiled,
-/// so prefer whichever exists (debug first, since that is the default build).
+/// under a debug or release build directory depending on how it was compiled.
+/// Prefer the variant matching the running test binary so a stale build of the
+/// other variant cannot affect a whitebox test.
 fn wbtest_resolve_bit_exe(repo_root : String) -> String {
   let fs : &@bitcore.RepoFileSystem = OsFs::new()
   let debug_rel = "/_build/native/debug/build/mizchi/bit/bit.exe"
@@ -52,6 +53,7 @@ fn wbtest_resolve_bit_exe(repo_root : String) -> String {
   // module dir), then the caller-supplied repo_root.
   let roots : Array[String] = []
   let exe = @env.args()[0]
+  let running_release = exe.contains("/_build/native/release/")
   match exe.find("/_build/") {
     Some(i) => roots.push(String::unsafe_substring(exe, start=0, end=i))
     None => ()
@@ -59,15 +61,24 @@ fn wbtest_resolve_bit_exe(repo_root : String) -> String {
   roots.push(repo_root)
   for root in roots {
     let debug_path = root + debug_rel
-    if fs.is_file(debug_path) {
-      return debug_path
-    }
     let release_path = root + release_rel
-    if fs.is_file(release_path) {
-      return release_path
+    if running_release {
+      if fs.is_file(release_path) {
+        return release_path
+      }
+      if fs.is_file(debug_path) {
+        return debug_path
+      }
+    } else {
+      if fs.is_file(debug_path) {
+        return debug_path
+      }
+      if fs.is_file(release_path) {
+        return release_path
+      }
     }
   }
-  // Not found anywhere: return the primary debug candidate so the caller's
+  // Not found anywhere: return the matching primary candidate so the caller's
   // existence check fails with a clear, actionable path.
-  roots[0] + debug_rel
+  roots[0] + (if running_release { release_rel } else { debug_rel })
 }
