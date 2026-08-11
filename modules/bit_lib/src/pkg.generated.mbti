@@ -105,6 +105,8 @@ pub fn convert_lf_to_crlf(Bytes) -> Bytes
 
 pub fn copy_tree(&@bit_types.FileSystem, &@bit_types.RepoFileSystem, String, String) -> Unit raise @bit_object.GitError
 
+pub fn core_filemode_enabled(&@bit_types.RepoFileSystem, String) -> Bool
+
 pub fn create_annotated_tag(&@bit_types.FileSystem, &@bit_types.RepoFileSystem, String, String, @bit_object.ObjectId, String, String, Int64, timezone? : String) -> Unit raise @bit_object.GitError
 
 pub fn create_branch(&@bit_types.FileSystem, &@bit_types.RepoFileSystem, String, String, start_point? : String?, author? : String, email? : String, timestamp? : Int64, timezone? : String) -> Unit raise @bit_object.GitError
@@ -115,7 +117,7 @@ pub fn create_lightweight_tag(&@bit_types.FileSystem, &@bit_types.RepoFileSystem
 
 pub fn create_reflog(&@bit_types.FileSystem, &@bit_types.RepoFileSystem, String, String) -> Unit raise @bit_object.GitError
 
-pub fn create_worktree(&@bit_types.FileSystem, &@bit_types.RepoFileSystem, String, String, String?, detach? : Bool, force? : Bool, new_branch~ : String?, relative_paths? : Bool?, orphan? : Bool) -> Unit raise @bit_object.GitError
+pub fn create_worktree(&@bit_types.FileSystem, &@bit_types.RepoFileSystem, String, String, String?, detach? : Bool, force? : Bool, new_branch~ : String?, relative_paths? : Bool?, orphan? : Bool, checkout_files? : Bool) -> Unit raise @bit_object.GitError
 
 pub fn decode_commit_message_bytes(Bytes, String) -> String
 
@@ -1278,4 +1280,3 @@ pub(open) trait WorkingTree {
   fn snapshot(Self, String, String, Int64) -> @bit_object.ObjectId raise @bit_object.GitError
   fn checkout(Self, @bit_object.ObjectId) -> Unit raise @bit_object.GitError
 }
-
