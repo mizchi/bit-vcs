@@ -34,7 +34,7 @@ async fn worktree_wbtest_collect_shim_git(
     "SHIM_REAL_GIT": wbtest_resolve_real_git(repo_root),
     "SHIM_EXEC_PATH": repo_root + "/third_party/git",
     "SHIM_MOON": shim_moon,
-    "SHIM_CMDS": "worktree fetch",
+    "SHIM_CMDS": "worktree fetch status diff",
     "SHIM_STRICT": "1",
   }
   let git_args : Array[String] = ["-C", worktree_wbtest_current_shim_cwd()]
@@ -365,6 +365,282 @@ async fn worktree_wbtest_case_explicit_head_creates_detached_worktree() -> Unit 
   add_test_restore_env("GIT_DIR", prev_git_dir)
   add_test_restore_env("GIT_WORK_TREE", prev_work_tree)
   cleanup_tree(fs, root)
+}
+
+///|
+async fn worktree_wbtest_case_preserves_executable_mode() -> Unit raise Error {
+  @bitnative.init_native_io()
+  let fs = OsFs::new()
+  let root = "/tmp/bit-test-worktree-executable-mode-" +
+    get_current_timestamp().to_string()
+  cleanup_tree(fs, root)
+  defer cleanup_tree(fs, root)
+  fs.mkdir_p(root)
+  let repo_dir = root + "/repo"
+  let worktree_dir = root + "/worker"
+
+  let prev_shim_cwd = @sys.get_env_var("GIT_SHIM_CWD")
+  let prev_shim_pwd = @sys.get_env_var("GIT_SHIM_PWD")
+  let prev_caller_pwd = @sys.get_env_var("GIT_SHIM_CALLER_PWD")
+  let prev_git_dir = @sys.get_env_var("GIT_DIR")
+  let prev_work_tree = @sys.get_env_var("GIT_WORK_TREE")
+  defer add_test_restore_env("GIT_SHIM_CWD", prev_shim_cwd)
+  defer add_test_restore_env("GIT_SHIM_PWD", prev_shim_pwd)
+  defer add_test_restore_env("GIT_SHIM_CALLER_PWD", prev_caller_pwd)
+  defer add_test_restore_env("GIT_DIR", prev_git_dir)
+  defer add_test_restore_env("GIT_WORK_TREE", prev_work_tree)
+
+  add_test_run_git(root, ["init", "--initial-branch=main", "-q", "repo"])
+  add_test_run_git(repo_dir, ["config", "user.name", "Test User"])
+  add_test_run_git(repo_dir, ["config", "user.email", "test@example.com"])
+  let executable_path = repo_dir + "/hook.sh"
+  fs.write_string(executable_path, "#!/bin/sh\necho ok\n")
+  @test.assert_eq(
+    @process.run("chmod", ["+x", executable_path], inherit_env=true),
+    0,
+  )
+  add_test_run_git(repo_dir, ["add", "hook.sh"])
+  add_test_run_git(repo_dir, ["commit", "-q", "-m", "base"])
+
+  @sys.set_env_var("GIT_SHIM_CWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", repo_dir)
+  @sys.unset_env_var("GIT_DIR")
+  @sys.unset_env_var("GIT_WORK_TREE")
+
+  worktree_wbtest_run_shim_git([
+    "worktree", "add", "-b", "repro/mode", worktree_dir, "HEAD",
+  ])
+
+  let mode = @bitio.lstat_entry_meta(worktree_dir + "/hook.sh").map(meta => {
+    meta.mode
+  })
+  @test.assert_eq(mode, Some(0o100755))
+  @test.assert_eq(
+    add_test_git_stdout(worktree_dir, ["status", "--porcelain"]),
+    "",
+  )
+
+  @sys.set_env_var("GIT_SHIM_CWD", worktree_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", worktree_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", worktree_dir)
+  let (status_code, status_out, _) = worktree_wbtest_collect_shim_git([
+    "status", "--porcelain",
+  ])
+  @test.assert_eq(status_code, 0)
+  @test.assert_eq(status_out, "")
+  let (quiet_code, quiet_out, _) = worktree_wbtest_collect_shim_git([
+    "diff", "--quiet",
+  ])
+  @test.assert_eq(quiet_code, 0)
+  @test.assert_eq(quiet_out, "")
+  let (diff_code, diff_out, _) = worktree_wbtest_collect_shim_git(["diff"])
+  @test.assert_eq(diff_code, 0)
+  @test.assert_eq(diff_out, "")
+
+  @sys.set_env_var("GIT_SHIM_CWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", repo_dir)
+  worktree_wbtest_run_shim_git(["worktree", "remove", worktree_dir])
+  assert_false(fs.is_dir(worktree_dir))
+}
+
+///|
+async fn worktree_wbtest_case_detects_mode_only_change() -> Unit raise Error {
+  @bitnative.init_native_io()
+  let fs = OsFs::new()
+  let root = "/tmp/bit-test-worktree-mode-only-" +
+    get_current_timestamp().to_string()
+  cleanup_tree(fs, root)
+  defer cleanup_tree(fs, root)
+  fs.mkdir_p(root)
+  let repo_dir = root + "/repo"
+  let worktree_dir = root + "/worker"
+
+  let prev_shim_cwd = @sys.get_env_var("GIT_SHIM_CWD")
+  let prev_shim_pwd = @sys.get_env_var("GIT_SHIM_PWD")
+  let prev_caller_pwd = @sys.get_env_var("GIT_SHIM_CALLER_PWD")
+  let prev_git_dir = @sys.get_env_var("GIT_DIR")
+  let prev_work_tree = @sys.get_env_var("GIT_WORK_TREE")
+  defer add_test_restore_env("GIT_SHIM_CWD", prev_shim_cwd)
+  defer add_test_restore_env("GIT_SHIM_PWD", prev_shim_pwd)
+  defer add_test_restore_env("GIT_SHIM_CALLER_PWD", prev_caller_pwd)
+  defer add_test_restore_env("GIT_DIR", prev_git_dir)
+  defer add_test_restore_env("GIT_WORK_TREE", prev_work_tree)
+
+  add_test_run_git(root, ["init", "--initial-branch=main", "-q", "repo"])
+  add_test_run_git(repo_dir, ["config", "user.name", "Test User"])
+  add_test_run_git(repo_dir, ["config", "user.email", "test@example.com"])
+  let executable_path = repo_dir + "/hook.sh"
+  fs.write_string(executable_path, "#!/bin/sh\necho ok\n")
+  @test.assert_eq(
+    @process.run("chmod", ["+x", executable_path], inherit_env=true),
+    0,
+  )
+  add_test_run_git(repo_dir, ["add", "hook.sh"])
+  add_test_run_git(repo_dir, ["commit", "-q", "-m", "base"])
+
+  @sys.set_env_var("GIT_SHIM_CWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", repo_dir)
+  @sys.unset_env_var("GIT_DIR")
+  @sys.unset_env_var("GIT_WORK_TREE")
+  worktree_wbtest_run_shim_git([
+    "worktree", "add", "-b", "repro/mode-only", worktree_dir, "HEAD",
+  ])
+
+  @test.assert_eq(
+    @process.run("chmod", ["-x", worktree_dir + "/hook.sh"], inherit_env=true),
+    0,
+  )
+  @sys.set_env_var("GIT_SHIM_CWD", worktree_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", worktree_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", worktree_dir)
+  let (status_code, status_out, _) = worktree_wbtest_collect_shim_git([
+    "status", "--porcelain",
+  ])
+  @test.assert_eq(status_code, 0)
+  @test.assert_eq(status_out, " M hook.sh\n")
+  let (diff_code, _, _) = worktree_wbtest_collect_shim_git(["diff", "--quiet"])
+  @test.assert_eq(diff_code, 1)
+
+  @sys.set_env_var("GIT_SHIM_CWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", repo_dir)
+  let (remove_code, _, _) = worktree_wbtest_collect_shim_git([
+    "worktree", "remove", worktree_dir,
+  ])
+  @test.assert_eq(remove_code, 1)
+  assert_true(fs.is_dir(worktree_dir))
+
+  @test.assert_eq(
+    @process.run("chmod", ["+x", worktree_dir + "/hook.sh"], inherit_env=true),
+    0,
+  )
+  worktree_wbtest_run_shim_git(["worktree", "remove", worktree_dir])
+}
+
+///|
+async fn worktree_wbtest_case_symlink_stays_clean() -> Unit raise Error {
+  @bitnative.init_native_io()
+  let fs = OsFs::new()
+  let root = "/tmp/bit-test-worktree-symlink-clean-" +
+    get_current_timestamp().to_string()
+  cleanup_tree(fs, root)
+  defer cleanup_tree(fs, root)
+  fs.mkdir_p(root)
+  let repo_dir = root + "/repo"
+  let worktree_dir = root + "/worker"
+
+  let prev_shim_cwd = @sys.get_env_var("GIT_SHIM_CWD")
+  let prev_shim_pwd = @sys.get_env_var("GIT_SHIM_PWD")
+  let prev_caller_pwd = @sys.get_env_var("GIT_SHIM_CALLER_PWD")
+  let prev_git_dir = @sys.get_env_var("GIT_DIR")
+  let prev_work_tree = @sys.get_env_var("GIT_WORK_TREE")
+  defer add_test_restore_env("GIT_SHIM_CWD", prev_shim_cwd)
+  defer add_test_restore_env("GIT_SHIM_PWD", prev_shim_pwd)
+  defer add_test_restore_env("GIT_SHIM_CALLER_PWD", prev_caller_pwd)
+  defer add_test_restore_env("GIT_DIR", prev_git_dir)
+  defer add_test_restore_env("GIT_WORK_TREE", prev_work_tree)
+
+  add_test_run_git(root, ["init", "--initial-branch=main", "-q", "repo"])
+  add_test_run_git(repo_dir, ["config", "user.name", "Test User"])
+  add_test_run_git(repo_dir, ["config", "user.email", "test@example.com"])
+  fs.write_string(repo_dir + "/hook.sh", "#!/bin/sh\necho ok\n")
+  @asyncfs.symlink(target="hook.sh", repo_dir + "/hook-link")
+  add_test_run_git(repo_dir, ["add", "hook.sh", "hook-link"])
+  add_test_run_git(repo_dir, ["commit", "-q", "-m", "base"])
+
+  @sys.set_env_var("GIT_SHIM_CWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", repo_dir)
+  @sys.unset_env_var("GIT_DIR")
+  @sys.unset_env_var("GIT_WORK_TREE")
+  worktree_wbtest_run_shim_git([
+    "worktree", "add", "-b", "repro/symlink", worktree_dir, "HEAD",
+  ])
+
+  @test.assert_eq(
+    @bitio.read_symlink_target_path(worktree_dir + "/hook-link"),
+    Some("hook.sh"),
+  )
+  @test.assert_eq(
+    add_test_git_stdout(worktree_dir, ["status", "--porcelain"]),
+    "",
+  )
+  @sys.set_env_var("GIT_SHIM_CWD", worktree_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", worktree_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", worktree_dir)
+  let (status_code, status_out, _) = worktree_wbtest_collect_shim_git([
+    "status", "--porcelain",
+  ])
+  @test.assert_eq(status_code, 0)
+  @test.assert_eq(status_out, "")
+  let (diff_code, _, _) = worktree_wbtest_collect_shim_git(["diff", "--quiet"])
+  @test.assert_eq(diff_code, 0)
+
+  @sys.set_env_var("GIT_SHIM_CWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", repo_dir)
+  worktree_wbtest_run_shim_git(["worktree", "remove", worktree_dir])
+  assert_false(fs.is_dir(worktree_dir))
+}
+
+///|
+async fn worktree_wbtest_case_no_checkout_leaves_files_absent() -> Unit raise Error {
+  @bitnative.init_native_io()
+  let fs = OsFs::new()
+  let root = "/tmp/bit-test-worktree-no-checkout-" +
+    get_current_timestamp().to_string()
+  cleanup_tree(fs, root)
+  defer cleanup_tree(fs, root)
+  fs.mkdir_p(root)
+  let repo_dir = root + "/repo"
+  let worktree_dir = root + "/worker-no-checkout"
+
+  let prev_shim_cwd = @sys.get_env_var("GIT_SHIM_CWD")
+  let prev_shim_pwd = @sys.get_env_var("GIT_SHIM_PWD")
+  let prev_caller_pwd = @sys.get_env_var("GIT_SHIM_CALLER_PWD")
+  let prev_git_dir = @sys.get_env_var("GIT_DIR")
+  let prev_work_tree = @sys.get_env_var("GIT_WORK_TREE")
+  defer add_test_restore_env("GIT_SHIM_CWD", prev_shim_cwd)
+  defer add_test_restore_env("GIT_SHIM_PWD", prev_shim_pwd)
+  defer add_test_restore_env("GIT_SHIM_CALLER_PWD", prev_caller_pwd)
+  defer add_test_restore_env("GIT_DIR", prev_git_dir)
+  defer add_test_restore_env("GIT_WORK_TREE", prev_work_tree)
+
+  add_test_run_git(root, ["init", "--initial-branch=main", "-q", "repo"])
+  add_test_run_git(repo_dir, ["config", "user.name", "Test User"])
+  add_test_run_git(repo_dir, ["config", "user.email", "test@example.com"])
+  fs.write_string(repo_dir + "/init.t", "main\n")
+  add_test_run_git(repo_dir, ["add", "init.t"])
+  add_test_run_git(repo_dir, ["commit", "-q", "-m", "base"])
+
+  @sys.set_env_var("GIT_SHIM_CWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", repo_dir)
+  @sys.unset_env_var("GIT_DIR")
+  @sys.unset_env_var("GIT_WORK_TREE")
+  worktree_wbtest_run_shim_git([
+    "worktree", "add", "--no-checkout", "-b", "repro/no-checkout", worktree_dir,
+    "HEAD",
+  ])
+
+  assert_true(fs.is_file(worktree_dir + "/.git"))
+  assert_false(fs.is_file(worktree_dir + "/init.t"))
+  assert_false(
+    fs.is_file(repo_dir + "/.git/worktrees/worker-no-checkout/index"),
+  )
+  add_test_run_git(worktree_dir, ["reset", "--hard"])
+  @test.assert_eq(
+    @utf8.decode_lossy(fs.read_file(worktree_dir + "/init.t")[:]),
+    "main\n",
+  )
+
+  @sys.set_env_var("GIT_SHIM_CWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_PWD", repo_dir)
+  @sys.set_env_var("GIT_SHIM_CALLER_PWD", repo_dir)
+  worktree_wbtest_run_shim_git(["worktree", "remove", worktree_dir])
 }
 
 ///|
@@ -1341,6 +1617,10 @@ async test "worktree: add command path cases stay compatible" {
   worktree_wbtest_case_lock_reason()
   worktree_wbtest_case_detach_defaults_to_head()
   worktree_wbtest_case_explicit_head_creates_detached_worktree()
+  worktree_wbtest_case_preserves_executable_mode()
+  worktree_wbtest_case_detects_mode_only_change()
+  worktree_wbtest_case_symlink_stays_clean()
+  worktree_wbtest_case_no_checkout_leaves_files_absent()
   worktree_wbtest_case_prune_keeps_recent_checkout()
   worktree_wbtest_case_existing_branch_dwim()
   worktree_wbtest_case_force_allows_current_branch_dwim()

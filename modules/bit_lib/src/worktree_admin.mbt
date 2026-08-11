@@ -120,6 +120,7 @@ pub fn create_worktree(
   new_branch~ : String?,
   relative_paths? : Bool? = None,
   orphan? : Bool = false,
+  checkout_files? : Bool = true,
 ) -> Unit raise @bit.GitError {
   let git_dir = resolve_git_dir(rfs, root)
   let common_git_dir = resolve_commondir(rfs, git_dir)
@@ -238,9 +239,9 @@ pub fn create_worktree(
   }
   // Checkout files to worktree
   match commit_id {
-    Some(id) =>
+    Some(id) if checkout_files =>
       checkout_to_worktree(fs, rfs, git_dir, abs_wt_path, admin_dir, id)
-    None => ()
+    _ => ()
   }
 }
 
@@ -1802,13 +1803,17 @@ fn worktree_contains_nested_git(
       continue
     }
     let child_path = join_path(path, entry)
+    let is_symlink = @bitio.read_symlink_target_path(child_path) is Some(_)
     if entry == ".git" {
-      if !is_root && (fs.is_file(child_path) || fs.is_dir(child_path)) {
+      if !is_root &&
+        !is_symlink &&
+        (fs.is_file(child_path) || fs.is_dir(child_path)) {
         return true
       }
       continue
     }
-    if fs.is_dir(child_path) &&
+    if !is_symlink &&
+      fs.is_dir(child_path) &&
       worktree_contains_nested_git(fs, child_path, is_root=false) {
       return true
     }
@@ -1826,6 +1831,7 @@ fn worktree_has_local_changes(
   let tracked_paths : Array[String] = []
   let gitlink_paths : Array[String] = []
   let common_git_dir = resolve_commondir_from_admin(fs, admin_dir)
+  let core_filemode = core_filemode_enabled(fs, common_git_dir)
   let db = ObjectDb::load_lazy(fs, common_git_dir)
   for entry in index_entries {
     tracked_paths.push(entry.path)
@@ -1834,10 +1840,25 @@ fn worktree_has_local_changes(
       continue
     }
     let file_path = join_path(worktree_path, entry.path)
-    if !fs.is_file(file_path) {
-      return true
+    let file_bytes = match @bitio.worktree_entry_meta_sync(fs, file_path) {
+      None => return true
+      Some(info) => {
+        let expected_kind = entry.mode & 0o170000
+        let observed_kind = info.mode & 0o170000
+        if expected_kind != observed_kind ||
+          (core_filemode && info.mode != entry.mode) {
+          return true
+        }
+        match info.kind {
+          @bitio.WorktreeKindMeta::Regular => fs.read_file(file_path)
+          @bitio.WorktreeKindMeta::Symlink =>
+            match @bitio.read_symlink_target_path(file_path) {
+              Some(target) => @utf8.encode(target)
+              None => return true
+            }
+        }
+      }
     }
-    let file_bytes = fs.read_file(file_path)
     match db.get(fs, entry.id) {
       Some(obj) if obj.obj_type == @bit.ObjectType::Blob =>
         if file_bytes != obj.data {
@@ -1880,7 +1901,8 @@ fn worktree_has_untracked_files(
       rel_path + "/" + entry
     }
     let child_abs = join_path(abs_path, entry)
-    if fs.is_dir(child_abs) {
+    let is_symlink = @bitio.read_symlink_target_path(child_abs) is Some(_)
+    if !is_symlink && fs.is_dir(child_abs) {
       if gitlink_paths.contains(child_rel) {
         if worktree_dir_has_entries(fs, child_abs) {
           return true
@@ -1899,7 +1921,8 @@ fn worktree_has_untracked_files(
       } else {
         return true
       }
-    } else if fs.is_file(child_abs) && !tracked_paths.contains(child_rel) {
+    } else if (is_symlink || fs.is_file(child_abs)) &&
+      !tracked_paths.contains(child_rel) {
       return true
     }
   }
@@ -1952,7 +1975,9 @@ fn remove_dir_recursive(
       continue
     }
     let child_path = join_path(path, entry)
-    if rfs.is_dir(child_path) {
+    if @bitio.read_symlink_target_path(child_path) is Some(_) {
+      fs.remove_file(child_path)
+    } else if rfs.is_dir(child_path) {
       remove_dir_recursive(fs, rfs, child_path)
     } else {
       fs.remove_file(child_path)

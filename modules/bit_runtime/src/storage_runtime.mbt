@@ -775,6 +775,11 @@ fn storage_is_tree_mode(mode : String) -> Bool {
 }
 
 ///|
+fn storage_file_mode_kind(mode : Int) -> Int {
+  mode & 0o170000
+}
+
+///|
 fn storage_resolve_common_git_dir(
   rfs : &@bit.RepoFileSystem,
   git_dir : String,
@@ -891,6 +896,8 @@ fn storage_collect_status_snapshot(
   root : String,
 ) -> StorageStatusSnapshot raise Error {
   let git_dir = storage_resolve_git_dir(rfs, root)
+  let common_git_dir = storage_resolve_common_git_dir(rfs, git_dir)
+  let core_filemode = @bitlib.core_filemode_enabled(rfs, common_git_dir)
   let entries = @bitlib.read_index_entries(rfs, git_dir)
   let index_map : Map[String, @bitlib.IndexEntry] = Map([])
   for entry in entries {
@@ -906,9 +913,41 @@ fn storage_collect_status_snapshot(
     match index_map.get(rel_path) {
       Some(index_entry) => {
         let abs_path = root + "/" + rel_path
-        let content = rfs.read_file(abs_path) catch { _ => continue }
-        let worktree_id = @bit.hash_blob(content)
-        if worktree_id != index_entry.id {
+        let mut changed = false
+        let content : Bytes? = match
+          @io.worktree_entry_meta_sync(rfs, abs_path) {
+          None => None
+          Some(info) => {
+            let kind_changed = storage_file_mode_kind(info.mode) !=
+              storage_file_mode_kind(index_entry.mode)
+            if kind_changed || (core_filemode && info.mode != index_entry.mode) {
+              changed = true
+            }
+            match info.kind {
+              @io.WorktreeKindMeta::Regular => {
+                let bytes = rfs.read_file(abs_path) catch {
+                  _ => {
+                    changed = true
+                    Bytes::new(0)
+                  }
+                }
+                Some(bytes)
+              }
+              @io.WorktreeKindMeta::Symlink =>
+                @io.read_symlink_target_path(abs_path).map(fn(target) {
+                  @utf8.encode(target)
+                })
+            }
+          }
+        }
+        match content {
+          Some(bytes) =>
+            if @bit.hash_blob(bytes) != index_entry.id {
+              changed = true
+            }
+          None => changed = true
+        }
+        if changed {
           unstaged_modified.push(rel_path)
         }
       }

@@ -857,6 +857,15 @@ fn read_core_filemode_setting(
 }
 
 ///|
+/// Return whether executable-bit changes are significant for this repository.
+pub fn core_filemode_enabled(
+  fs : &@bit.RepoFileSystem,
+  git_dir : String,
+) -> Bool {
+  read_core_filemode_setting(fs, git_dir)
+}
+
+///|
 fn read_core_filemode_from_config(
   fs : &@bit.RepoFileSystem,
   path : String,
