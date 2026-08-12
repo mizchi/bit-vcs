@@ -1,14 +1,14 @@
 name = "mizchi/bit_protocol"
 
-version = "0.46.3"
+version = "0.46.4"
 
 import {
-  "mizchi/bit_core@0.46.3",
-  "mizchi/bit_object@0.46.3",
-  "mizchi/bit_io@0.46.3",
-  "mizchi/bit_repo@0.46.3",
-  "mizchi/bit_types@0.46.3",
-  "mizchi/bit_pack@0.46.3",
+  "mizchi/bit_core@0.46.4",
+  "mizchi/bit_object@0.46.4",
+  "mizchi/bit_io@0.46.4",
+  "mizchi/bit_repo@0.46.4",
+  "mizchi/bit_types@0.46.4",
+  "mizchi/bit_pack@0.46.4",
   "moonbitlang/async@0.19.4",
 }
 

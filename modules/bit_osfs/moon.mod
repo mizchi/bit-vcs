@@ -1,12 +1,12 @@
 name = "mizchi/bit_osfs"
 
-version = "0.46.3"
+version = "0.46.4"
 
 import {
-  "mizchi/bit_core@0.46.3",
-  "mizchi/bit_io@0.46.3",
-  "mizchi/bit_object@0.46.3",
-  "mizchi/bit_types@0.46.3",
+  "mizchi/bit_core@0.46.4",
+  "mizchi/bit_io@0.46.4",
+  "mizchi/bit_object@0.46.4",
+  "mizchi/bit_types@0.46.4",
   "moonbitlang/x@0.4.40",
 }
 

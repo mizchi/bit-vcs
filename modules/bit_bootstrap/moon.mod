@@ -1,6 +1,6 @@
 name = "mizchi/bit_bootstrap"
 
-version = "0.46.3"
+version = "0.46.4"
 
 repository = "https://github.com/mizchi/bit-vcs"
 
