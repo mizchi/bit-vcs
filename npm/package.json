@@ -1,6 +1,6 @@
 {
   "name": "@mizchi/bit",
-  "version": "0.46.3",
+  "version": "0.46.4",
   "description": "Pure MoonBit Git implementation (JS target)",
   "type": "module",
   "sideEffects": false,
