@@ -96,10 +96,10 @@ fn collect_tree_ids_only(
           if collect_is_gitlink_mode(entry.mode) {
             continue // Skip submodule entries
           }
-          let entry_hex = entry.id.to_hex()
-          seen[entry_hex] = true
           if collect_is_tree_mode(entry.mode) {
             collect_tree_ids_only(db, fs, entry.id, seen)
+          } else {
+            seen[entry.id.to_hex()] = true
           }
         }
       }
@@ -235,51 +235,18 @@ pub fn collect_reachable_objects_excluding_commits(
   commits : Array[@bit.ObjectId],
   excluded_commits : Array[@bit.ObjectId],
 ) -> Array[@bit.PackObject] raise @bit.GitError {
-  let excluded : Map[String, Bool] = Map([])
-  for id in excluded_commits {
-    excluded[id.to_hex()] = true
-  }
+  // Mark the complete object closure already owned by the receiver. Merely
+  // stopping the commit walk at a have commit is insufficient: the wanted
+  // commit's new tree can still reference unchanged blobs from that commit.
   let seen : Map[String, Bool] = Map([])
+  for id in excluded_commits {
+    collect_object_ids_only(db, fs, id, seen)
+  }
   let out : Array[@bit.PackObject] = []
   for commit_id in commits {
-    collect_commit_objects_until_excluded(
-      db, fs, commit_id, excluded, seen, out,
-    )
+    collect_commit_objects(db, fs, commit_id, seen, out)
   }
   out
-}
-
-///|
-fn collect_commit_objects_until_excluded(
-  db : ObjectDb,
-  fs : &@bit.RepoFileSystem,
-  commit_id : @bit.ObjectId,
-  excluded : Map[String, Bool],
-  seen : Map[String, Bool],
-  out : Array[@bit.PackObject],
-) -> Unit raise @bit.GitError {
-  let hex = commit_id.to_hex()
-  if excluded.contains(hex) || seen.contains(hex) {
-    return
-  }
-  seen[hex] = true
-  let obj = db.get(fs, commit_id)
-  match obj {
-    None => raise @bit.GitError::InvalidObject("Missing commit object")
-    Some(o) => {
-      if o.obj_type != @bit.ObjectType::Commit {
-        raise @bit.GitError::InvalidObject("Object is not a commit")
-      }
-      out.push(o)
-      let info = @bit.parse_commit(o.data)
-      collect_tree_objects(db, fs, info.tree, seen, out)
-      for parent in info.parents {
-        collect_commit_objects_until_excluded(
-          db, fs, parent, excluded, seen, out,
-        )
-      }
-    }
-  }
 }
 
 ///|

@@ -2,9 +2,12 @@
 // Simple Git Smart HTTP server for testing git-shim
 // Usage: node http-test-server.js <repo-path> [port]
 
-const http = require('http');
-const { spawn } = require('child_process');
-const path = require('path');
+import http from 'node:http';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const repoPath = process.argv[2] || '.';
 const port = parseInt(process.argv[3] || '8080', 10);
