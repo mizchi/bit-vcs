@@ -1221,12 +1221,33 @@ async fn hub_push_git_http(
       None,
     )
   }
-  let db = @lib.ObjectDb::load(rfs, git_dir)
-  let objects = @lib.collect_reachable_objects(db, rfs, local_id)
-  let pack = @pack.create_packfile(objects)
   let remote = @protocol.Remote::new(remote_url)
   let refs = @bitnative.discover_receive_refs_http(remote)
   let (old_id, push_ref) = @hub.find_remote_notes_ref(refs)
+  if old_id == local_id {
+    return @hub.PrSyncResult::new(
+      true,
+      "Already up to date",
+      Some(local_id),
+      Some(local_id),
+    )
+  }
+  let haves : Array[@bit.ObjectId] = []
+  let zero = @bit.ObjectId::zero()
+  for item in refs {
+    let (id, _) = item
+    if id != zero {
+      haves.push(id)
+    }
+  }
+  let db = @lib.ObjectDb::load(rfs, git_dir)
+  let objects = @lib.collect_reachable_objects_excluding_commits(
+    db,
+    rfs,
+    [local_id],
+    haves,
+  )
+  let pack = @pack.create_packfile(objects)
   let req = @protocol.PushRequest::new(old_id, local_id, push_ref, pack)
   let result = @bitnative.push(remote, req)
   if result.has_prefix("unpack ok") ||

@@ -137,8 +137,30 @@ pub async fn push_http(
   match head {
     None => raise @bit.GitError::InvalidObject("HEAD not found")
     Some(head_id) => {
+      // Discover first so object collection can exclude everything the
+      // receiver already advertises. Building a full-history pack before
+      // negotiation can retain many gigabytes for a one-commit push.
+      let remote = @protocol.Remote::new(remote_url)
+      let refs = @bitnative.discover_receive_refs_http(remote)
+      let old_id = sync_find_ref(refs, refname)
+      if old_id == head_id {
+        return "Everything up-to-date"
+      }
+      // Check fast-forward unless force
+      if !force && old_id != @bit.ObjectId::zero() {
+        if !sync_is_ancestor(rfs, actual_git_dir, old_id, head_id) {
+          raise @bit.GitError::InvalidObject(
+            "Updates were rejected because the tip of your current branch is behind\nits remote counterpart. If you want to force the update, use 'git push --force'.",
+          )
+        }
+      }
       let db = @bitlib.ObjectDb::load(rfs, actual_git_dir)
-      let objects = @bitlib.collect_reachable_objects(db, rfs, head_id)
+      let objects = @bitlib.collect_reachable_objects_excluding_commits(
+        db,
+        rfs,
+        [head_id],
+        sync_remote_have_ids(refs),
+      )
       let pack = @pack.create_packfile(objects)
       sync_raise_lfs_upload_errors(
         lfs_upload_pack_objects(
@@ -149,17 +171,6 @@ pub async fn push_http(
           remote_name~,
         ),
       )
-      let remote = @protocol.Remote::new(remote_url)
-      let refs = @bitnative.discover_receive_refs_http(remote)
-      let old_id = sync_find_ref(refs, refname)
-      // Check fast-forward unless force
-      if !force && old_id != @bit.ObjectId::zero() {
-        if !sync_is_ancestor(rfs, actual_git_dir, old_id, head_id) {
-          raise @bit.GitError::InvalidObject(
-            "Updates were rejected because the tip of your current branch is behind\nits remote counterpart. If you want to force the update, use 'git push --force'.",
-          )
-        }
-      }
       let req = @protocol.PushRequest::new(old_id, head_id, refname, pack)
       @bitnative.push(remote, req)
     }
@@ -181,15 +192,23 @@ pub async fn push_http_from_commit(
   } else {
     git_dir
   }
+  let remote = @protocol.Remote::new(remote_url)
+  let refs = @bitnative.discover_receive_refs_http(remote)
+  let old_id = sync_find_ref(refs, refname)
+  if old_id == commit_id {
+    return "Everything up-to-date"
+  }
   let db = @bitlib.ObjectDb::load(rfs, actual_git_dir)
-  let objects = @bitlib.collect_reachable_objects(db, rfs, commit_id)
+  let objects = @bitlib.collect_reachable_objects_excluding_commits(
+    db,
+    rfs,
+    [commit_id],
+    sync_remote_have_ids(refs),
+  )
   let pack = @pack.create_packfile(objects)
   sync_raise_lfs_upload_errors(
     lfs_upload_pack_objects(rfs, actual_git_dir, remote_url, objects),
   )
-  let remote = @protocol.Remote::new(remote_url)
-  let refs = @bitnative.discover_receive_refs_http(remote)
-  let old_id = sync_find_ref(refs, refname)
   let req = @protocol.PushRequest::new(old_id, commit_id, refname, pack)
   @bitnative.push(remote, req)
 }
@@ -249,6 +268,41 @@ fn sync_find_ref(
     }
   }
   @bit.ObjectId::zero()
+}
+
+///|
+fn sync_remote_have_ids(
+  refs : Array[(@bit.ObjectId, String)],
+) -> Array[@bit.ObjectId] {
+  let zero = @bit.ObjectId::zero()
+  let seen : Map[String, Bool] = Map([])
+  let haves : Array[@bit.ObjectId] = []
+  for item in refs {
+    let (id, _) = item
+    let hex = id.to_hex()
+    if id != zero && !seen.contains(hex) {
+      seen[hex] = true
+      haves.push(id)
+    }
+  }
+  haves
+}
+
+///|
+test "sync_remote_have_ids removes zero and duplicate refs" {
+  let first = @bit.ObjectId::from_hex(
+    "1111111111111111111111111111111111111111",
+  )
+  let second = @bit.ObjectId::from_hex(
+    "2222222222222222222222222222222222222222",
+  )
+  let haves = sync_remote_have_ids([
+    (first, "HEAD"),
+    (first, "refs/heads/main"),
+    (@bit.ObjectId::zero(), "refs/heads/unborn"),
+    (second, "refs/heads/topic"),
+  ])
+  assert_eq(haves, [first, second])
 }
 
 ///|
