@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLI commands</title>
+<link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__brand">
+    <a href="../" class="plain"><img src="../assets/img/wordmark.svg" alt="bit"></a>
+    <span class="ver">docs · v0.1</span>
+  </div>
+  <button class="topbar__menu" aria-label="menu"><span></span><span></span><span></span></button>
+  <nav>
+    <a href="../learn/">Learn</a>
+    <a href="../reference/" class="active">Reference</a>
+    <a href="https://github.com/mizchi/bit" target="_blank" rel="noopener">GitHub ↗</a>
+  </nav>
+</header>
+
+<div class="layout">
+
+  <aside class="side">
+    <h4>// Reference</h4>
+    <ul>
+      <li><a href="cli.html" class="active">01 CLI commands</a></li>
+      <li><a href="library.html">02 Library API</a></li>
+      <li><a href="env.html">03 Environment</a></li>
+    </ul>
+    <h4>// More</h4>
+    <ul>
+      <li><a href="../learn/">Learning Guide</a></li>
+      <li><a href="../">Home</a></li>
+    </ul>
+  </aside>
+
+  <article>
+    <header class="title">
+      <p class="kicker">// reference · R1</p>
+      <h1>CLI commands.</h1>
+      <p class="lead">bit implements 108 Git commands natively. Anything not listed here falls back to Git's surface — read <a href="../learn/distributed.html">going distributed</a> for the protocol-level differences.</p>
+    </header>
+
+<h2 id="porcelain" data-num="// 001">Porcelain</h2>
+<p>Everyday commands. Identical surface to Git.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bit init</code></td>
+<td>Create an empty <code>.git/</code> in the current directory.</td>
+</tr>
+<tr>
+<td><code>bit clone &lt;url&gt;</code></td>
+<td>Clone over HTTP, relay, or a subdirectory URL (see extensions).</td>
+</tr>
+<tr>
+<td><code>bit add &lt;path&gt;…</code></td>
+<td>Stage files. Supports <code>-A</code>, <code>-p</code>, <code>--update</code>.</td>
+</tr>
+<tr>
+<td><code>bit commit -m &lt;msg&gt;</code></td>
+<td>Record staged changes. <code>--amend</code>, <code>--no-edit</code>, <code>--allow-empty</code>.</td>
+</tr>
+<tr>
+<td><code>bit status</code></td>
+<td>Working tree state in Git's exact line format.</td>
+</tr>
+<tr>
+<td><code>bit log</code></td>
+<td>Native graph renderer. <code>--graph</code>, <code>--stat</code>, <code>--name-only</code>, <code>--topo-order</code>.</td>
+</tr>
+<tr>
+<td><code>bit diff</code></td>
+<td>Worktree vs index, or any two trees / commits.</td>
+</tr>
+<tr>
+<td><code>bit checkout</code></td>
+<td>Switch branches, restore files. <code>-b</code> creates.</td>
+</tr>
+<tr>
+<td><code>bit branch</code></td>
+<td>List, create, delete branches.</td>
+</tr>
+<tr>
+<td><code>bit merge</code></td>
+<td>Three-way merge with conflict markers.</td>
+</tr>
+<tr>
+<td><code>bit rebase</code></td>
+<td>Native <code>-i</code> with editor injection.</td>
+</tr>
+<tr>
+<td><code>bit cherry-pick &lt;sha&gt;</code></td>
+<td>Apply commits onto HEAD.</td>
+</tr>
+<tr>
+<td><code>bit revert &lt;sha&gt;</code></td>
+<td>Reverse a commit.</td>
+</tr>
+<tr>
+<td><code>bit fetch</code></td>
+<td>Download refs and objects from a remote.</td>
+</tr>
+<tr>
+<td><code>bit pull</code></td>
+<td>Fetch and merge / rebase.</td>
+</tr>
+<tr>
+<td><code>bit push</code></td>
+<td>Upload refs and objects. HTTPS, relay, LFS upload.</td>
+</tr>
+<tr>
+<td><code>bit remote</code></td>
+<td>Manage remotes.</td>
+</tr>
+<tr>
+<td><code>bit tag</code></td>
+<td>Lightweight and annotated tags.</td>
+</tr>
+<tr>
+<td><code>bit stash</code></td>
+<td>Shelve worktree state.</td>
+</tr>
+<tr>
+<td><code>bit reset</code></td>
+<td><code>--soft</code>, <code>--mixed</code>, <code>--hard</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="plumbing" data-num="// 002">Plumbing</h2>
+<p>Low-level operations on Git objects. Same surface as Git's plumbing.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bit hash-object</code></td>
+<td>Compute the SHA-1 of a file (optionally write to objects).</td>
+</tr>
+<tr>
+<td><code>bit cat-file</code></td>
+<td>Print object type, size, or contents.</td>
+</tr>
+<tr>
+<td><code>bit rev-parse</code></td>
+<td>Resolve refs and revisions to SHAs.</td>
+</tr>
+<tr>
+<td><code>bit ls-tree</code></td>
+<td>List tree contents.</td>
+</tr>
+<tr>
+<td><code>bit ls-files</code></td>
+<td>List files in the index.</td>
+</tr>
+<tr>
+<td><code>bit update-ref</code></td>
+<td>Move a ref atomically.</td>
+</tr>
+<tr>
+<td><code>bit pack-objects</code></td>
+<td>Build a packfile.</td>
+</tr>
+<tr>
+<td><code>bit unpack-objects</code></td>
+<td>Explode a packfile into loose objects.</td>
+</tr>
+<tr>
+<td><code>bit symbolic-ref</code></td>
+<td>Read or write a symbolic ref like <code>HEAD</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="hub-prs-and-issues" data-num="// 003">Hub — PRs and issues</h2>
+<p>Local, server-less collaboration backed by Git objects. Sync via relay.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bit pr init</code></td>
+<td>Initialize hub metadata in the current repo (writes <code>.git/hub/policy.toml</code>).</td>
+</tr>
+<tr>
+<td><code>bit pr create</code></td>
+<td><code>--title</code>, <code>--body</code>, <code>--head</code>, <code>--base</code>. Opens a local PR.</td>
+</tr>
+<tr>
+<td><code>bit pr list</code></td>
+<td><code>--open</code>, <code>--closed</code>, <code>--all</code>.</td>
+</tr>
+<tr>
+<td><code>bit pr review &lt;id&gt;</code></td>
+<td><code>--approve</code>, <code>--request-changes</code>, <code>--commit &lt;sha&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>bit pr merge &lt;id&gt;</code></td>
+<td>Merge into base. Honors policy.</td>
+</tr>
+<tr>
+<td><code>bit pr search &lt;q&gt;</code></td>
+<td>Full-text over PR titles and bodies.</td>
+</tr>
+<tr>
+<td><code>bit issue create</code></td>
+<td><code>--title</code>, <code>--body</code>, <code>--parent &lt;id&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>bit issue list</code></td>
+<td><code>--open</code>, <code>--tree</code>, <code>--all</code>, <code>--parent</code>.</td>
+</tr>
+<tr>
+<td><code>bit issue link &lt;issue&gt; &lt;pr&gt;</code></td>
+<td>Cross-link issue ↔ PR.</td>
+</tr>
+<tr>
+<td><code>bit issue search &lt;q&gt;</code></td>
+<td>Full-text over issues.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="relay" data-num="// 004">Relay</h2>
+<p>Sync PR and issue metadata between peers via an HTTP relay.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bit relay sync push &lt;url&gt;</code></td>
+<td>Upload hub notes to a relay.</td>
+</tr>
+<tr>
+<td><code>bit relay sync fetch &lt;url&gt;</code></td>
+<td>Download hub notes from a relay.</td>
+</tr>
+<tr>
+<td><code>bit relay serve</code></td>
+<td>Run a relay host locally. Supports LFS Batch API.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="extensions" data-num="// 005">Extensions</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bit subdir-clone &lt;url&gt; &lt;path&gt; &lt;dst&gt;</code></td>
+<td>Clone a subdirectory as an independent repo.</td>
+</tr>
+<tr>
+<td><code>bit clone user/repo:path</code></td>
+<td>Shorthand for subdir-clone via the standard clone command.</td>
+</tr>
+<tr>
+<td><code>bit hq get &lt;user/repo&gt;</code></td>
+<td><code>ghq</code>-compatible repo manager. Default root: <code>~/bhq</code>.</td>
+</tr>
+<tr>
+<td><code>bit hq list</code></td>
+<td>List all repos under hq.</td>
+</tr>
+<tr>
+<td><code>bit workspace flow &lt;task&gt;</code></td>
+<td>Workspace fingerprint-based task runner.</td>
+</tr>
+<tr>
+<td><code>bit fingerprint</code></td>
+<td>Workspace / PR fingerprint helpers.</td>
+</tr>
+<tr>
+<td><code>bit completion &lt;shell&gt;</code></td>
+<td>Emit shell completion script. <code>bash</code> or <code>zsh</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ai-assist" data-num="// 006">AI assist</h2>
+<p>AI-assisted conflict resolution via OpenRouter. Default model: <code>moonshotai/kimi-k2</code>. Requires <code>OPENROUTER_API_KEY</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bit ai rebase &lt;base&gt;</code></td>
+<td>Rebase with AI resolving conflicts. <code>--continue</code>, <code>--abort</code>, <code>--skip</code>.</td>
+</tr>
+<tr>
+<td><code>bit ai merge &lt;branch&gt;</code></td>
+<td>Merge with AI assist.</td>
+</tr>
+<tr>
+<td><code>bit ai commit</code></td>
+<td>AI commit message (<code>--split</code> for multi-commit suggestion).</td>
+</tr>
+<tr>
+<td><code>bit ai cherry-pick &lt;sha&gt;</code></td>
+<td>Cherry-pick with AI conflict resolution.</td>
+</tr>
+<tr>
+<td><code>bit ai revert &lt;sha&gt;</code></td>
+<td>Revert with AI.</td>
+</tr>
+</tbody>
+</table>
+<h3>Common AI flags</h3>
+<ul>
+<li>
+<p><code>--model &lt;id&gt;</code> — override the OpenRouter model.</p>
+</li>
+<li>
+<p><code>--max-ai-rounds &lt;n&gt;</code> — bound conflict-resolution turns.</p>
+</li>
+<li>
+<p><code>--agent-loop</code> — give the AI an agent loop, not single-shot.</p>
+</li>
+<li>
+<p><code>--agent-max-steps &lt;n&gt;</code> — bound the agent loop.</p>
+</li>
+</ul>
+<div class="callout">
+<p class="kicker">// see also</p>
+<p>The <a href="library.html">Library API</a> exposes the same surface to MoonBit code — drive any of the above from an agent without spawning a process.</p>
+</div>
+
+
+<nav class="pager">
+  <a href="./">
+    <span class="pager__k">← back</span>
+    <span class="pager__t">Reference</span>
+  </a>
+  <a class="next" href="library.html">
+    <span class="pager__k">next · R2 →</span>
+    <span class="pager__t">Library API</span>
+  </a>
+</nav>
+  </article>
+
+  <aside class="toc">
+    <h4>// on this page</h4>
+    <ul>
+      <li><a href="#porcelain"><span class="num">001</span> Porcelain</a></li>
+      <li><a href="#plumbing"><span class="num">002</span> Plumbing</a></li>
+      <li><a href="#hub-prs-and-issues"><span class="num">003</span> Hub — PRs and issues</a></li>
+      <li><a href="#relay"><span class="num">004</span> Relay</a></li>
+      <li><a href="#extensions"><span class="num">005</span> Extensions</a></li>
+      <li><a href="#ai-assist"><span class="num">006</span> AI assist</a></li>
+    </ul>
+  </aside>
+
+</div>
+
+<footer class="site">
+  <span>bit · reference · cli</span>
+  <span><a href="../">Home</a> · <a href="../learn/">Learn</a> · <a href="../reference/">Reference</a></span>
+</footer>
+
+<script src="../assets/syntax.js"></script>
+<script src="../assets/site.js"></script>
+</body>
+</html>

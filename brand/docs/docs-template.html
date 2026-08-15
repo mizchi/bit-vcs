@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>bit — docs · brand applied</title>
+<link rel="stylesheet" href="../tokens/tokens.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: var(--type-1);
+    line-height: var(--leading-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a { color: var(--bit-pink); text-decoration: none; border-bottom: 1px solid var(--bit-pink); }
+  a:hover { background: var(--bit-pink); color: var(--bit-paper); }
+
+  /* ── topbar ───────────────────────────────────────────────── */
+  .topbar {
+    border-bottom: 1px solid var(--rule);
+    padding: var(--space-4) var(--space-6);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+  .topbar__brand { display: flex; align-items: center; gap: var(--space-3); }
+  .topbar__brand img { height: 28px; display: block; }
+  .topbar__brand .ver {
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--rule-soft);
+  }
+  .topbar nav {
+    display: flex;
+    gap: var(--space-5);
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+  }
+  .topbar nav a {
+    color: var(--fg);
+    text-decoration: none;
+    border: none;
+    padding-bottom: 4px;
+    border-bottom: 1px solid transparent;
+  }
+  .topbar nav a:hover { background: transparent; color: var(--bit-pink); border-bottom-color: var(--bit-pink); }
+  .topbar nav a.active { border-bottom-color: var(--bit-pink); color: var(--bit-pink); }
+
+  /* ── layout ───────────────────────────────────────────────── */
+  .layout {
+    display: grid;
+    grid-template-columns: 240px 1fr 220px;
+    gap: var(--space-7);
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: var(--space-7) var(--space-6) var(--space-9);
+  }
+  @media (max-width: 1024px) {
+    .layout { grid-template-columns: 200px 1fr; }
+    aside.toc { display: none; }
+  }
+  @media (max-width: 720px) {
+    .layout { grid-template-columns: 1fr; padding: var(--space-5); }
+    aside.side { display: none; }
+  }
+
+  /* ── side nav ─────────────────────────────────────────────── */
+  aside.side {
+    position: sticky; top: 88px; align-self: start;
+    font-family: var(--font-sans); font-size: var(--type-0);
+  }
+  aside.side h4 {
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+    margin: 0 0 var(--space-3);
+    font-weight: 400;
+  }
+  aside.side ul { list-style: none; padding: 0; margin: 0 0 var(--space-6); }
+  aside.side li { padding: 4px 0; }
+  aside.side a {
+    color: var(--fg);
+    text-decoration: none;
+    border: none;
+    display: block;
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--rule-soft);
+  }
+  aside.side a:hover { background: transparent; border-left-color: var(--bit-pink); color: var(--bit-pink); }
+  aside.side a.active { border-left-color: var(--bit-pink); color: var(--bit-pink); font-weight: 500; }
+
+  /* ── article ──────────────────────────────────────────────── */
+  article { min-width: 0; }
+  article header.title {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: var(--space-6);
+    margin-bottom: var(--space-7);
+  }
+  article .kicker {
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+    margin: 0 0 var(--space-4);
+  }
+  article h1 {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: clamp(40px, 6vw, var(--type-5));
+    line-height: var(--leading-tight);
+    letter-spacing: var(--track-display);
+    margin: 0 0 var(--space-4);
+  }
+  article .lead {
+    font-size: var(--type-2);
+    line-height: var(--leading-snug);
+    color: var(--fg-soft);
+    max-width: 56ch;
+    margin: 0;
+  }
+  article h2 {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: var(--type-4);
+    line-height: var(--leading-snug);
+    letter-spacing: var(--track-heading);
+    margin: var(--space-8) 0 var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--rule);
+  }
+  article h2::before {
+    content: attr(data-num);
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--bit-pink);
+    margin-bottom: var(--space-3);
+    font-weight: 400;
+  }
+  article h3 {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: var(--type-2);
+    margin: var(--space-6) 0 var(--space-3);
+    letter-spacing: var(--track-heading);
+  }
+  article p { margin: 0 0 var(--space-4); max-width: 72ch; }
+  article ul, article ol { max-width: 72ch; padding-left: var(--space-5); margin: 0 0 var(--space-4); }
+  article li { padding: 4px 0; }
+  article li::marker { color: var(--bit-pink); }
+
+  /* inline & block code */
+  article code {
+    font-family: var(--font-mono);
+    font-size: 0.94em;
+    background: var(--bit-paper-deep);
+    padding: 2px 6px;
+    border: 1px solid var(--rule-soft);
+  }
+  article pre {
+    background: var(--bit-ink);
+    color: var(--bit-paper);
+    padding: var(--space-5);
+    overflow-x: auto;
+    margin: 0 0 var(--space-5);
+    font-family: var(--font-mono);
+    font-size: var(--type-0);
+    line-height: 1.7;
+    border: 0;
+  }
+  article pre code { background: transparent; border: 0; padding: 0; color: inherit; font-size: inherit; }
+  article pre .cm { color: var(--bit-ink-mute); }
+  article pre .kw { color: var(--bit-pink); }
+  article pre .ac { color: var(--bit-acid); }
+
+  /* callouts — geometric, rectangular, no rounding, no shadow */
+  .callout {
+    border: 1px solid var(--rule);
+    border-left: 6px solid var(--bit-pink);
+    padding: var(--space-4) var(--space-5);
+    margin: var(--space-5) 0;
+  }
+  .callout .kicker { margin: 0 0 var(--space-2); color: var(--bit-pink); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout--acid { border-left-color: var(--bit-ink); background: var(--bit-acid); }
+  .callout--acid .kicker { color: var(--bit-ink); }
+
+  /* tables */
+  table { width: 100%; border-collapse: collapse; margin: var(--space-5) 0; font-size: var(--type-0); }
+  thead th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+    font-weight: 400;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--rule);
+  }
+  tbody td { padding: var(--space-3); border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  tbody td:first-child { font-family: var(--font-mono); }
+
+  /* TOC */
+  aside.toc {
+    position: sticky; top: 88px; align-self: start;
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+  }
+  aside.toc h4 { color: var(--fg-mute); margin: 0 0 var(--space-3); font-weight: 400; }
+  aside.toc ul { list-style: none; padding: 0; margin: 0; }
+  aside.toc li { padding: 6px 0; }
+  aside.toc a {
+    color: var(--fg);
+    text-decoration: none;
+    border: none;
+    display: flex;
+    gap: var(--space-2);
+  }
+  aside.toc a:hover { color: var(--bit-pink); background: transparent; }
+  aside.toc .num { color: var(--bit-pink); font-family: var(--font-mono); }
+
+  /* footer */
+  footer.docs {
+    border-top: 1px solid var(--rule);
+    padding: var(--space-6);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+  }
+</style>
+</head>
+<body>
+
+<!-- ─────────────────────────── TOPBAR ─────────────────────────── -->
+<div class="topbar">
+  <div class="topbar__brand">
+    <img src="../logo/wordmark.svg" alt="bit">
+    <span class="ver">docs · v0.1</span>
+  </div>
+  <nav>
+    <a href="#" class="active">Guide</a>
+    <a href="#">Reference</a>
+    <a href="#">CLI</a>
+    <a href="#">Brand</a>
+  </nav>
+</div>
+
+<!-- ─────────────────────────── LAYOUT ─────────────────────────── -->
+<div class="layout">
+
+  <!-- side nav -->
+  <aside class="side">
+    <h4>// Getting started</h4>
+    <ul>
+      <li><a href="#">Install</a></li>
+      <li><a href="#" class="active">Concepts</a></li>
+      <li><a href="#">Quick start</a></li>
+      <li><a href="#">Shell completion</a></li>
+    </ul>
+    <h4>// Core</h4>
+    <ul>
+      <li><a href="#">Objects &amp; refs</a></li>
+      <li><a href="#">Gossip protocol</a></li>
+      <li><a href="#">Hub (PR / Issue)</a></li>
+      <li><a href="#">Relay sync</a></li>
+    </ul>
+    <h4>// Extensions</h4>
+    <ul>
+      <li><a href="#">bit ai</a></li>
+      <li><a href="#">bit fingerprint</a></li>
+      <li><a href="#">bit subdir</a></li>
+      <li><a href="#">bit hq</a></li>
+    </ul>
+  </aside>
+
+  <!-- article -->
+  <article>
+
+    <header class="title">
+      <p class="kicker">// guide · 002 · concepts</p>
+      <h1>A node, a source, a single bit.</h1>
+      <p class="lead">bit is a distributed Git implementation. Every clone is a peer. Every commit is a bit of evidence. There is no central authority — only a graph of nodes converging through gossip.</p>
+    </header>
+
+    <h2 data-num="// 001">Nodes</h2>
+    <p>A <em>node</em> in bit is any process holding a copy of the repository. Your laptop, a CI runner, a relay host — all peers, no master. Each node exposes an address and a set of refs, and accepts handshakes from other peers it trusts.</p>
+
+    <p>Nodes are addressed by URI:</p>
+
+<pre><code><span class="cm">// peer addresses</span>
+bit://aurora.local:9418/repo
+relay://bit.example.com/u/<span class="kw">mizchi</span>/bit
+https://github.com/<span class="kw">mizchi</span>/bit.git</code></pre>
+
+    <div class="callout">
+      <p class="kicker">// note</p>
+      <p>The pink dot in the bit logo represents the <em>source</em> node — the origin of a particular truth. In a distributed system, every node can be a source. The brand asserts this visually: only one node in the triad is pink at a time, but which one can rotate.</p>
+    </div>
+
+    <h2 data-num="// 002">Source</h2>
+    <p>Source is whoever wrote the commit you are looking at. bit records the source identity in the commit metadata and reconciles concurrent writes through a conflict-free history graph — not through a server vote.</p>
+
+    <h3>Replication</h3>
+    <p>When two peers handshake, they exchange ref tips and walk the object graph backwards until they meet a common ancestor. Bytes flow in both directions. This is gossip, not consensus.</p>
+
+    <table>
+      <thead>
+        <tr><th>Mode</th><th>Trigger</th><th>Direction</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>push</td><td>explicit</td><td>local → remote</td></tr>
+        <tr><td>fetch</td><td>explicit</td><td>remote → local</td></tr>
+        <tr><td>gossip</td><td>periodic, on handshake</td><td>both</td></tr>
+        <tr><td>relay</td><td>via relay host</td><td>both, async</td></tr>
+      </tbody>
+    </table>
+
+    <h2 data-num="// 003">Communication</h2>
+    <p>A single edge between two nodes is the smallest unit of meaning in the system — one bit of exchange. Communication in bit is content-addressed: peers ask for object hashes, not for filenames, so the protocol is naturally idempotent and deduplicating.</p>
+
+<pre><code><span class="cm">// initiate a peer session</span>
+<span class="kw">let</span> peer = Node::from_uri(<span class="ac">"bit://aurora.local:9418/repo"</span>)
+peer.handshake(timeout=<span class="ac">2.s</span>)?
+<span class="kw">let</span> wants = local.refs().diff(peer.refs())
+peer.fetch(wants)</code></pre>
+
+    <div class="callout callout--acid">
+      <p class="kicker">// caveat</p>
+      <p>bit is experimental. Data corruption can occur in worst-case scenarios. Always keep backups of important repositories. The acid green of this callout exists for one reason: you should not miss it.</p>
+    </div>
+
+    <h2 data-num="// 004">What's next</h2>
+    <ul>
+      <li>Read the <a href="#">gossip protocol</a> reference.</li>
+      <li>Try <code>bit clone</code> against a relay host.</li>
+      <li>Open a local PR with <code>bit pr create</code>.</li>
+    </ul>
+
+  </article>
+
+  <!-- TOC -->
+  <aside class="toc">
+    <h4>// on this page</h4>
+    <ul>
+      <li><a href="#"><span class="num">001</span> Nodes</a></li>
+      <li><a href="#"><span class="num">002</span> Source</a></li>
+      <li><a href="#"><span class="num">003</span> Communication</a></li>
+      <li><a href="#"><span class="num">004</span> What's next</a></li>
+    </ul>
+  </aside>
+
+</div>
+
+<footer class="docs">
+  <span>bit · docs</span>
+  <span>edited 2026-05-19 · apache-2.0</span>
+</footer>
+
+</body>
+</html>

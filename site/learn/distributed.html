@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Going distributed</title>
+<link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__brand">
+    <a href="../" class="plain"><img src="../assets/img/wordmark.svg" alt="bit"></a>
+    <span class="ver">docs · v0.1</span>
+  </div>
+  <button class="topbar__menu" aria-label="menu"><span></span><span></span><span></span></button>
+  <nav>
+    <a href="../learn/" class="active">Learn</a>
+    <a href="../reference/">Reference</a>
+    <a href="https://github.com/mizchi/bit" target="_blank" rel="noopener">GitHub ↗</a>
+  </nav>
+</header>
+
+<div class="layout">
+
+  <aside class="side">
+    <h4>// Learning Guide</h4>
+    <ul>
+      <li><a href="concept.html">00 Concept</a></li>
+      <li><a href="install.html">01 Install bit</a></li>
+      <li><a href="first-commit.html">02 Your first commit</a></li>
+      <li><a href="distributed.html" class="active">03 Going distributed</a></li>
+    </ul>
+    <h4>// More</h4>
+    <ul>
+      <li><a href="../reference/">Reference</a></li>
+      <li><a href="../">Home</a></li>
+    </ul>
+  </aside>
+
+  <article>
+    <header class="title">
+      <p class="kicker">// guide · 03</p>
+      <h1>Going distributed.</h1>
+      <p class="lead">bit was built on the premise that source control should not depend on a central host. In this chapter you will clone a repository over HTTP and over a bit <em>relay</em>, push commits in both directions, and watch two peers converge through gossip.</p>
+    </header>
+
+<h2 id="mental-model" data-num="// 001">Mental model</h2>
+<p>A bit <strong>node</strong> is any process holding a copy of the repository. Your laptop, a CI runner, a relay host — all peers, no master. Two peers reconcile by exchanging ref tips and walking the object graph until they meet a common ancestor.</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Trigger</th>
+<th>Direction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>push</td>
+<td>explicit</td>
+<td>local → remote</td>
+</tr>
+<tr>
+<td>fetch</td>
+<td>explicit</td>
+<td>remote → local</td>
+</tr>
+<tr>
+<td>gossip</td>
+<td>periodic, on handshake</td>
+<td>both</td>
+</tr>
+<tr>
+<td>relay sync</td>
+<td>via relay host</td>
+<td>both, async</td>
+</tr>
+</tbody>
+</table>
+<h2 id="clone-over-http" data-num="// 002">Clone over HTTP</h2>
+<p>This is the standard Git path. bit speaks <code>git-upload-pack</code> and <code>git-receive-pack</code> over smart HTTP.</p>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ bit clone https://github.com/user/repo
+$ cd repo
+$ bit remote -v
+origin  https://github.com/user/repo (fetch)
+origin  https://github.com/user/repo (push)
+</code></pre></div>
+<h2 id="clone-over-a-relay" data-num="// 003">Clone over a relay</h2>
+<p>A <em>relay</em> is a lightweight bit-aware host. It speaks the bit protocol over HTTP and supports async sync — useful when peers are not online at the same time.</p>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ bit clone relay://bit.example.com/u/me/repo
+$ cd repo
+</code></pre></div>
+<h2 id="two-peers-one-truth" data-num="// 004">Two peers, one truth</h2>
+<p>Open two terminals. In the first, simulate node A:</p>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ bit clone relay://bit.example.com/u/me/repo a
+$ cd a
+$ echo &quot;from A&quot; &gt;&gt; note.txt
+$ bit add . &amp;&amp; bit commit -m &quot;A writes&quot;
+$ bit push origin main
+</code></pre></div>
+<p>In the second terminal, node B:</p>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ bit clone relay://bit.example.com/u/me/repo b
+$ cd b
+$ bit fetch origin
+$ bit log --oneline
+a8c2f6e (origin/main) A writes
+1d0e7c2 root commit
+</code></pre></div>
+<p>B now holds A's history without ever talking to A directly. The relay carried the bytes asynchronously.</p>
+<h2 id="concurrent-writes" data-num="// 005">Concurrent writes</h2>
+<p>Two peers writing at the same time produce two heads. bit's history graph is content-addressed, so collisions are deterministic — both heads are valid until a merge or rebase reconciles them. There is no server vote.</p>
+<div class="callout">
+<p class="kicker">// recommendation</p>
+<p>Use <code>bit ai rebase</code> when the conflict is mechanical (formatting drift, import re-orderings). For semantic conflicts, do the merge by hand — the AI assist is wrong often enough that you want to read what it proposes.</p>
+</div>
+<h2 id="inspect-the-graph" data-num="// 006">Inspect the graph</h2>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ bit log --graph --oneline --all
+*   1f02776 (HEAD -&gt; main) merge: reconcile A and B
+|\
+| * e871d71 B writes
+* | a8c2f6e A writes
+|/
+* 1d0e7c2 root commit
+</code></pre></div>
+<h2 id="from-moonbit" data-num="// 007">From MoonBit</h2>
+<p>The same flow scripted against the library. <code>Node::from_uri</code> opens a peer session; <code>fetch</code> walks the graph diff.</p>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// moonbit</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="moonbit">let peer = @bit.Node::from_uri(&quot;bit://aurora.local:9418/repo&quot;)
+peer.handshake(timeout=2.s)?
+
+let local_refs = @bit.refs(fs, &quot;.git&quot;)
+let wants      = local_refs.diff(peer.refs())
+peer.fetch(wants)?
+
+println(&quot;now at: \{peer.refs().get(\&quot;refs/heads/main\&quot;)}&quot;)
+</code></pre></div>
+
+
+<nav class="pager">
+  <a href="first-commit.html">
+    <span class="pager__k">← prev · 02</span>
+    <span class="pager__t">Your first commit</span>
+  </a>
+  <a class="next" href="hub.html">
+    <span class="pager__k">next · 04 →</span>
+    <span class="pager__t">PRs & issues</span>
+  </a>
+</nav>
+  </article>
+
+  <aside class="toc">
+    <h4>// on this page</h4>
+    <ul>
+      <li><a href="#mental-model"><span class="num">001</span> Mental model</a></li>
+      <li><a href="#clone-over-http"><span class="num">002</span> Clone over HTTP</a></li>
+      <li><a href="#clone-over-a-relay"><span class="num">003</span> Clone over a relay</a></li>
+      <li><a href="#two-peers-one-truth"><span class="num">004</span> Two peers, one truth</a></li>
+      <li><a href="#concurrent-writes"><span class="num">005</span> Concurrent writes</a></li>
+      <li><a href="#inspect-the-graph"><span class="num">006</span> Inspect the graph</a></li>
+      <li><a href="#from-moonbit"><span class="num">007</span> From MoonBit</a></li>
+    </ul>
+  </aside>
+
+</div>
+
+<footer class="site">
+  <span>bit · learn · distributed</span>
+  <span><a href="../">Home</a> · <a href="../learn/">Learn</a> · <a href="../reference/">Reference</a></span>
+</footer>
+
+<script src="../assets/syntax.js"></script>
+<script src="../assets/site.js"></script>
+</body>
+</html>

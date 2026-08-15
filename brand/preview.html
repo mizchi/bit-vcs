@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>bit — brand system</title>
+<link rel="stylesheet" href="tokens/tokens.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: var(--type-1);
+    line-height: var(--leading-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a { color: inherit; }
+
+  /* ── kicker ───────────────────────────────────────────────────── */
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+    margin: 0 0 var(--space-4);
+  }
+  .kicker .pink { color: var(--bit-pink); }
+
+  /* ── frame / sections ─────────────────────────────────────────── */
+  .frame {
+    border-top: 1px solid var(--rule);
+    padding: var(--space-7) var(--space-6) var(--space-8);
+  }
+  .frame:first-child { border-top: 0; }
+  .frame__head {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    align-items: baseline;
+    gap: var(--space-5);
+    margin-bottom: var(--space-7);
+  }
+  .frame__num {
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+  }
+  .frame__title {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: var(--type-4);
+    letter-spacing: var(--track-heading);
+    line-height: var(--leading-snug);
+    margin: 0;
+  }
+
+  /* ── hero ─────────────────────────────────────────────────────── */
+  .hero {
+    padding: var(--space-8) var(--space-6) var(--space-9);
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-7);
+    position: relative;
+  }
+  .hero__tag {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-6);
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+  }
+  .hero__tag strong { color: var(--fg); font-weight: 400; }
+  .hero__head {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: clamp(56px, 12vw, var(--type-7));
+    line-height: var(--leading-tight);
+    letter-spacing: var(--track-display);
+    margin: 0;
+  }
+  .hero__head .dot {
+    display: inline-block;
+    width: 0.6em;
+    height: 0.6em;
+    border-radius: var(--radius-dot);
+    background: var(--bit-pink);
+    vertical-align: 0.06em;
+    margin: 0 0.03em;
+  }
+  .hero__sub {
+    font-size: var(--type-2);
+    line-height: var(--leading-snug);
+    max-width: 38ch;
+    margin: 0;
+    color: var(--fg-soft);
+  }
+  .hero__lockup img { display: block; max-width: 460px; width: 100%; }
+
+  /* ── grid helpers ─────────────────────────────────────────────── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-5); }
+  @media (max-width: 720px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* ── color swatches ───────────────────────────────────────────── */
+  .swatch {
+    border: 1px solid var(--rule);
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    aspect-ratio: 4 / 5;
+    position: relative;
+  }
+  .swatch__chip {
+    flex: 1;
+    border: 1px solid var(--rule);
+  }
+  .swatch__meta {
+    font-family: var(--font-mono);
+    font-size: var(--type-00);
+  }
+  .swatch__name {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: var(--type-1);
+    margin: 0 0 var(--space-2);
+    letter-spacing: var(--track-heading);
+  }
+
+  /* ── type specimen ────────────────────────────────────────────── */
+  .specimen {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-7);
+  }
+  .specimen__row { display: grid; grid-template-columns: 96px 1fr; gap: var(--space-5); align-items: baseline; }
+  .specimen__label {
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+  }
+  .specimen__sample { font-family: var(--font-sans); font-weight: 700; line-height: var(--leading-tight); letter-spacing: var(--track-display); margin: 0; }
+  .specimen__sample--body { font-weight: 400; font-size: var(--type-1); letter-spacing: var(--track-body); line-height: var(--leading-body); }
+  .specimen__sample--mono { font-family: var(--font-mono); font-weight: 400; }
+
+  /* ── logo plate ───────────────────────────────────────────────── */
+  .plate {
+    border: 1px solid var(--rule);
+    padding: var(--space-7) var(--space-5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    min-height: 200px;
+  }
+  .plate--dark { background: var(--bit-ink); border-color: var(--bit-ink); }
+  .plate--acid { background: var(--bit-acid); border-color: var(--bit-acid); }
+  .plate img { max-width: 70%; max-height: 140px; display: block; }
+  .plate__caption {
+    margin-top: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+  }
+  .plate-wrap { display: flex; flex-direction: column; }
+
+  /* ── icon grid ────────────────────────────────────────────────── */
+  .icon-cell {
+    border: 1px solid var(--rule);
+    padding: var(--space-6) var(--space-4) var(--space-4);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .icon-cell img { width: 72px; height: 72px; display: block; }
+  .icon-cell__name {
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+  }
+
+  /* ── components ───────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 14px 20px;
+    border: 0;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: var(--type-0);
+    letter-spacing: var(--track-heading);
+    cursor: pointer;
+    text-decoration: none;
+    transition: background var(--dur-fast) var(--ease-snap);
+  }
+  .btn--primary { background: var(--bit-pink); color: var(--bit-paper); }
+  .btn--primary:hover { background: var(--bit-pink-deep); }
+  .btn--ghost { background: transparent; color: var(--fg); border: 1.5px solid var(--rule); }
+  .btn--ghost:hover { background: var(--fg); color: var(--bg); }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    border: 1px solid var(--rule);
+  }
+  .tag--filled { background: var(--bit-pink-tint); border-color: var(--bit-pink); color: var(--bit-ink); }
+  .tag--acid   { background: var(--bit-acid); border-color: var(--bit-ink); }
+
+  .panel {
+    border: 1px solid var(--rule);
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .panel__title {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: var(--type-2);
+    letter-spacing: var(--track-heading);
+  }
+  .panel__row {
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid var(--rule-soft);
+    padding-top: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--type-00);
+  }
+  .panel__row:first-of-type { border-top: 0; padding-top: 0; }
+  .panel__row .v { color: var(--fg-mute); }
+
+  pre.code {
+    margin: 0;
+    padding: var(--space-5);
+    background: var(--bit-ink);
+    color: var(--bit-paper);
+    font-family: var(--font-mono);
+    font-size: var(--type-0);
+    line-height: 1.7;
+    overflow-x: auto;
+  }
+  pre.code .cm { color: var(--bit-ink-mute); }
+  pre.code .kw { color: var(--bit-pink); }
+  pre.code .ac { color: var(--bit-acid); }
+
+  /* ── poster composition ───────────────────────────────────────── */
+  .poster {
+    background: var(--bit-ink);
+    color: var(--bit-paper);
+    padding: var(--space-8) var(--space-6);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-6);
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .poster .kicker { color: var(--bit-paper-deep); }
+  .poster__head {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: clamp(48px, 7vw, 96px);
+    line-height: var(--leading-tight);
+    letter-spacing: var(--track-display);
+    margin: 0;
+  }
+  .poster__head .acid { color: var(--bit-acid); }
+  .poster__rule { height: 1px; background: var(--bit-paper); margin: var(--space-5) 0; }
+  .poster__meta {
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--bit-paper-deep);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+  }
+  .poster__meta strong { display: block; color: var(--bit-paper); font-weight: 400; margin-top: 4px; }
+  .poster__diagram {
+    background: var(--bit-paper);
+    color: var(--bit-ink);
+    aspect-ratio: 4 / 5;
+    padding: var(--space-5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .poster__diagram img { max-width: 70%; }
+  @media (max-width: 720px) {
+    .poster { grid-template-columns: 1fr; }
+  }
+
+  /* footer */
+  footer {
+    border-top: 1px solid var(--rule);
+    padding: var(--space-6);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: var(--type-001);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+  }
+</style>
+</head>
+<body>
+
+<!-- ─────────────────────────── HERO ─────────────────────────── -->
+<section class="hero">
+  <div class="hero__tag">
+    <span><strong>bit / brand</strong></span>
+    <span>v0.1 — 2026</span>
+  </div>
+
+  <p class="kicker">// distributed source control · MoonBit</p>
+
+  <h1 class="hero__head">A node.<br>A source.<br>A single b<span class="dot" aria-hidden="true"></span>t.</h1>
+
+  <p class="hero__sub">bit is a distributed Git implementation. The brand is its physical form — geometric primitives, asserted color, the pink dot as the smallest unit of meaning.</p>
+
+  <div class="hero__lockup">
+    <img src="logo/lockup-horizontal.svg" alt="bit lockup">
+  </div>
+</section>
+
+<!-- ─────────────────────────── 001 ─────────────────────────── -->
+<section class="frame">
+  <header class="frame__head">
+    <div class="frame__num">// 001</div>
+    <h2 class="frame__title">Color is asserted, never blended.</h2>
+  </header>
+
+  <div class="grid-4">
+
+    <div class="swatch">
+      <div class="swatch__chip" style="background:var(--bit-pink);"></div>
+      <div>
+        <p class="swatch__name">Bit Pink</p>
+        <div class="swatch__meta">
+          #FF2D6F<br>
+          rgb 255 45 111<br>
+          primary · source
+        </div>
+      </div>
+    </div>
+
+    <div class="swatch">
+      <div class="swatch__chip" style="background:var(--bit-ink);"></div>
+      <div>
+        <p class="swatch__name">Bit Ink</p>
+        <div class="swatch__meta">
+          #0E0E12<br>
+          rgb 14 14 18<br>
+          foreground · rule
+        </div>
+      </div>
+    </div>
+
+    <div class="swatch">
+      <div class="swatch__chip" style="background:var(--bit-paper);"></div>
+      <div>
+        <p class="swatch__name">Bit Paper</p>
+        <div class="swatch__meta">
+          #F2EFE7<br>
+          rgb 242 239 231<br>
+          background · cream
+        </div>
+      </div>
+    </div>
+
+    <div class="swatch">
+      <div class="swatch__chip" style="background:var(--bit-acid);"></div>
+      <div>
+        <p class="swatch__name">Bit Acid</p>
+        <div class="swatch__meta">
+          #D6FF3D<br>
+          rgb 214 255 61<br>
+          counterpoint · rare
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ─────────────────────────── 002 ─────────────────────────── -->
+<section class="frame">
+  <header class="frame__head">
+    <div class="frame__num">// 002</div>
+    <h2 class="frame__title">Type carries the voice. Italic is forbidden.</h2>
+  </header>
+
+  <div class="specimen">
+
+    <div class="specimen__row">
+      <div class="specimen__label">Hero<br>148 / 700</div>
+      <p class="specimen__sample" style="font-size: clamp(64px, 12vw, 148px);">distributed.</p>
+    </div>
+
+    <div class="specimen__row">
+      <div class="specimen__label">H1<br>96 / 700</div>
+      <p class="specimen__sample" style="font-size: clamp(48px, 8vw, 96px);">peer to peer.</p>
+    </div>
+
+    <div class="specimen__row">
+      <div class="specimen__label">H2<br>60 / 700</div>
+      <p class="specimen__sample" style="font-size: clamp(36px, 6vw, 60px);">A graph of nodes.</p>
+    </div>
+
+    <div class="specimen__row">
+      <div class="specimen__label">H3<br>40 / 700</div>
+      <p class="specimen__sample" style="font-size: 40px; line-height: var(--leading-snug);">Communication is the smallest unit.</p>
+    </div>
+
+    <div class="specimen__row">
+      <div class="specimen__label">Body<br>17 / 400</div>
+      <p class="specimen__sample specimen__sample--body">bit stores history as content-addressed objects, replicated across peers without a central authority. Every node is a source. Every commit is a bit of evidence. The graph converges through gossip, not consensus.</p>
+    </div>
+
+    <div class="specimen__row">
+      <div class="specimen__label">Label<br>11 / 500 / mono</div>
+      <p class="specimen__sample specimen__sample--mono" style="font-size: var(--type-001); letter-spacing: var(--track-label); text-transform: uppercase;">// node.0142 — commit a8c2f6 — peer wrote 14 bytes</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ─────────────────────────── 003 ─────────────────────────── -->
+<section class="frame">
+  <header class="frame__head">
+    <div class="frame__num">// 003</div>
+    <h2 class="frame__title">Logo. Three nodes, one asymmetric triangle.</h2>
+  </header>
+
+  <div class="grid-3">
+    <div class="plate-wrap">
+      <div class="plate"><img src="logo/lockup-horizontal.svg" alt=""></div>
+      <p class="plate__caption">lockup · horizontal · on paper</p>
+    </div>
+    <div class="plate-wrap">
+      <div class="plate plate--dark"><img src="logo/lockup-horizontal.svg" alt="" style="filter: invert(1) hue-rotate(0deg);"></div>
+      <p class="plate__caption">lockup · inverse · on ink</p>
+    </div>
+    <div class="plate-wrap">
+      <div class="plate plate--acid"><img src="logo/lockup-horizontal.svg" alt=""></div>
+      <p class="plate__caption">lockup · on acid (rare)</p>
+    </div>
+
+    <div class="plate-wrap">
+      <div class="plate"><img src="logo/logo.svg" alt="" style="max-height: 140px;"></div>
+      <p class="plate__caption">mark · on paper</p>
+    </div>
+    <div class="plate-wrap">
+      <div class="plate plate--dark"><img src="logo/logo-inverse.svg" alt="" style="max-height: 140px;"></div>
+      <p class="plate__caption">mark · inverse</p>
+    </div>
+    <div class="plate-wrap">
+      <div class="plate"><img src="logo/wordmark.svg" alt="" style="max-height: 80px;"></div>
+      <p class="plate__caption">wordmark · the pink dot is the i</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────── 004 ─────────────────────────── -->
+<section class="frame">
+  <header class="frame__head">
+    <div class="frame__num">// 004</div>
+    <h2 class="frame__title">Components. Rectangles. No corners. No shadow.</h2>
+  </header>
+
+  <div class="grid-2">
+
+    <div class="panel">
+      <p class="kicker">// node.0142 — origin</p>
+      <h3 class="panel__title">aurora.local</h3>
+      <div class="panel__row"><span>refs</span><span class="v">14</span></div>
+      <div class="panel__row"><span>last gossip</span><span class="v">2s ago</span></div>
+      <div class="panel__row"><span>head</span><span class="v">a8c2f6</span></div>
+      <div style="display:flex; gap: var(--space-3); margin-top: var(--space-3);">
+        <button class="btn btn--primary">push origin</button>
+        <button class="btn btn--ghost">inspect</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="kicker">// pr.0007 — open</p>
+      <h3 class="panel__title">Replace gossip backoff with token bucket</h3>
+      <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+        <span class="tag tag--filled">pink · primary</span>
+        <span class="tag">ghost · meta</span>
+        <span class="tag tag--acid">acid · 1 per view</span>
+      </div>
+
+<pre class="code"><span class="cm">// peer announcement</span>
+<span class="kw">let</span> peer = Node::from_uri(uri)
+peer.handshake(timeout=<span class="ac">2.s</span>)?
+peer.send(Bit::source(commit))</pre>
+    </div>
+
+  </div>
+</section>
+
+<!-- ─────────────────────────── POSTER ─────────────────────────── -->
+<section class="poster">
+  <div>
+    <p class="kicker">// 006 — manifesto</p>
+    <h2 class="poster__head">no center.<br>no master.<br>only <span class="acid">peers.</span></h2>
+    <div class="poster__rule"></div>
+    <div class="poster__meta">
+      <div>system <strong>bit / 2026</strong></div>
+      <div>kernel <strong>moonbit</strong></div>
+      <div>license <strong>apache-2.0</strong></div>
+    </div>
+  </div>
+  <div class="poster__diagram">
+    <img src="logo/logo.svg" alt="">
+  </div>
+</section>
+
+<footer>
+  <span>bit · brand · v0.1</span>
+  <span>— constructed from rectangles, circles, and ink —</span>
+</footer>
+
+</body>
+</html>

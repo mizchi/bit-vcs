@@ -1,0 +1,12 @@
+{
+  "name": "mizchi/bit-docs-build",
+  "version": "0.0.1",
+  "deps": {
+    "mizchi/markdown": "0.4.9"
+  },
+  "readme": "README.md",
+  "license": "Apache-2.0",
+  "description": "Build-time markdown renderer for the bit docs site. Wraps mizchi/markdown as a JS module consumed by tools/build-docs.mjs.",
+  "source": "src",
+  "preferred-target": "js"
+}

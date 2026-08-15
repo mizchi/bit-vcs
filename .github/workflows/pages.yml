@@ -1,0 +1,73 @@
+name: Pages
+
+on:
+  push:
+    branches: [main, brand]
+    paths:
+      - "site/**"
+      - "brand/**"
+      - "tools/build-docs.mjs"
+      - "tools/docs-build-mbt/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install MoonBit toolchain
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Build MoonBit docs renderer
+        working-directory: tools/docs-build-mbt
+        run: |
+          moon update
+          moon build --target js --release
+
+      - name: Refresh brand assets in site
+        run: |
+          mkdir -p site/assets/img
+          cp brand/tokens/tokens.css site/assets/tokens.css
+          cp brand/logo/*.svg site/assets/img/
+          touch site/.nojekyll
+
+      - name: Render markdown to HTML
+        run: node tools/build-docs.mjs
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

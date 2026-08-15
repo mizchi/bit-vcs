@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>bit — distributed Git in MoonBit</title>
+<meta name="description" content="bit is a distributed Git implementation written in MoonBit. Every clone is a peer. Every commit is a bit of evidence.">
+<link rel="icon" href="assets/img/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body class="landing">
+
+<header class="topbar">
+  <div class="topbar__brand">
+    <a href="./" class="plain"><img src="assets/img/wordmark.svg" alt="bit"></a>
+    <span class="ver">v0.1 — 2026</span>
+  </div>
+  <button class="topbar__menu" aria-label="menu"><span></span><span></span><span></span></button>
+  <nav>
+    <a href="learn/">Learn</a>
+    <a href="reference/">Reference</a>
+    <a href="https://github.com/mizchi/bit" target="_blank" rel="noopener">GitHub ↗</a>
+  </nav>
+</header>
+
+<!-- ───── HERO ───── -->
+<section class="hero">
+  <div class="hero__tag">
+    <span><strong>bit / 2026</strong></span>
+    <span>distributed source control · written in moonbit</span>
+  </div>
+
+  <div class="hero__grid">
+    <div>
+      <p class="kicker">// 001 — a manifesto in three lines</p>
+      <h1 class="hero__head">A node.<br>A source.<br>A b<span class="dot" aria-hidden="true"></span>t.</h1>
+      <p class="hero__sub">bit is a Git implementation in MoonBit. Every clone is a peer. Every commit is a bit of evidence. The graph converges through gossip, not consensus.</p>
+
+      <div class="hero__cta">
+        <a class="btn btn--primary" href="learn/">Start learning →</a>
+        <a class="btn btn--ghost" href="reference/">Reference</a>
+      </div>
+
+      <div class="hero__install">
+        <span><span class="prompt">$</span> <span class="cmd">curl -fsSL https://raw.githubusercontent.com/mizchi/bit-vcs/main/install.sh | bash</span></span>
+        <button type="button">copy</button>
+      </div>
+    </div>
+
+    <div class="hero__art">
+      <img src="assets/img/logo.svg" alt="">
+    </div>
+  </div>
+</section>
+
+<!-- ───── PRINCIPLES ───── -->
+<section class="section">
+  <header class="section__head">
+    <div class="section__num">// 002</div>
+    <h2 class="section__title">Three principles, never bend.</h2>
+  </header>
+
+  <div class="feature-grid">
+    <article class="feature">
+      <p class="feature__no">— principle 01</p>
+      <h3 class="feature__h">No center.</h3>
+      <p class="feature__p">No central server. No master. Every node holds the full history and can become the source. Peers converge by gossip, asymmetric on purpose.</p>
+      <p class="feature__link"><a href="learn/distributed.html">Going distributed →</a></p>
+    </article>
+
+    <article class="feature">
+      <p class="feature__no">— principle 02</p>
+      <h3 class="feature__h">No service.</h3>
+      <p class="feature__p">PRs, issues, and reviews live as Git objects in the repo. <code>bit pr</code> and <code>bit issue</code> work offline, sync through relays, and never depend on GitHub.</p>
+      <p class="feature__link"><a href="reference/cli.html#hub">CLI: bit hub →</a></p>
+    </article>
+
+    <article class="feature">
+      <p class="feature__no">— principle 03</p>
+      <h3 class="feature__h">No magic.</h3>
+      <p class="feature__p">Written in MoonBit. Compiles to native and JS. The MoonBit API is the runtime — agents and CI can drive bit storage directly without going through a CLI.</p>
+      <p class="feature__link"><a href="reference/library.html">Library API →</a></p>
+    </article>
+  </div>
+</section>
+
+<!-- ───── QUICK START ───── -->
+<section class="section">
+  <header class="section__head">
+    <div class="section__num">// 003</div>
+    <h2 class="section__title">Quick start.</h2>
+  </header>
+
+  <div class="codeblock">
+    <div class="codeblock__bar"><span class="lang">// shell</span><button class="codeblock__copy">copy</button></div>
+    <pre><code data-lang="bash">$ bit clone https://github.com/user/repo
+$ bit checkout -b feature
+$ bit add .
+$ bit commit -m "first node speaks"
+$ bit push origin feature</code></pre>
+  </div>
+
+  <p>That's Git. Now flip on the distributed layer:</p>
+
+  <div class="codeblock">
+    <div class="codeblock__bar"><span class="lang">// shell</span><button class="codeblock__copy">copy</button></div>
+    <pre><code data-lang="bash">$ bit pr init
+$ bit pr create --title "first node speaks" --head feature --base main
+$ bit relay sync push https://relay.example.com/u/me/repo</code></pre>
+  </div>
+</section>
+
+<!-- ───── MANIFESTO STRIP ───── -->
+<section class="strip">
+  <div class="strip__wrap">
+    <p class="kicker">// 004 — manifesto</p>
+    <h2 class="strip__head">no center.<br>no master.<br>only <span class="acid">peers.</span></h2>
+  </div>
+</section>
+
+<!-- ───── EMBEDDED MOONBIT ───── -->
+<section class="section">
+  <header class="section__head">
+    <div class="section__num">// 005</div>
+    <h2 class="section__title">Speaks MoonBit, natively.</h2>
+  </header>
+
+  <p>bit's core operations run against any storage backend that implements <code>@bit.FileSystem</code>. Agents can drive a repository entirely in memory — no shell, no subprocess.</p>
+
+  <div class="codeblock">
+    <div class="codeblock__bar"><span class="lang">// moonbit</span><button class="codeblock__copy">copy</button></div>
+    <pre><code data-lang="moonbit">// spin up an in-memory repo and write a commit
+let fs = @bit.TestFs::new()
+let root = "/agent-repo"
+run_storage_command(fs, fs, root, "init", ["-q"])
+fs.write_string(root + "/note.txt", "hello, peer")
+run_storage_command(fs, fs, root, "add", ["note.txt"])
+run_storage_command(fs, fs, root, "commit", ["-m", "agent snapshot"])</code></pre>
+  </div>
+</section>
+
+<footer class="site">
+  <span>bit · apache-2.0 · written in <a href="https://moonbitlang.com" target="_blank" rel="noopener">moonbit</a></span>
+  <span><a href="learn/">Learn</a> · <a href="reference/">Reference</a> · <a href="https://github.com/mizchi/bit" target="_blank" rel="noopener">GitHub</a></span>
+</footer>
+
+<script src="assets/syntax.js"></script>
+<script src="assets/site.js"></script>
+</body>
+</html>

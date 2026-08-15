@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 320" role="img" aria-label="bit — stacked lockup">
+  <title>bit stacked lockup</title>
+  <desc>Logo above wordmark, both centered. For square placements: avatars, app icons, cover composition.</desc>
+
+  <!-- logo centered -->
+  <g transform="translate(30 0)">
+    <g stroke="#0E0E12" stroke-width="3.5" stroke-linecap="round" fill="none">
+      <line x1="66" y1="76"  x2="146" y2="64"/>
+      <line x1="66" y1="76"  x2="110" y2="152"/>
+      <line x1="146" y1="64" x2="110" y2="152"/>
+    </g>
+    <circle cx="146" cy="64" r="20" fill="none" stroke="#0E0E12" stroke-width="5"/>
+    <circle cx="110" cy="152" r="12" fill="#0E0E12"/>
+    <circle cx="66" cy="76" r="32" fill="#FF2D6F"/>
+  </g>
+
+  <!-- wordmark centered below -->
+  <g transform="translate(25 200)">
+    <rect x="10" y="10" width="16" height="100" fill="#0E0E12"/>
+    <circle cx="58" cy="72" r="30" fill="none" stroke="#0E0E12" stroke-width="16"/>
+
+    <rect x="116" y="44" width="16" height="66" fill="#0E0E12"/>
+    <circle cx="124" cy="24" r="12" fill="#FF2D6F"/>
+
+    <rect x="152" y="20" width="16" height="90" fill="#0E0E12"/>
+    <rect x="138" y="44" width="44" height="12" fill="#0E0E12"/>
+  </g>
+</svg>

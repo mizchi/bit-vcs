@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Your first commit</title>
+<link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__brand">
+    <a href="../" class="plain"><img src="../assets/img/wordmark.svg" alt="bit"></a>
+    <span class="ver">docs · v0.1</span>
+  </div>
+  <button class="topbar__menu" aria-label="menu"><span></span><span></span><span></span></button>
+  <nav>
+    <a href="../learn/" class="active">Learn</a>
+    <a href="../reference/">Reference</a>
+    <a href="https://github.com/mizchi/bit" target="_blank" rel="noopener">GitHub ↗</a>
+  </nav>
+</header>
+
+<div class="layout">
+
+  <aside class="side">
+    <h4>// Learning Guide</h4>
+    <ul>
+      <li><a href="concept.html">00 Concept</a></li>
+      <li><a href="install.html">01 Install bit</a></li>
+      <li><a href="first-commit.html" class="active">02 Your first commit</a></li>
+      <li><a href="distributed.html">03 Going distributed</a></li>
+    </ul>
+    <h4>// More</h4>
+    <ul>
+      <li><a href="../reference/">Reference</a></li>
+      <li><a href="../">Home</a></li>
+    </ul>
+  </aside>
+
+  <article>
+    <header class="title">
+      <p class="kicker">// guide · 02</p>
+      <h1>Your first commit.</h1>
+      <p class="lead">If you have ever used Git, you already know this. bit reuses the porcelain — <code>init</code>, <code>add</code>, <code>commit</code>, <code>log</code> all behave the way you expect. The first commit is a sanity check that the binary works.</p>
+    </header>
+
+<h2 id="initialize-a-repository" data-num="// 001">Initialize a repository</h2>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ mkdir hello-bit
+$ cd hello-bit
+$ bit init
+Initialized empty bit repository in .git/
+</code></pre></div>
+<p>bit writes a standard <code>.git/</code> directory. Any existing Git tool can read it. There is no parallel <code>.bit/</code> store.</p>
+<h2 id="write-and-stage" data-num="// 002">Write and stage</h2>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ echo &quot;hello, peer&quot; &gt; note.txt
+$ bit add note.txt
+$ bit status
+On branch main
+
+Changes to be committed:
+        new file:   note.txt
+</code></pre></div>
+<div class="callout">
+<p class="kicker">// note</p>
+<p>The <em>status</em> output is intentionally identical to Git's. bit emits the same line shapes so your editor's plugins, your hooks, and your <code>grep</code> incantations keep working.</p>
+</div>
+<h2 id="commit" data-num="// 003">Commit</h2>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ bit commit -m &quot;first node speaks&quot;
+[main (root-commit) a8c2f6e] first node speaks
+ 1 file changed, 1 insertion(+)
+ create mode 100644 note.txt
+</code></pre></div>
+<h2 id="read-the-log" data-num="// 004">Read the log</h2>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ bit log --graph --oneline
+* a8c2f6e (HEAD -&gt; main) first node speaks
+</code></pre></div>
+<p>The graph renderer is native — <code>--graph</code>, <code>--stat</code>, <code>--name-only</code>, <code>--name-status</code>, and <code>--topo-order</code> all run inside bit without shelling out.</p>
+<h2 id="what-just-happened" data-num="// 005">What just happened</h2>
+<p>bit wrote three Git objects under <code>.git/objects/</code>:</p>
+<ul>
+<li>
+<p>a <strong>blob</strong> for <code>note.txt</code> (the file contents)</p>
+</li>
+<li>
+<p>a <strong>tree</strong> describing the directory snapshot</p>
+</li>
+<li>
+<p>a <strong>commit</strong> pointing at the tree, with your author identity and message</p>
+</li>
+</ul>
+<p>These are the same object types every Git client speaks. Anything you commit with bit can be pushed to a Git server, and anything cloned from a Git server can be operated on by bit.</p>
+<h2 id="try-it-from-moonbit" data-num="// 006">Try it from MoonBit</h2>
+<p>The same flow, scripted against an in-memory filesystem — no shell involved. This is how agents drive bit.</p>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// moonbit</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="moonbit">let fs = @bit.TestFs::new()
+let root = &quot;/hello-bit&quot;
+
+run_storage_command(fs, fs, root, &quot;init&quot;, [&quot;-q&quot;])
+fs.write_string(root + &quot;/note.txt&quot;, &quot;hello, peer&quot;)
+run_storage_command(fs, fs, root, &quot;add&quot;, [&quot;note.txt&quot;])
+run_storage_command(fs, fs, root, &quot;commit&quot;, [&quot;-m&quot;, &quot;first node speaks&quot;])
+
+let head = run_storage_command(fs, fs, root, &quot;rev-parse&quot;, [&quot;HEAD&quot;])
+println(&quot;commit: \{head}&quot;)
+</code></pre></div>
+
+
+<nav class="pager">
+  <a href="install.html">
+    <span class="pager__k">← prev · 01</span>
+    <span class="pager__t">Install bit</span>
+  </a>
+  <a class="next" href="distributed.html">
+    <span class="pager__k">next · 03 →</span>
+    <span class="pager__t">Going distributed</span>
+  </a>
+</nav>
+  </article>
+
+  <aside class="toc">
+    <h4>// on this page</h4>
+    <ul>
+      <li><a href="#initialize-a-repository"><span class="num">001</span> Initialize a repository</a></li>
+      <li><a href="#write-and-stage"><span class="num">002</span> Write and stage</a></li>
+      <li><a href="#commit"><span class="num">003</span> Commit</a></li>
+      <li><a href="#read-the-log"><span class="num">004</span> Read the log</a></li>
+      <li><a href="#what-just-happened"><span class="num">005</span> What just happened</a></li>
+      <li><a href="#try-it-from-moonbit"><span class="num">006</span> Try it from MoonBit</a></li>
+    </ul>
+  </aside>
+
+</div>
+
+<footer class="site">
+  <span>bit · learn · first-commit</span>
+  <span><a href="../">Home</a> · <a href="../learn/">Learn</a> · <a href="../reference/">Reference</a></span>
+</footer>
+
+<script src="../assets/syntax.js"></script>
+<script src="../assets/site.js"></script>
+</body>
+</html>

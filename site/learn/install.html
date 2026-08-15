@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Install bit</title>
+<link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__brand">
+    <a href="../" class="plain"><img src="../assets/img/wordmark.svg" alt="bit"></a>
+    <span class="ver">docs · v0.1</span>
+  </div>
+  <button class="topbar__menu" aria-label="menu"><span></span><span></span><span></span></button>
+  <nav>
+    <a href="../learn/" class="active">Learn</a>
+    <a href="../reference/">Reference</a>
+    <a href="https://github.com/mizchi/bit" target="_blank" rel="noopener">GitHub ↗</a>
+  </nav>
+</header>
+
+<div class="layout">
+
+  <aside class="side">
+    <h4>// Learning Guide</h4>
+    <ul>
+      <li><a href="concept.html">00 Concept</a></li>
+      <li><a href="install.html" class="active">01 Install bit</a></li>
+      <li><a href="first-commit.html">02 Your first commit</a></li>
+      <li><a href="distributed.html">03 Going distributed</a></li>
+    </ul>
+    <h4>// More</h4>
+    <ul>
+      <li><a href="../reference/">Reference</a></li>
+      <li><a href="../">Home</a></li>
+    </ul>
+  </aside>
+
+  <article>
+    <header class="title">
+      <p class="kicker">// guide · 01</p>
+      <h1>Install bit.</h1>
+      <p class="lead">Two install paths — a single curl line, or via the MoonBit toolchain if you already have one. Both produce a <code>bit</code> binary on PATH.</p>
+    </header>
+
+<h2 id="supported-platforms" data-num="// 001">Supported platforms</h2>
+<ul>
+<li>
+<p>Linux x86_64</p>
+</li>
+<li>
+<p>macOS arm64 &amp; x86_64</p>
+</li>
+</ul>
+<p>Windows is not supported yet. WSL works.</p>
+<h2 id="one-line-install" data-num="// 002">One-line install</h2>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ curl -fsSL https://raw.githubusercontent.com/mizchi/bit-vcs/main/install.sh | bash
+</code></pre></div>
+<p>The script detects your OS and architecture, downloads the matching release, and drops the binary at <code>~/.local/bin/bit</code>. Add it to your shell's <code>PATH</code> if it isn't already.</p>
+<div class="callout">
+<p class="kicker">// note</p>
+<p>Read the script before you pipe it to bash — that's the rule for every install script on the internet, not just this one. Mirror at <a href="https://github.com/mizchi/bit-vcs/blob/main/install.sh">github.com/mizchi/bit-vcs</a>.</p>
+</div>
+<h2 id="via-the-moonbit-toolchain" data-num="// 003">Via the MoonBit toolchain</h2>
+<p>If you have <code>moon</code> installed:</p>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ moon install mizchi/bit/cmd/bit
+</code></pre></div>
+<p>This builds bit from source against your toolchain. Useful if you want to track main or contribute patches.</p>
+<h2 id="verify" data-num="// 004">Verify</h2>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ bit --version
+bit 0.1.0 — distributed git in moonbit
+</code></pre></div>
+<h2 id="shell-completion" data-num="// 005">Shell completion</h2>
+<p>bit ships its own completion generator. Pick your shell and source the output from your rc file.</p>
+<h3>bash</h3>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">eval &quot;$(bit completion bash)&quot;
+</code></pre></div>
+<h3>zsh</h3>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">eval &quot;$(bit completion zsh)&quot;
+</code></pre></div>
+<h2 id="uninstall" data-num="// 006">Uninstall</h2>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// bash</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="bash">$ rm ~/.local/bin/bit
+</code></pre></div>
+<p>That's it. bit has no daemons, no system services, no cache outside your repos.</p>
+<div class="callout callout--acid">
+<p class="kicker">// caveat</p>
+<p>bit is experimental. Data corruption is possible in worst-case scenarios. Always keep a Git backup of important repositories until you have stress-tested your workflow.</p>
+</div>
+
+
+<nav class="pager">
+  <a href="./">
+    <span class="pager__k">← back</span>
+    <span class="pager__t">Learning Guide</span>
+  </a>
+  <a class="next" href="first-commit.html">
+    <span class="pager__k">next · 02 →</span>
+    <span class="pager__t">Your first commit</span>
+  </a>
+</nav>
+  </article>
+
+  <aside class="toc">
+    <h4>// on this page</h4>
+    <ul>
+      <li><a href="#supported-platforms"><span class="num">001</span> Supported platforms</a></li>
+      <li><a href="#one-line-install"><span class="num">002</span> One-line install</a></li>
+      <li><a href="#via-the-moonbit-toolchain"><span class="num">003</span> Via the MoonBit toolchain</a></li>
+      <li><a href="#verify"><span class="num">004</span> Verify</a></li>
+      <li><a href="#shell-completion"><span class="num">005</span> Shell completion</a></li>
+      <li><a href="#uninstall"><span class="num">006</span> Uninstall</a></li>
+    </ul>
+  </aside>
+
+</div>
+
+<footer class="site">
+  <span>bit · learn · install</span>
+  <span><a href="../">Home</a> · <a href="../learn/">Learn</a> · <a href="../reference/">Reference</a></span>
+</footer>
+
+<script src="../assets/syntax.js"></script>
+<script src="../assets/site.js"></script>
+</body>
+</html>

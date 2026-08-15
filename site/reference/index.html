@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reference</title>
+<link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__brand">
+    <a href="../" class="plain"><img src="../assets/img/wordmark.svg" alt="bit"></a>
+    <span class="ver">docs · v0.1</span>
+  </div>
+  <button class="topbar__menu" aria-label="menu"><span></span><span></span><span></span></button>
+  <nav>
+    <a href="../learn/">Learn</a>
+    <a href="../reference/" class="active">Reference</a>
+    <a href="https://github.com/mizchi/bit" target="_blank" rel="noopener">GitHub ↗</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <div class="hero__tag">
+    <span><strong>bit / reference</strong></span>
+    <span>complete · authoritative</span>
+  </div>
+
+  <p class="kicker">// reference</p>
+  <h1 class="hero__head" style="font-size: clamp(48px, 9vw, 96px);">Reference.</h1>
+  <p class="hero__sub" style="margin-top: var(--space-5);">Everything bit exposes — every command, every public type, every environment variable. Sorted, terse, link-anchored. Reach for this when you know what you are looking for.</p>
+</section>
+
+<section class="section" style="padding-top: 0;">
+  <nav class="chapters" aria-label="chapters">
+    <a class="chapter" href="cli.html">
+      <div class="chapter__num">// R1</div>
+      <div>
+        <h3 class="chapter__h">CLI commands</h3>
+        <p class="chapter__p">Every subcommand grouped by surface — porcelain, plumbing, hub, relay, extensions, AI. Flags, exit codes, examples.</p>
+      </div>
+      <div class="chapter__meta">108 commands</div>
+    </a>
+    <a class="chapter" href="library.html">
+      <div class="chapter__num">// R2</div>
+      <div>
+        <h3 class="chapter__h">Library API</h3>
+        <p class="chapter__p">MoonBit types and functions for embedding bit in your own programs — agents, CI runners, editor plugins.</p>
+      </div>
+      <div class="chapter__meta">moonbit</div>
+    </a>
+    <a class="chapter" href="env.html">
+      <div class="chapter__num">// R3</div>
+      <div>
+        <h3 class="chapter__h">Environment</h3>
+        <p class="chapter__p">Every <code>BIT_*</code> variable bit reads, and the Git-compat variables it honors (<code>GIT_EDITOR</code>, <code>GIT_CONFIG_GLOBAL</code>, …).</p>
+      </div>
+      <div class="chapter__meta">12 vars</div>
+    </a>
+  </nav>
+</section>
+
+
+
+<footer class="site">
+  <span>bit · reference</span>
+  <span><a href="../">Home</a> · <a href="../learn/">Learn</a> · <a href="../reference/">Reference</a></span>
+</footer>
+
+<script src="../assets/syntax.js"></script>
+<script src="../assets/site.js"></script>
+</body>
+</html>

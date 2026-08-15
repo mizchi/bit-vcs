@@ -1,0 +1,164 @@
+/*
+ * bit — Design Tokens (CSS)
+ * Surface-level tokens for color, typography, spacing, motion, and shape.
+ * No gradients. No shadows. Strict palette. Geometric primitives only.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap");
+
+:root {
+  /* ──────────────────────────────────────────────────────────────
+   * COLOR — strict 5-token palette. Never blend, never gradient.
+   * ────────────────────────────────────────────────────────────── */
+
+  /* Primary — Bit Pink. The node, the source, the single bit. */
+  --bit-pink:        #FF2D6F;
+  --bit-pink-deep:   #C7124F;   /* for press/hover states only */
+  --bit-pink-tint:   #FFD9E6;   /* for filled tag/chip backgrounds */
+
+  /* Ink — off-black with cool tint. Editorial. Never #000. */
+  --bit-ink:         #0E0E12;
+  --bit-ink-soft:    #2B2B33;   /* secondary text */
+  --bit-ink-mute:    #6B6B74;   /* meta / captions */
+
+  /* Paper — warm cream. Never #FFF. */
+  --bit-paper:       #F2EFE7;
+  --bit-paper-deep:  #E8E4D8;   /* alt surface, panels */
+
+  /* Stone — desaturated neutral. UI lines, dividers, tracks. */
+  --bit-stone:       #D9D5CB;
+
+  /* Acid — the eccentric counterpoint. Use SPARINGLY. */
+  --bit-acid:        #D6FF3D;
+
+  /* ──────────────────────────────────────────────────────────────
+   * SEMANTIC ALIASES
+   * ────────────────────────────────────────────────────────────── */
+
+  --bg:              var(--bit-paper);
+  --bg-alt:          var(--bit-paper-deep);
+  --fg:              var(--bit-ink);
+  --fg-soft:         var(--bit-ink-soft);
+  --fg-mute:         var(--bit-ink-mute);
+  --rule:            var(--bit-ink);            /* rules are ink, full strength */
+  --rule-soft:       var(--bit-stone);
+  --accent:          var(--bit-pink);
+  --accent-press:    var(--bit-pink-deep);
+  --highlight:       var(--bit-acid);
+
+  /* ──────────────────────────────────────────────────────────────
+   * TYPOGRAPHY
+   * Sans  → Space Grotesk (display + body)
+   * Mono  → Space Mono   (machine voice, captions, code)
+   * No italic. Ever.
+   * ────────────────────────────────────────────────────────────── */
+
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+
+  /* Type scale — modular, tight at display, loose at body */
+  --type-001: 11px;   /* micro label */
+  --type-00:  13px;   /* caption, meta */
+  --type-0:   15px;   /* small body */
+  --type-1:   17px;   /* body */
+  --type-2:   21px;   /* lead */
+  --type-3:   28px;   /* h4 */
+  --type-4:   40px;   /* h3 */
+  --type-5:   60px;   /* h2 */
+  --type-6:   96px;   /* h1 */
+  --type-7:   148px;  /* hero, poster */
+
+  /* Line heights — display tight, body comfortable */
+  --leading-tight:   0.95;
+  --leading-snug:    1.08;
+  --leading-body:    1.55;
+  --leading-loose:   1.72;
+
+  /* Tracking — display tightens, micro labels open up */
+  --track-display:  -0.035em;
+  --track-heading:  -0.018em;
+  --track-body:      0;
+  --track-label:     0.16em;     /* UPPERCASE labels only */
+  --track-mono:      0;
+
+  /* ──────────────────────────────────────────────────────────────
+   * SHAPE — geometric primitives, no soft rounding.
+   * ────────────────────────────────────────────────────────────── */
+
+  --radius-none:  0;
+  --radius-dot:   999px;   /* circles only — never used on rectangles */
+  --stroke-hair:  1px;
+  --stroke-thin:  1.5px;
+  --stroke-med:   2px;
+  --stroke-thick: 4px;
+
+  /* ──────────────────────────────────────────────────────────────
+   * SPACE — 4px base, prefer larger jumps for editorial whitespace.
+   * ────────────────────────────────────────────────────────────── */
+
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   24px;
+  --space-6:   32px;
+  --space-7:   48px;
+  --space-8:   72px;
+  --space-9:   112px;
+  --space-10:  168px;
+
+  /* ──────────────────────────────────────────────────────────────
+   * MOTION — instant or slow. No "smooth-default".
+   * ────────────────────────────────────────────────────────────── */
+
+  --ease-snap:  cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-flat:  linear;
+  --dur-fast:   120ms;
+  --dur-slow:   480ms;
+
+  color-scheme: light;
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * DARK MODE — invert paper/ink, keep pink and acid identical.
+ * ────────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:        var(--bit-ink);
+    --bg-alt:    #17171C;
+    --fg:        var(--bit-paper);
+    --fg-soft:   #C9C5BB;
+    --fg-mute:   #8A867D;
+    --rule:      var(--bit-paper);
+    --rule-soft: #3A3A42;
+
+    color-scheme: dark;
+  }
+}
+
+/* Forced dark utility (e.g. previews) */
+[data-theme="dark"] {
+  --bg:        var(--bit-ink);
+  --bg-alt:    #17171C;
+  --fg:        var(--bit-paper);
+  --fg-soft:   #C9C5BB;
+  --fg-mute:   #8A867D;
+  --rule:      var(--bit-paper);
+  --rule-soft: #3A3A42;
+
+  color-scheme: dark;
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * BRAND RULE — NO ITALIC.
+ * Browser defaults render <em>, <i>, <cite>, <dfn>, <address>, <var>
+ * in italic. We do not ship italic fonts, so the browser would
+ * synthesize a slanted face — on a geometric grotesque that reads
+ * as a deformed serif. We override globally and carry emphasis
+ * through weight + color instead.
+ * ────────────────────────────────────────────────────────────── */
+em, i, cite, dfn, address, var, q {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--fg);
+}

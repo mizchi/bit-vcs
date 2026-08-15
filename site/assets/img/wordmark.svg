@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 120" role="img" aria-label="bit wordmark">
+  <title>bit wordmark</title>
+  <desc>"bit" constructed from geometric primitives: rectangles and circles. The pink dot above the i is the brand signature — a single node, a single source, a single bit.</desc>
+
+  <!-- "b" — stem + stroked bowl -->
+  <rect x="10" y="10" width="16" height="100" fill="#0E0E12"/>
+  <circle cx="58" cy="72" r="30" fill="none" stroke="#0E0E12" stroke-width="16"/>
+
+  <!-- "i" — stem + pink tittle (the signature) -->
+  <rect x="116" y="44" width="16" height="66" fill="#0E0E12"/>
+  <circle cx="124" cy="24" r="12" fill="#FF2D6F"/>
+
+  <!-- "t" — stem + crossbar -->
+  <rect x="152" y="20" width="16" height="90" fill="#0E0E12"/>
+  <rect x="138" y="44" width="44" height="12" fill="#0E0E12"/>
+</svg>

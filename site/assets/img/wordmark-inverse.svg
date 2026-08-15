@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 120" role="img" aria-label="bit wordmark (inverse)">
+  <title>bit wordmark, inverse</title>
+  <desc>Paper-colored letterforms for dark surfaces. Pink tittle unchanged.</desc>
+
+  <rect x="10" y="10" width="16" height="100" fill="#F2EFE7"/>
+  <circle cx="58" cy="72" r="30" fill="none" stroke="#F2EFE7" stroke-width="16"/>
+
+  <rect x="116" y="44" width="16" height="66" fill="#F2EFE7"/>
+  <circle cx="124" cy="24" r="12" fill="#FF2D6F"/>
+
+  <rect x="152" y="20" width="16" height="90" fill="#F2EFE7"/>
+  <rect x="138" y="44" width="44" height="12" fill="#F2EFE7"/>
+</svg>

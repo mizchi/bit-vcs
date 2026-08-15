@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Concept</title>
+<link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__brand">
+    <a href="../" class="plain"><img src="../assets/img/wordmark.svg" alt="bit"></a>
+    <span class="ver">docs · v0.1</span>
+  </div>
+  <button class="topbar__menu" aria-label="menu"><span></span><span></span><span></span></button>
+  <nav>
+    <a href="../learn/" class="active">Learn</a>
+    <a href="../reference/">Reference</a>
+    <a href="https://github.com/mizchi/bit" target="_blank" rel="noopener">GitHub ↗</a>
+  </nav>
+</header>
+
+<div class="layout">
+
+  <aside class="side">
+    <h4>// Learning Guide</h4>
+    <ul>
+      <li><a href="concept.html" class="active">00 Concept</a></li>
+      <li><a href="install.html">01 Install bit</a></li>
+      <li><a href="first-commit.html">02 Your first commit</a></li>
+      <li><a href="distributed.html">03 Going distributed</a></li>
+    </ul>
+    <h4>// More</h4>
+    <ul>
+      <li><a href="../reference/">Reference</a></li>
+      <li><a href="../">Home</a></li>
+    </ul>
+  </aside>
+
+  <article>
+    <header class="title">
+      <p class="kicker">// guide · 00 — the idea</p>
+      <h1>What bit is.</h1>
+      <p class="lead">bit is a Git implementation in MoonBit. It speaks the Git wire protocol, it produces a normal <code>.git/</code>, and any Git client can read what it writes. Underneath, bit treats distribution as the default — not a feature bolted onto a central server, but the entire premise.</p>
+    </header>
+
+<h2 id="what-s-interesting" data-num="// 001">What's interesting</h2>
+<p>Three things distinguish bit from &quot;yet another Git client.&quot;</p>
+<p><strong>PRs and issues live inside the repo.</strong> Pull requests, reviews, and issues are written as Git objects under <code>refs/notes/bit-hub</code>. Replicate the repo and you replicate the work. GitHub can go away. Your project history — and the conversations around it — survive intact.</p>
+<p><strong>bit is a library before it is a tool.</strong> Every CLI command is a thin shell over a MoonBit function. Drop bit into an agent, an editor plugin, or a CI runner — you do not shell out, you call it. Mount an in-memory filesystem and you have a working repository in five lines.</p>
+<p><strong>Convergence is gossip, not consensus.</strong> Peers reconcile by walking object graphs until they meet a common ancestor. No election, no quorum, no leader. A laptop offline for a week catches up the moment it touches a peer.</p>
+<h2 id="a-five-concept-mental-model" data-num="// 002">A five-concept mental model</h2>
+<p>These five words carry the whole system. If you have them straight, the CLI and the library both stop surprising you.</p>
+<h3>Node</h3>
+<p>A node is any process holding a copy of the repository. Your laptop is a node. A CI runner is a node. A relay host is a node. Nodes are symmetric — there is no &quot;primary&quot; — and they are addressed by URI:</p>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// text</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="text">bit://aurora.local:9418/repo
+relay://bit.example.com/u/mizchi/bit
+https://github.com/mizchi/bit.git
+</code></pre></div>
+<h3>Source</h3>
+<p>Source is whoever wrote the commit you are looking at. It is a fact, not a place. The pink dot in the bit logo represents the source node; in any given moment, <em>any</em> node can become it.</p>
+<div class="codeblock"><div class="codeblock__bar"><span class="lang">// moonbit</span><button class="codeblock__copy">copy</button></div><pre><code data-lang="moonbit">let commit = @bit.head(fs, &quot;.git&quot;)?
+println(&quot;author: \{commit.author}&quot;)
+println(&quot;source: \{commit.committer.tz}@\{commit.committer.email}&quot;)
+</code></pre></div>
+<h3>Bit</h3>
+<p>A bit is a single edge between two peers — one unit of exchange. Communication is content-addressed: peers ask for object hashes, never filenames. The protocol is therefore naturally idempotent and naturally deduplicating.</p>
+<h3>Convergence</h3>
+<p>Two peers handshake, exchange ref tips, and walk the graph backwards until they meet. Bytes flow in both directions. Disagreement persists as parallel heads until a human merges them. There is no server-side reconciliation step. There is no server.</p>
+<h3>Hub</h3>
+<p>PRs and issues are stored as Git objects. The hub is not a service — it is a particular shape of commit graph. <code>bit pr create</code> writes objects. <code>bit relay sync push</code> replicates them. The hub survives forks because it has no &quot;outside&quot; to survive against.</p>
+<h2 id="what-follows-from-this" data-num="// 003">What follows from this</h2>
+<p>Implications you can feel as soon as you start using it.</p>
+<ul>
+<li>
+<p>The hub survives forks. Fork a repo, get every PR and issue with it.</p>
+</li>
+<li>
+<p>Agents drive bit without a shell. The same MoonBit functions the CLI calls, your agent can call directly.</p>
+</li>
+<li>
+<p>You can clone a single subdirectory of a 50 GB monorepo with <code>bit clone user/repo:src/lib</code>.</p>
+</li>
+<li>
+<p>A merge conflict resolved by AI is just commits plus a note — no third-party state, no external dashboard.</p>
+</li>
+<li>
+<p>You can write your own bit-aware tool in MoonBit in an afternoon. The library API is the surface.</p>
+</li>
+</ul>
+<h2 id="what-bit-is-not" data-num="// 004">What bit is not</h2>
+<p>Equally important — bit refuses several adjacent identities.</p>
+<ul>
+<li>
+<p><strong>Not a Git replacement.</strong> It <em>is</em> Git. The bytes on disk are valid Git, the wire protocol is Git's, the SHA-1 history is interchangeable. Use it next to vanilla <code>git</code> if you want.</p>
+</li>
+<li>
+<p><strong>Not a blockchain.</strong> No consensus, no tokens, no proof-of-anything. Convergence is gossip.</p>
+</li>
+<li>
+<p><strong>Not a P2P file share.</strong> bit is collaboration software that happens to be distributed. The unit of meaning is a commit, not a file.</p>
+</li>
+<li>
+<p><strong>Not an LLM agent.</strong> AI assist is one optional command (<code>bit ai rebase</code>), not the architecture.</p>
+</li>
+</ul>
+<h2 id="what-s-next" data-num="// 005">What's next</h2>
+<p>Now that you have the model, the rest of the guide is mostly muscle memory.</p>
+<ul>
+<li>Read <a href="install.html">Install bit</a> and get the binary on PATH.</li>
+<li>Walk through <a href="first-commit.html">Your first commit</a> for the porcelain refresher.</li>
+<li>Hit <a href="distributed.html">Going distributed</a> to see two peers converge.</li>
+</ul>
+
+
+<nav class="pager">
+  <a href="./">
+    <span class="pager__k">← back</span>
+    <span class="pager__t">Learning Guide</span>
+  </a>
+  <a class="next" href="install.html">
+    <span class="pager__k">next · 01 →</span>
+    <span class="pager__t">Install bit</span>
+  </a>
+</nav>
+  </article>
+
+  <aside class="toc">
+    <h4>// on this page</h4>
+    <ul>
+      <li><a href="#what-s-interesting"><span class="num">001</span> What's interesting</a></li>
+      <li><a href="#a-five-concept-mental-model"><span class="num">002</span> A five-concept mental model</a></li>
+      <li><a href="#what-follows-from-this"><span class="num">003</span> What follows from this</a></li>
+      <li><a href="#what-bit-is-not"><span class="num">004</span> What bit is not</a></li>
+      <li><a href="#what-s-next"><span class="num">005</span> What's next</a></li>
+    </ul>
+  </aside>
+
+</div>
+
+<footer class="site">
+  <span>bit · learn · concept</span>
+  <span><a href="../">Home</a> · <a href="../learn/">Learn</a> · <a href="../reference/">Reference</a></span>
+</footer>
+
+<script src="../assets/syntax.js"></script>
+<script src="../assets/site.js"></script>
+</body>
+</html>

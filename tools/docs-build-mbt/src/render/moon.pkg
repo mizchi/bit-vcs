@@ -1,0 +1,14 @@
+import {
+  "mizchi/markdown" @markdown,
+}
+
+options(
+  link: {
+    "js": {
+      "exports": [
+        "render:render",
+      ],
+      "format": "esm",
+    },
+  },
+)
